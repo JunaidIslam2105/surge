@@ -25,10 +25,10 @@ const (
 	MaxChunk     = 16 * MB // Maximum chunk size
 	TargetChunk  = 8 * MB  // Target chunk size
 	AlignSize    = 4 * KB  // Align chunks to 4KB for filesystem
-	WorkerBuffer = 128 * KB
+	WorkerBuffer = 512 * KB
 
 	TasksPerWorker = 4 // Target tasks per connection
-	
+
 	// Connection limits
 	PerHostMax = 8 // Max concurrent connections per host
 )
@@ -50,6 +50,7 @@ type Task struct {
 // TaskQueue is a thread-safe work-stealing queue
 type TaskQueue struct {
 	tasks       []Task
+	head        int
 	mu          sync.Mutex
 	cond        *sync.Cond
 	done        bool
@@ -79,10 +80,10 @@ func (q *TaskQueue) PushMultiple(tasks []Task) {
 func (q *TaskQueue) Pop() (Task, bool) {
 	// Mark as idle while waiting
 	atomic.AddInt64(&q.idleWorkers, 1)
-	
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	for len(q.tasks) == 0 && !q.done {
 		q.cond.Wait()
 	}
@@ -94,8 +95,12 @@ func (q *TaskQueue) Pop() (Task, bool) {
 		return Task{}, false
 	}
 
-	t := q.tasks[0]
-	q.tasks = q.tasks[1:]
+	t := q.tasks[q.head]
+	q.head++
+	if q.head > len(q.tasks)/2 {
+		q.tasks = append([]Task(nil), q.tasks[q.head:]...)
+		q.head = 0
+	}
 	return t, true
 }
 
@@ -232,7 +237,6 @@ func newConcurrentClient() *http.Client {
 
 	return &http.Client{
 		Transport: transport,
-		// Don't set global Timeout - use per-request context instead
 	}
 }
 
@@ -409,7 +413,7 @@ func (d *Downloader) downloadTask(ctx context.Context, rawurl string, file *os.F
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
 		"AppleWebKit/537.36 (KHTML, like Gecko) "+
-		"Chrome/120.0.0.0 Safari/537.36") 
+		"Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", task.Offset, task.Offset+task.Length-1))
 
 	resp, err := client.Do(req)
