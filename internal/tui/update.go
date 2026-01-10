@@ -290,11 +290,40 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.UpdateListItems()
 				return m, nil
 			}
-			if msg.String() == "d" {
-				m.activeTab = TabDone
-				m.updateListTitle()
-				m.UpdateListItems()
-				return m, nil
+			// Delete download with D or X
+			if msg.String() == "d" || msg.String() == "x" {
+				// Don't process delete if list is filtering
+				if m.list.FilterState() == list.Filtering {
+					// Fall through to let list handle it
+				} else if d := m.GetSelectedDownload(); d != nil {
+					targetID := d.ID
+
+					// Find index in real list
+					realIdx := -1
+					for i, dl := range m.downloads {
+						if dl.ID == targetID {
+							realIdx = i
+							break
+						}
+					}
+
+					if realIdx != -1 {
+						dl := m.downloads[realIdx]
+
+						// Cancel if active
+						m.Pool.Cancel(dl.ID)
+
+						// Delete state files
+						if dl.URL != "" {
+							_ = downloader.DeleteStateByURL(dl.URL)
+						}
+
+						// Remove from list
+						m.downloads = append(m.downloads[:realIdx], m.downloads[realIdx+1:]...)
+					}
+					m.UpdateListItems()
+					return m, nil
+				}
 			}
 			if msg.String() == "h" {
 				// Open history view
@@ -333,44 +362,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.UpdateListItems()
 				return m, tea.Batch(cmds...)
-			}
-
-			// Delete download (x only, d is for Done tab)
-			if msg.String() == "x" {
-				// Don't process delete if list is filtering
-				if m.list.FilterState() == list.Filtering {
-					break
-				}
-
-				if d := m.GetSelectedDownload(); d != nil {
-					targetID := d.ID
-
-					// Find index in real list
-					realIdx := -1
-					for i, dl := range m.downloads {
-						if dl.ID == targetID {
-							realIdx = i
-							break
-						}
-					}
-
-					if realIdx != -1 {
-						dl := m.downloads[realIdx]
-
-						// Cancel if active
-						m.Pool.Cancel(dl.ID)
-
-						// Delete state files
-						if dl.URL != "" {
-							_ = downloader.DeleteStateByURL(dl.URL)
-						}
-
-						// Remove from list
-						m.downloads = append(m.downloads[:realIdx], m.downloads[realIdx+1:]...)
-					}
-				}
-				m.UpdateListItems()
-				return m, nil
 			}
 
 			// Pass messages to the list for navigation/filtering
