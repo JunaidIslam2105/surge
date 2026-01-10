@@ -148,6 +148,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.DownloadCompleteMsg:
 		for _, d := range m.downloads {
 			if d.ID == msg.DownloadID {
+				if d.done {
+					break
+				}
 				d.Downloaded = d.Total
 				d.Elapsed = msg.Elapsed
 				d.done = true

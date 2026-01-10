@@ -4,7 +4,6 @@ import (
 	"context"
 	"surge/internal/messages"
 	"sync"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -166,9 +165,7 @@ func (p *WorkerPool) worker() {
 			if cfg.State != nil {
 				cfg.State.Done.Store(true)
 			}
-			if p.progressCh != nil {
-				p.progressCh <- messages.DownloadCompleteMsg{DownloadID: cfg.ID, Elapsed: time.Since(cfg.State.StartTime), Total: cfg.State.TotalSize}
-			}
+			// Note: DownloadCompleteMsg is sent by the progress reporter when it detects Done=true
 
 			// Clean up from tracking
 			p.mu.Lock()
