@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"surge/internal/downloader"
@@ -23,6 +24,23 @@ func notificationTickCmd() tea.Cmd {
 	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
 		return notificationTickMsg{}
 	})
+}
+
+// addLogEntry adds a log entry to the log viewport
+func (m *RootModel) addLogEntry(msg string) {
+	timestamp := time.Now().Format("15:04:05")
+	entry := fmt.Sprintf("[%s] %s", timestamp, msg)
+	m.logEntries = append(m.logEntries, entry)
+
+	// Keep only the last 100 entries to prevent memory issues
+	if len(m.logEntries) > 100 {
+		m.logEntries = m.logEntries[len(m.logEntries)-100:]
+	}
+
+	// Update viewport content
+	m.logViewport.SetContent(strings.Join(m.logEntries, "\n"))
+	// Auto-scroll to bottom
+	m.logViewport.GotoBottom()
 }
 
 // Update handles messages and updates the model
@@ -87,6 +105,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Update list items to reflect new filename
 		m.UpdateListItems()
+		// Add log entry
+		m.addLogEntry(LogStyleStarted.Render("⬇ Started: " + msg.Filename))
 		cmds = append(cmds, listenForActivity(m.progressChan))
 
 	case messages.ProgressMsg:
@@ -134,14 +154,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Set progress to 100%
 				cmds = append(cmds, d.progress.SetPercent(1.0))
 
-				// Set notification
+				// Add log entry
 				speed := float64(d.Total) / msg.Elapsed.Seconds()
-				m.notification = fmt.Sprintf("✔ Downloaded %s in %s (%.2f MB/s)",
-					d.Filename,
-					msg.Elapsed.Round(time.Millisecond),
-					speed/Megabyte)
-				m.notificationExpiry = time.Now().Add(5 * time.Second)
-				cmds = append(cmds, notificationTickCmd())
+				m.addLogEntry(LogStyleComplete.Render(fmt.Sprintf("✔ Done: %s (%.2f MB/s)", d.Filename, speed/Megabyte)))
 
 				// Persist to history (TUI has the correct filename from DownloadStartedMsg)
 				_ = downloader.AddToMasterList(downloader.DownloadEntry{
@@ -166,6 +181,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if d.ID == msg.DownloadID {
 				d.err = msg.Err
 				d.done = true
+				// Add log entry
+				m.addLogEntry(LogStyleError.Render("✖ Error: " + d.Filename))
 				break
 			}
 		}
@@ -178,6 +195,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.paused = true
 				d.Downloaded = msg.Downloaded
 				d.Speed = 0 // Clear speed when paused
+				// Add log entry
+				m.addLogEntry(LogStylePaused.Render("⏸ Paused: " + d.Filename))
 				break
 			}
 		}
@@ -188,6 +207,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, d := range m.downloads {
 			if d.ID == msg.DownloadId {
 				d.paused = false
+				// Add log entry
+				m.addLogEntry(LogStyleStarted.Render("▶ Resumed: " + d.Filename))
 				// Restart polling
 				cmds = append(cmds, d.reporter.PollCmd())
 				break
@@ -220,14 +241,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case notificationTickMsg:
-		// Check if notification should be cleared
-		if m.notification != "" && time.Now().After(m.notificationExpiry) {
-			m.notification = ""
-		} else if m.notification != "" {
-			// Keep ticking until notification expires
-			cmds = append(cmds, notificationTickCmd())
-		}
-		return m, tea.Batch(cmds...)
+		// Notification tick is still used but logs don't expire
+		return m, nil
 
 	// Handle filepicker messages for all message types when in FilePickerState
 	default:
@@ -362,6 +377,34 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.UpdateListItems()
 				return m, tea.Batch(cmds...)
+			}
+
+			// Toggle log focus with L
+			if msg.String() == "l" {
+				m.logFocused = !m.logFocused
+				return m, nil
+			}
+
+			// If log is focused, handle viewport scrolling
+			if m.logFocused {
+				switch msg.String() {
+				case "esc":
+					m.logFocused = false
+					return m, nil
+				case "j", "down":
+					m.logViewport.LineDown(1)
+					return m, nil
+				case "k", "up":
+					m.logViewport.LineUp(1)
+					return m, nil
+				case "g":
+					m.logViewport.GotoTop()
+					return m, nil
+				case "G":
+					m.logViewport.GotoBottom()
+					return m, nil
+				}
+				return m, nil
 			}
 
 			// Pass messages to the list for navigation/filtering

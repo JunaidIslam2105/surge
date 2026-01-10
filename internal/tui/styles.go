@@ -89,10 +89,16 @@ var (
 	ProgressStart = "#ff79c6" // Pink
 	ProgressEnd   = "#bd93f9" // Purple
 
-	// Notification Style
-	NotificationStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#282a36")).
-				Background(ColorNeonCyan).
-				Bold(true).
-				Padding(0, 2)
+	// Log Entry Styles
+	LogStyleStarted = lipgloss.NewStyle().
+			Foreground(ColorStateDownloading)
+
+	LogStyleComplete = lipgloss.NewStyle().
+				Foreground(ColorStateDone)
+
+	LogStyleError = lipgloss.NewStyle().
+			Foreground(ColorStateError)
+
+	LogStylePaused = lipgloss.NewStyle().
+			Foreground(ColorStatePaused)
 )

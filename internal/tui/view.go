@@ -119,7 +119,7 @@ func (m RootModel) View() string {
 		detailHeight = 10
 	}
 
-	// --- SECTION 1: HEADER & LOGO (Top Left) ---
+	// --- SECTION 1: HEADER & LOGO (Top Left) + LOG BOX (Top Right) ---
 	logoText := `
  ██████  ██    ██ ██████   ██████  ███████ 
 ██       ██    ██ ██   ██ ██       ██      
@@ -130,12 +130,28 @@ func (m RootModel) View() string {
 	// Calculate stats for tab bar
 	active, queued, downloaded := m.CalculateStats()
 
-	// Render logo without borders - clean look
-	headerBox := lipgloss.NewStyle().
-		Width(leftWidth).
-		Height(headerHeight).
-		Padding(1, 2).
-		Render(LogoStyle.Render(logoText))
+	// Logo takes ~45% of header width
+	logoWidth := int(float64(leftWidth) * 0.45)
+	logWidth := leftWidth - logoWidth - 2 // Rest for log box
+
+	// Render logo centered in its box
+	logoBox := lipgloss.Place(logoWidth, headerHeight, lipgloss.Center, lipgloss.Center,
+		LogoStyle.Render(logoText))
+
+	// Render log viewport
+	m.logViewport.Width = logWidth - 4      // Account for borders
+	m.logViewport.Height = headerHeight - 4 // Account for borders and title
+	logContent := m.logViewport.View()
+
+	// Use different border color when focused
+	logBorderColor := ColorNeonCyan
+	if m.logFocused {
+		logBorderColor = ColorNeonPink
+	}
+	logBox := renderBtopBox("Activity Log", logContent, logWidth, headerHeight, logBorderColor, false)
+
+	// Combine logo and log box horizontally
+	headerBox := lipgloss.JoinHorizontal(lipgloss.Top, logoBox, logBox)
 
 	// --- SECTION 2: SPEED GRAPH (Top Right) ---
 	// Calculate dimensions - compact axis for cleaner look
@@ -287,14 +303,8 @@ func (m RootModel) View() string {
 	// Body
 	body := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
 
-	// Footer - show notification if active, otherwise show keybindings
-	var footer string
-	if m.notification != "" {
-		footer = lipgloss.Place(m.width, 1, lipgloss.Center, lipgloss.Center,
-			NotificationStyle.Render(m.notification))
-	} else {
-		footer = lipgloss.NewStyle().Foreground(ColorLightGray).Padding(0, 1).Render(" [Q/W/E] Tabs  [A] Add  [P] Pause  [X] Delete  [/] Filter  [Ctrl+Q] Quit")
-	}
+	// Footer - just keybindings
+	footer := lipgloss.NewStyle().Foreground(ColorLightGray).Padding(0, 1).Render(" [Q/W/E] Tabs  [A] Add  [P] Pause  [X] Delete  [L] Log  [/] Filter  [Ctrl+Q] Quit")
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		body,

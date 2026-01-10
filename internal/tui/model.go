@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -100,9 +101,10 @@ type RootModel struct {
 	// Graph Data
 	SpeedHistory []float64 // Stores the last ~60 ticks of speed data
 
-	// Notification system
-	notification       string    // Current notification message
-	notificationExpiry time.Time // When the notification should disappear
+	// Notification log system
+	logViewport viewport.Model // Scrollable log viewport
+	logEntries  []string       // Log entries for download events
+	logFocused  bool           // Whether the log viewport is focused
 }
 
 // NewDownloadModel creates a new download model with progress state and reporter
@@ -198,6 +200,8 @@ func InitialRootModel() RootModel {
 		Pool:           downloader.NewWorkerPool(progressChan),
 		PWD:            pwd,
 		SpeedHistory:   make([]float64, 200), // 200 points of history to fill wide screens
+		logViewport:    viewport.New(40, 5),  // Default size, will be resized
+		logEntries:     make([]string, 0),
 	}
 }
 
