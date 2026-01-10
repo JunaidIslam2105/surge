@@ -36,24 +36,28 @@ func (m RootModel) View() string {
 			hintStyle.Render("[Tab] Browse"),
 		)
 
-		popup := lipgloss.JoinVertical(lipgloss.Left,
-			TitleStyle.Render("ADD DOWNLOAD"),
-			"",
+		// Content layout - removing TitleStyle Render and adding spacers
+		content := lipgloss.JoinVertical(lipgloss.Left,
+			"", // Top spacer
 			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("URL:"), m.inputs[0].View()),
+			"", // Spacer
 			pathLine,
+			"", // Spacer
 			lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render("Filename:"), m.inputs[2].View()),
-			"",
+			"", // Bottom spacer
 			lipgloss.NewStyle().Foreground(ColorLightGray).Render("[Enter] Start  [Esc] Cancel"),
 		)
 
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			PaneStyle.Width(60).Padding(1, 2).Render(popup),
-		)
+		// Apply padding to the content before boxing it
+		paddedContent := lipgloss.NewStyle().Padding(0, 2).Render(content)
+
+		box := renderBtopBox("Add Download", paddedContent, 80, 9, ColorNeonPink, false)
+
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 	}
 
 	if m.state == FilePickerState {
 		pickerContent := lipgloss.JoinVertical(lipgloss.Left,
-			TitleStyle.Render("SELECT DIRECTORY"),
 			"",
 			lipgloss.NewStyle().Foreground(ColorLightGray).Render(m.filepicker.CurrentDirectory),
 			"",
@@ -62,9 +66,11 @@ func (m RootModel) View() string {
 			lipgloss.NewStyle().Foreground(ColorLightGray).Render("[.] Select Here  [H] Downloads  [Enter] Open  [Esc] Cancel"),
 		)
 
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			PaneStyle.Width(60).Padding(1, 2).Render(pickerContent),
-		)
+		paddedContent := lipgloss.NewStyle().Padding(0, 2).Render(pickerContent)
+
+		box := renderBtopBox("Select Directory", paddedContent, 80, 20, ColorNeonPink, false)
+
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 	}
 
 	if m.state == DuplicateWarningState {
