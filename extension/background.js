@@ -1,27 +1,59 @@
 // Surge Download Manager - Background Service Worker
 // Intercepts downloads and sends them to local Surge instance
 
-const SURGE_URL = "http://127.0.0.1:8080";
+const DEFAULT_PORT = 8080;
+const MAX_PORT_SCAN = 100;
 const INTERCEPT_ENABLED_KEY = "interceptEnabled";
+
+// Cache the discovered port
+let cachedPort = null;
+
+// Find Surge by scanning ports
+async function findSurgePort() {
+    // Try cached port first
+    if (cachedPort) {
+        try {
+            const response = await fetch(`http://127.0.0.1:${cachedPort}/health`, {
+                method: "GET",
+                signal: AbortSignal.timeout(500),
+            });
+            if (response.ok) return cachedPort;
+        } catch { }
+    }
+
+    // Scan for available port
+    for (let port = DEFAULT_PORT; port < DEFAULT_PORT + MAX_PORT_SCAN; port++) {
+        try {
+            const response = await fetch(`http://127.0.0.1:${port}/health`, {
+                method: "GET",
+                signal: AbortSignal.timeout(300),
+            });
+            if (response.ok) {
+                cachedPort = port;
+                console.log(`[Surge] Found server on port ${port}`);
+                return port;
+            }
+        } catch { }
+    }
+    return null;
+}
 
 // Check if Surge is running
 async function checkSurgeHealth() {
-    try {
-        const response = await fetch(`${SURGE_URL}/health`, {
-            method: "GET",
-            signal: AbortSignal.timeout(2000),
-        });
-        return response.ok;
-    } catch (error) {
-        console.log("[Surge] Server not reachable:", error.message);
-        return false;
-    }
+    const port = await findSurgePort();
+    return port !== null;
 }
 
 // Send download request to Surge
 async function sendToSurge(url, filename) {
+    const port = await findSurgePort();
+    if (!port) {
+        console.error("[Surge] No server found");
+        return false;
+    }
+
     try {
-        const response = await fetch(`${SURGE_URL}/download`, {
+        const response = await fetch(`http://127.0.0.1:${port}/download`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
