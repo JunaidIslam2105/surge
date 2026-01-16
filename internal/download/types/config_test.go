@@ -1,4 +1,4 @@
-package downloader
+package types
 
 import (
 	"testing"
@@ -281,7 +281,7 @@ func TestRuntimeConfig_GetMaxTaskRetries(t *testing.T) {
 		runtime  *RuntimeConfig
 		expected int
 	}{
-		{"nil config", nil, maxTaskRetries},
+		{"nil config", nil, MaxTaskRetries}, // Fixed casing from maxTaskRetries
 		{"custom value", &RuntimeConfig{MaxTaskRetries: 5}, 5},
 	}
 
@@ -301,7 +301,7 @@ func TestRuntimeConfig_GetSlowWorkerThreshold(t *testing.T) {
 		runtime  *RuntimeConfig
 		expected float64
 	}{
-		{"nil config", nil, slowWorkerThreshold},
+		{"nil config", nil, SlowWorkerThreshold}, // Fixed casing
 		{"custom value", &RuntimeConfig{SlowWorkerThreshold: 0.25}, 0.25},
 	}
 
@@ -321,7 +321,7 @@ func TestRuntimeConfig_GetSlowWorkerGracePeriod(t *testing.T) {
 		runtime  *RuntimeConfig
 		expected time.Duration
 	}{
-		{"nil config", nil, slowWorkerGrace},
+		{"nil config", nil, SlowWorkerGrace}, // Fixed casing
 		{"custom value", &RuntimeConfig{SlowWorkerGracePeriod: 10 * time.Second}, 10 * time.Second},
 	}
 
@@ -341,7 +341,7 @@ func TestRuntimeConfig_GetStallTimeout(t *testing.T) {
 		runtime  *RuntimeConfig
 		expected time.Duration
 	}{
-		{"nil config", nil, stallTimeout},
+		{"nil config", nil, StallTimeout}, // Fixed casing
 		{"custom value", &RuntimeConfig{StallTimeout: 15 * time.Second}, 15 * time.Second},
 	}
 
@@ -361,7 +361,7 @@ func TestRuntimeConfig_GetSpeedEmaAlpha(t *testing.T) {
 		runtime  *RuntimeConfig
 		expected float64
 	}{
-		{"nil config", nil, speedEMAAlpha},
+		{"nil config", nil, SpeedEMAAlpha}, // Fixed casing
 		{"custom value", &RuntimeConfig{SpeedEmaAlpha: 0.5}, 0.5},
 	}
 

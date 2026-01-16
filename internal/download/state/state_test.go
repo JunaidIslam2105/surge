@@ -1,9 +1,10 @@
-package downloader
+package state
 
 import (
 	"testing"
 
 	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/download/types"
 )
 
 func TestURLHash(t *testing.T) {
@@ -79,12 +80,12 @@ func TestSaveLoadState(t *testing.T) {
 
 	testURL := "https://test.example.com/save-load-test.zip"
 	testDestPath := "C:\\Downloads\\testfile.zip"
-	originalState := &DownloadState{
+	originalState := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   testDestPath,
 		TotalSize:  1000000,
 		Downloaded: 500000,
-		Tasks: []Task{
+		Tasks: []types.Task{
 			{Offset: 500000, Length: 250000},
 			{Offset: 750000, Length: 250000},
 		},
@@ -132,7 +133,7 @@ func TestDeleteState(t *testing.T) {
 
 	testURL := "https://test.example.com/delete-test.zip"
 	testDestPath := "C:\\Downloads\\delete-test.zip"
-	state := &DownloadState{
+	state := &types.DownloadState{
 		URL:      testURL,
 		DestPath: testDestPath,
 		Filename: "delete-test.zip",
@@ -171,12 +172,12 @@ func TestStateOverwrite(t *testing.T) {
 	testDestPath := "C:\\Downloads\\overwrite-test.zip"
 
 	// First pause at 30%
-	state1 := &DownloadState{
+	state1 := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   testDestPath,
 		TotalSize:  1000000,
 		Downloaded: 300000, // 30%
-		Tasks:      []Task{{Offset: 300000, Length: 700000}},
+		Tasks:      []types.Task{{Offset: 300000, Length: 700000}},
 		Filename:   "overwrite-test.zip",
 	}
 	if err := SaveState(testURL, testDestPath, state1); err != nil {
@@ -184,12 +185,12 @@ func TestStateOverwrite(t *testing.T) {
 	}
 
 	// Second pause at 80% (simulating resume + more downloading)
-	state2 := &DownloadState{
+	state2 := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   testDestPath,
 		TotalSize:  1000000,
 		Downloaded: 800000, // 80%
-		Tasks:      []Task{{Offset: 800000, Length: 200000}},
+		Tasks:      []types.Task{{Offset: 800000, Length: 200000}},
 		Filename:   "overwrite-test.zip",
 	}
 	if err := SaveState(testURL, testDestPath, state2); err != nil {
@@ -226,28 +227,28 @@ func TestDuplicateURLStateIsolation(t *testing.T) {
 	dest3 := "C:\\Downloads\\samefile(2).zip"
 
 	// Create 3 downloads of the same URL with different destinations
-	state1 := &DownloadState{
+	state1 := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   dest1,
 		TotalSize:  1000000,
 		Downloaded: 100000, // 10%
-		Tasks:      []Task{{Offset: 100000, Length: 900000}},
+		Tasks:      []types.Task{{Offset: 100000, Length: 900000}},
 		Filename:   "samefile.zip",
 	}
-	state2 := &DownloadState{
+	state2 := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   dest2,
 		TotalSize:  1000000,
 		Downloaded: 500000, // 50%
-		Tasks:      []Task{{Offset: 500000, Length: 500000}},
+		Tasks:      []types.Task{{Offset: 500000, Length: 500000}},
 		Filename:   "samefile(1).zip",
 	}
-	state3 := &DownloadState{
+	state3 := &types.DownloadState{
 		URL:        testURL,
 		DestPath:   dest3,
 		TotalSize:  1000000,
 		Downloaded: 900000, // 90%
-		Tasks:      []Task{{Offset: 900000, Length: 100000}},
+		Tasks:      []types.Task{{Offset: 900000, Length: 100000}},
 		Filename:   "samefile(2).zip",
 	}
 

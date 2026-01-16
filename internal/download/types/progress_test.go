@@ -1,4 +1,4 @@
-package downloader
+package types
 
 import (
 	"context"
