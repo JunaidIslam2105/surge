@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/junaid2005p/surge/internal/downloader"
@@ -20,6 +22,35 @@ import (
 )
 
 const progressChannelBuffer = 100
+
+// readURLsFromFile reads URLs from a file, one per line
+func readURLsFromFile(filepath string) ([]string, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var urls []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and comments
+		if line != "" && !strings.HasPrefix(line, "#") {
+			urls = append(urls, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no URLs found in file")
+	}
+
+	return urls, nil
+}
 
 // runHeadless runs a download without TUI, printing progress to stderr
 func runHeadless(ctx context.Context, url, outPath string, verbose bool) error {
@@ -103,13 +134,33 @@ var getCmd = &cobra.Command{
 	Long: `Download a file from a URL without the TUI interface.
 
 Use --headless for CLI-only downloads (useful for scripting).
-Use --port to send the download to a running Surge instance.`,
-	Args: cobra.ExactArgs(1),
+Use --port to send the download to a running Surge instance.
+Use --batch to download multiple URLs from a file (one URL per line).`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		url := args[0]
 		outPath, _ := cmd.Flags().GetString("output")
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		port, _ := cmd.Flags().GetInt("port")
+		batchFile, _ := cmd.Flags().GetString("batch")
+
+		// Collect URLs to download
+		var urls []string
+		if batchFile != "" {
+			// Batch mode: read URLs from file
+			var err error
+			urls, err = readURLsFromFile(batchFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "Loaded %d URLs from %s\n", len(urls), batchFile)
+		} else if len(args) == 1 {
+			// Single URL mode
+			urls = []string{args[0]}
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: requires either a URL argument or --batch flag\n")
+			os.Exit(1)
+		}
 
 		if outPath == "" && port == 0 {
 			// Only default to "." for headless mode.
@@ -117,19 +168,31 @@ Use --port to send the download to a running Surge instance.`,
 			outPath = "."
 		}
 
-		// Send to running server if port specified
-		if port > 0 {
-			if err := sendToServer(url, outPath, port); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+		// Process each URL
+		var failed int
+		for i, url := range urls {
+			if len(urls) > 1 {
+				fmt.Fprintf(os.Stderr, "\n[%d/%d] %s\n", i+1, len(urls), url)
 			}
-			return
+
+			if port > 0 {
+				// Send to running server
+				if err := sendToServer(url, outPath, port); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					failed++
+				}
+			} else {
+				// Headless download
+				ctx := context.Background()
+				if err := runHeadless(ctx, url, outPath, verbose); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					failed++
+				}
+			}
 		}
 
-		// Default: headless download
-		ctx := context.Background()
-		if err := runHeadless(ctx, url, outPath, verbose); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if failed > 0 {
+			fmt.Fprintf(os.Stderr, "\n%d of %d downloads failed\n", failed, len(urls))
 			os.Exit(1)
 		}
 	},
@@ -139,4 +202,5 @@ func init() {
 	getCmd.Flags().StringP("output", "o", "", "output directory")
 	getCmd.Flags().BoolP("verbose", "v", false, "verbose output")
 	getCmd.Flags().IntP("port", "p", 0, "send to running surge server on this port")
+	getCmd.Flags().StringP("batch", "b", "", "file containing URLs to download (one per line)")
 }
