@@ -16,7 +16,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/surge-downloader/surge/internal/config"
-	"github.com/surge-downloader/surge/internal/downloader"
+	"github.com/surge-downloader/surge/internal/download"
+	"github.com/surge-downloader/surge/internal/download/state"
+	"github.com/surge-downloader/surge/internal/download/types"
 )
 
 type UIState int //Defines UIState as int to be used in rootModel
@@ -64,7 +66,7 @@ type DownloadModel struct {
 	progress progress.Model
 
 	// Hybrid architecture: atomic state + polling reporter
-	state    *downloader.ProgressState
+	state    *types.ProgressState
 	reporter *ProgressReporter
 
 	done   bool
@@ -91,11 +93,11 @@ type RootModel struct {
 	// Bubbles list component for download listing
 	list list.Model
 
-	Pool *downloader.WorkerPool //Works as the download queue
+	Pool *download.WorkerPool //Works as the download queue
 	PWD  string
 
 	// History view
-	historyEntries []downloader.DownloadEntry
+	historyEntries []types.DownloadEntry
 	historyCursor  int
 
 	// Duplicate detection
@@ -144,7 +146,7 @@ type RootModel struct {
 
 // NewDownloadModel creates a new download model with progress state and reporter
 func NewDownloadModel(id string, url string, filename string, total int64) *DownloadModel {
-	state := downloader.NewProgressState(id, total)
+	state := types.NewProgressState(id, total)
 	return &DownloadModel{
 		ID:        id,
 		URL:       url,
@@ -195,7 +197,7 @@ func InitialRootModel(serverPort int) RootModel {
 
 	// Load paused downloads from master list (now uses global config directory)
 	var downloads []*DownloadModel
-	if pausedEntries, err := downloader.LoadPausedDownloads(); err == nil {
+	if pausedEntries, err := state.LoadPausedDownloads(); err == nil {
 		for _, entry := range pausedEntries {
 			var id string
 			if entry.ID != "" {
@@ -205,7 +207,7 @@ func InitialRootModel(serverPort int) RootModel {
 			dm.paused = true
 			dm.Destination = entry.DestPath // Store destination for state lookup on resume
 			// Load actual progress from state file (using URL+DestPath for unique lookup)
-			if state, err := downloader.LoadState(entry.URL, entry.DestPath); err == nil {
+			if state, err := state.LoadState(entry.URL, entry.DestPath); err == nil {
 				dm.Downloaded = state.Downloaded
 				dm.Total = state.TotalSize
 				dm.state.Downloaded.Store(state.Downloaded)
@@ -220,7 +222,7 @@ func InitialRootModel(serverPort int) RootModel {
 	}
 
 	// Load completed downloads from master list (for Done tab persistence)
-	if completedEntries, err := downloader.LoadCompletedDownloads(); err == nil {
+	if completedEntries, err := state.LoadCompletedDownloads(); err == nil {
 		for _, entry := range completedEntries {
 			var id string
 			if entry.ID != "" {
@@ -266,7 +268,7 @@ func InitialRootModel(serverPort int) RootModel {
 		filepicker:    fp,
 		help:          helpModel,
 		list:          downloadList,
-		Pool:          downloader.NewWorkerPool(progressChan),
+		Pool:          download.NewWorkerPool(progressChan),
 		PWD:           pwd,
 		SpeedHistory:  make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
 		logViewport:   viewport.New(40, 5),                 // Default size, will be resized

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/surge-downloader/surge/internal/downloader"
+	"github.com/surge-downloader/surge/internal/download"
 	"github.com/surge-downloader/surge/internal/messages"
 	"github.com/surge-downloader/surge/internal/utils"
 
@@ -63,7 +63,7 @@ func runHeadless(ctx context.Context, url, outPath string, verbose bool) error {
 	// Start download in background
 	errCh := make(chan error, 1)
 	go func() {
-		err := downloader.Download(ctx, url, outPath, verbose, eventCh, uuid.New().String())
+		err := download.Download(ctx, url, outPath, verbose, eventCh, uuid.New().String())
 		errCh <- err
 		close(eventCh)
 	}()

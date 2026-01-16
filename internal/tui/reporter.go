@@ -1,9 +1,10 @@
 package tui
 
 import (
-	"github.com/surge-downloader/surge/internal/downloader"
-	"github.com/surge-downloader/surge/internal/messages"
 	"time"
+
+	"github.com/surge-downloader/surge/internal/download/types"
+	"github.com/surge-downloader/surge/internal/messages"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,12 +15,12 @@ const (
 )
 
 type ProgressReporter struct {
-	state        *downloader.ProgressState
+	state        *types.ProgressState
 	pollInterval time.Duration
 	lastSpeed    float64
 }
 
-func NewProgressReporter(state *downloader.ProgressState) *ProgressReporter {
+func NewProgressReporter(state *types.ProgressState) *ProgressReporter {
 	return &ProgressReporter{
 		state:        state,
 		pollInterval: DefaultPollInterval,
