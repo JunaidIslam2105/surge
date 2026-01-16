@@ -325,3 +325,19 @@ func (m *RootModel) resetFilepicker() {
 	m.filepicker.DirAllowed = true
 	m.filepicker.AllowedTypes = nil
 }
+
+// newFilepicker creates a fresh filepicker instance with consistent settings.
+// This is necessary to avoid cursor desync issues that cause "index out of range"
+// panics when navigating directories (especially on Windows).
+// See: https://github.com/charmbracelet/bubbles/issues/864
+func newFilepicker(currentDir string) filepicker.Model {
+	fp := filepicker.New()
+	fp.CurrentDirectory = currentDir
+	fp.DirAllowed = true
+	fp.FileAllowed = false
+	fp.ShowHidden = false
+	fp.ShowSize = true
+	fp.ShowPermissions = true
+	fp.SetHeight(FilePickerHeight)
+	return fp
+}

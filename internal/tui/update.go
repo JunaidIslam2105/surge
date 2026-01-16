@@ -651,7 +651,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Batch import
 			if key.Matches(msg, m.keys.Dashboard.BatchImport) {
 				m.state = BatchFilePickerState
-				// Set filepicker to allow files (not just directories)
+				m.filepicker = newFilepicker(m.PWD)
 				m.filepicker.FileAllowed = true
 				m.filepicker.DirAllowed = false
 				return m, m.filepicker.Init()
@@ -707,8 +707,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Tab to open file picker when on path input
 			if key.Matches(msg, m.keys.Input.Tab) && m.focusedInput == 1 {
 				m.state = FilePickerState
-				// Reset filepicker to current directory
-				m.filepicker.CurrentDirectory = m.PWD
+				m.filepicker = newFilepicker(m.PWD)
 				return m, m.filepicker.Init()
 			}
 			if key.Matches(msg, m.keys.Input.Enter) {
@@ -782,10 +781,14 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// H key to jump to Downloads folder
+			// H key to jump to default download directory
 			if key.Matches(msg, m.keys.FilePicker.GotoHome) {
-				homeDir, _ := os.UserHomeDir()
-				m.filepicker.CurrentDirectory = filepath.Join(homeDir, "Downloads")
+				defaultDir := m.Settings.General.DefaultDownloadDir
+				if defaultDir == "" {
+					homeDir, _ := os.UserHomeDir()
+					defaultDir = filepath.Join(homeDir, "Downloads")
+				}
+				m.filepicker = newFilepicker(defaultDir)
 				return m, m.filepicker.Init()
 			}
 
@@ -907,10 +910,16 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// H key to jump to Downloads folder
+			// H key to jump to default download directory
 			if key.Matches(msg, m.keys.FilePicker.GotoHome) {
-				homeDir, _ := os.UserHomeDir()
-				m.filepicker.CurrentDirectory = filepath.Join(homeDir, "Downloads")
+				defaultDir := m.Settings.General.DefaultDownloadDir
+				if defaultDir == "" {
+					homeDir, _ := os.UserHomeDir()
+					defaultDir = filepath.Join(homeDir, "Downloads")
+				}
+				m.filepicker = newFilepicker(defaultDir)
+				m.filepicker.FileAllowed = true
+				m.filepicker.DirAllowed = false
 				return m, m.filepicker.Init()
 			}
 
@@ -1057,7 +1066,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if settingKey == "default_download_dir" {
 					m.SettingsFileBrowsing = true
 					m.state = FilePickerState
-					m.filepicker.CurrentDirectory = m.Settings.General.DefaultDownloadDir
+					m.filepicker = newFilepicker(m.Settings.General.DefaultDownloadDir)
 					return m, m.filepicker.Init()
 				}
 				return m, nil
