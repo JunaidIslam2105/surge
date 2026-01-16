@@ -943,17 +943,29 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case BatchConfirmState:
 			if key.Matches(msg, m.keys.BatchConfirm.Confirm) {
-				// Add all URLs as downloads
+				// Add all URLs as downloads, skipping duplicates
 				path := m.Settings.General.DefaultDownloadDir
 				if path == "" {
 					path = "."
 				}
 
+				added := 0
+				skipped := 0
 				for _, url := range m.pendingBatchURLs {
+					// Skip duplicate URLs
+					if m.checkForDuplicate(url) != nil {
+						skipped++
+						continue
+					}
 					m, _ = m.startDownload(url, path, "")
+					added++
 				}
 
-				m.addLogEntry(LogStyleStarted.Render(fmt.Sprintf("⬇ Added %d downloads from batch", len(m.pendingBatchURLs))))
+				if skipped > 0 {
+					m.addLogEntry(LogStyleStarted.Render(fmt.Sprintf("⬇ Added %d downloads from batch (%d duplicates skipped)", added, skipped)))
+				} else {
+					m.addLogEntry(LogStyleStarted.Render(fmt.Sprintf("⬇ Added %d downloads from batch", added)))
+				}
 				m.pendingBatchURLs = nil
 				m.batchFilePath = ""
 				m.state = DashboardState
