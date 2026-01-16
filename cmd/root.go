@@ -44,7 +44,7 @@ var rootCmd = &cobra.Command{
 		saveActivePort(port)
 
 		// Create TUI program
-		model := tui.InitialRootModel()
+		model := tui.InitialRootModel(port)
 		serverProgram = tea.NewProgram(model, tea.WithAltScreen())
 
 		// Start HTTP server in background (reuse the listener)

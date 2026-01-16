@@ -137,6 +137,9 @@ type RootModel struct {
 
 	// Keybindings
 	keys KeyMap
+
+	// Server port for display
+	ServerPort int
 }
 
 // NewDownloadModel creates a new download model with progress state and reporter
@@ -154,7 +157,7 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 	}
 }
 
-func InitialRootModel() RootModel {
+func InitialRootModel(serverPort int) RootModel {
 	// Initialize inputs
 	urlInput := textinput.New()
 	urlInput.Placeholder = "https://example.com/file.zip"
@@ -272,6 +275,7 @@ func InitialRootModel() RootModel {
 		SettingsInput: settingsInput,
 		searchInput:   searchInput,
 		keys:          Keys,
+		ServerPort:    serverPort,
 	}
 }
 

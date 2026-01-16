@@ -143,6 +143,7 @@ func (m RootModel) View() string {
 	rightWidth := availableWidth - leftWidth - 2 // -2 for spacing
 
 	// --- LEFT COLUMN HEIGHTS ---
+	serverBoxHeight := 3
 	headerHeight := 11
 	listHeight := availableHeight - headerHeight
 	if listHeight < 10 {
@@ -174,10 +175,22 @@ func (m RootModel) View() string {
 	logoWidth := int(float64(leftWidth) * 0.45)
 	logWidth := leftWidth - logoWidth - 2 // Rest for log box
 
-	// Render logo centered in its box
+	// Render logo centered in its box (move up to make room for server box)
 	gradientLogo := ApplyGradient(logoText, ColorNeonPink, ColorNeonPurple)
-	logoBox := lipgloss.Place(logoWidth, headerHeight, lipgloss.Center, lipgloss.Center,
-		lipgloss.NewStyle().MarginBottom(1).Render(gradientLogo))
+	logoContent := lipgloss.NewStyle().Render(gradientLogo)
+	logoBox := lipgloss.Place(logoWidth, headerHeight-serverBoxHeight, lipgloss.Center, lipgloss.Center, logoContent)
+
+	// Server port box (below logo, same width)
+	greenDot := lipgloss.NewStyle().Foreground(ColorStateDownloading).Render("●")
+	serverText := lipgloss.NewStyle().Foreground(ColorNeonCyan).Bold(true).Render(fmt.Sprintf(" Listening on :%d", m.ServerPort))
+	serverPortContent := lipgloss.NewStyle().
+		Width(logoWidth - 4).
+		Align(lipgloss.Center).
+		Render(greenDot + serverText)
+	serverBox := renderBtopBox("", PaneTitleStyle.Render(" Server "), serverPortContent, logoWidth, serverBoxHeight, ColorDarkGray)
+
+	// Combine logo and server box vertically
+	logoColumn := lipgloss.JoinVertical(lipgloss.Left, logoBox, serverBox)
 
 	// Render log viewport
 	m.logViewport.Width = logWidth - 4      // Account for borders
@@ -191,8 +204,8 @@ func (m RootModel) View() string {
 	}
 	logBox := renderBtopBox(PaneTitleStyle.Render(" Activity Log "), "", logContent, logWidth, headerHeight, logBorderColor)
 
-	// Combine logo and log box horizontally
-	headerBox := lipgloss.JoinHorizontal(lipgloss.Top, logoBox, logBox)
+	// Combine logo column and log box horizontally
+	headerBox := lipgloss.JoinHorizontal(lipgloss.Top, logoColumn, logBox)
 
 	// --- SECTION 2: SPEED GRAPH (Top Right) ---
 	// Use GraphHistoryPoints from config (30 seconds of history)

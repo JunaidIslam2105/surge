@@ -52,8 +52,11 @@ surge get <URL>
 # Headless download with custom output directory
 surge get <URL> -o ~/Downloads
 
+# Send download via CLI to already running TUI instance
+surge get <URL> --port <PORT>
+
 # Batch download from a file (one URL per line)
-surge get --batch urls.txt -o ~/Downloads
+surge get --batch urls.txt
 ```
 
 ### Batch Downloads
