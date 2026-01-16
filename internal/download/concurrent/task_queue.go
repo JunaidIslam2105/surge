@@ -9,7 +9,7 @@ import (
 
 // TaskQueue is a thread-safe work-stealing queue
 type TaskQueue struct {
-	tasks       []Task
+	tasks       []types.Task
 	head        int
 	mu          sync.Mutex
 	cond        *sync.Cond
@@ -23,21 +23,21 @@ func NewTaskQueue() *TaskQueue {
 	return tq
 }
 
-func (q *TaskQueue) Push(t Task) {
+func (q *TaskQueue) Push(t types.Task) {
 	q.mu.Lock()
 	q.tasks = append(q.tasks, t)
 	q.cond.Signal()
 	q.mu.Unlock()
 }
 
-func (q *TaskQueue) PushMultiple(tasks []Task) {
+func (q *TaskQueue) PushMultiple(tasks []types.Task) {
 	q.mu.Lock()
 	q.tasks = append(q.tasks, tasks...)
 	q.cond.Broadcast()
 	q.mu.Unlock()
 }
 
-func (q *TaskQueue) Pop() (Task, bool) {
+func (q *TaskQueue) Pop() (types.Task, bool) {
 	// Mark as idle while waiting
 	atomic.AddInt64(&q.idleWorkers, 1)
 
@@ -52,13 +52,13 @@ func (q *TaskQueue) Pop() (Task, bool) {
 	atomic.AddInt64(&q.idleWorkers, -1)
 
 	if len(q.tasks) == 0 {
-		return Task{}, false
+		return types.Task{}, false
 	}
 
 	t := q.tasks[q.head]
 	q.head++
 	if q.head > len(q.tasks)/2 {
-		q.tasks = append([]Task(nil), q.tasks[q.head:]...)
+		q.tasks = append([]types.Task(nil), q.tasks[q.head:]...)
 		q.head = 0
 	}
 	return t, true
@@ -82,7 +82,7 @@ func (q *TaskQueue) IdleWorkers() int64 {
 }
 
 // DrainRemaining returns all remaining tasks in the queue (used for pause/resume)
-func (q *TaskQueue) DrainRemaining() []Task {
+func (q *TaskQueue) DrainRemaining() []types.Task {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -90,7 +90,7 @@ func (q *TaskQueue) DrainRemaining() []Task {
 		return nil
 	}
 
-	remaining := make([]Task, len(q.tasks)-q.head)
+	remaining := make([]types.Task, len(q.tasks)-q.head)
 	copy(remaining, q.tasks[q.head:])
 	q.tasks = nil
 	q.head = 0
@@ -125,8 +125,8 @@ func (q *TaskQueue) SplitLargestIfNeeded() bool {
 		return false // Halves would be too small
 	}
 
-	left := Task{Offset: t.Offset, Length: half}
-	right := Task{Offset: t.Offset + half, Length: t.Length - half}
+	left := types.Task{Offset: t.Offset, Length: half}
+	right := types.Task{Offset: t.Offset + half, Length: t.Length - half}
 
 	// Replace original with right half, append left half
 	q.tasks[idx] = right

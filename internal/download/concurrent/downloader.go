@@ -154,20 +154,8 @@ func (d *ConcurrentDownloader) newConcurrentClient(numConns int) *http.Client {
 	}
 }
 
-// IncompleteSuffix is appended to files while downloading
-const IncompleteSuffix = ".surge"
-
-// Download downloads a file using multiple concurrent connections
-// Uses pre-probed metadata (file size already known)
-func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath string, fileSize int64, verbose bool) error {
-	utils.Debug("ConcurrentDownloader.Download: %s -> %s (size: %d)", rawurl, destPath, fileSize)
-
-	// Store URL and path for pause/resume (final path without .surge)
-	d.URL = rawurl
-	d.DestPath = destPath
-
 	// Working file has .surge suffix until download completes
-	workingPath := destPath + IncompleteSuffix
+	workingPath := destPath + types.IncompleteSuffix
 
 	// Create cancellable context for pause support
 	downloadCtx, cancel := context.WithCancel(ctx)

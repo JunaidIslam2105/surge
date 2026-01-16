@@ -14,6 +14,9 @@ const (
 
 	// Megabyte as float for display calculations
 	Megabyte = 1024.0 * 1024.0
+
+	// IncompleteSuffix is appended to files while downloading
+	IncompleteSuffix = ".surge"
 )
 
 // Chunk size constants for concurrent downloads
@@ -128,22 +131,22 @@ func (r *RuntimeConfig) GetWorkerBufferSize() int {
 }
 
 const (
-	maxTaskRetries = 3
-	retryBaseDelay = 200 * time.Millisecond
+	MaxTaskRetries = 3
+	RetryBaseDelay = 200 * time.Millisecond
 
 	// Health check constants
-	healthCheckInterval = 1 * time.Second // How often to check worker health
-	slowWorkerThreshold = 0.50            // Restart if speed < x times of mean
-	slowWorkerGrace     = 5 * time.Second // Grace period before checking speed
-	stallTimeout        = 5 * time.Second // Restart if no data for x seconds
-	speedEMAAlpha       = 0.3             // EMA smoothing factor
-	minAbsoluteSpeed    = 100 * KB        // Don't cancel workers above this speed
+	HealthCheckInterval = 1 * time.Second // How often to check worker health
+	SlowWorkerThreshold = 0.50            // Restart if speed < x times of mean
+	SlowWorkerGrace     = 5 * time.Second // Grace period before checking speed
+	StallTimeout        = 5 * time.Second // Restart if no data for x seconds
+	SpeedEMAAlpha       = 0.3             // EMA smoothing factor
+	MinAbsoluteSpeed    = 100 * KB        // Don't cancel workers above this speed
 )
 
 // GetMaxTaskRetries returns configured value or default
 func (r *RuntimeConfig) GetMaxTaskRetries() int {
 	if r == nil || r.MaxTaskRetries <= 0 {
-		return maxTaskRetries
+		return MaxTaskRetries
 	}
 	return r.MaxTaskRetries
 }
@@ -151,7 +154,7 @@ func (r *RuntimeConfig) GetMaxTaskRetries() int {
 // GetSlowWorkerThreshold returns configured value or default
 func (r *RuntimeConfig) GetSlowWorkerThreshold() float64 {
 	if r == nil || r.SlowWorkerThreshold <= 0 {
-		return slowWorkerThreshold
+		return SlowWorkerThreshold
 	}
 	return r.SlowWorkerThreshold
 }
@@ -159,7 +162,7 @@ func (r *RuntimeConfig) GetSlowWorkerThreshold() float64 {
 // GetSlowWorkerGracePeriod returns configured value or default
 func (r *RuntimeConfig) GetSlowWorkerGracePeriod() time.Duration {
 	if r == nil || r.SlowWorkerGracePeriod <= 0 {
-		return slowWorkerGrace
+		return SlowWorkerGrace
 	}
 	return r.SlowWorkerGracePeriod
 }
@@ -167,7 +170,7 @@ func (r *RuntimeConfig) GetSlowWorkerGracePeriod() time.Duration {
 // GetStallTimeout returns configured value or default
 func (r *RuntimeConfig) GetStallTimeout() time.Duration {
 	if r == nil || r.StallTimeout <= 0 {
-		return stallTimeout
+		return StallTimeout
 	}
 	return r.StallTimeout
 }
@@ -175,7 +178,7 @@ func (r *RuntimeConfig) GetStallTimeout() time.Duration {
 // GetSpeedEmaAlpha returns configured value or default
 func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
 	if r == nil || r.SpeedEmaAlpha <= 0 {
-		return speedEMAAlpha
+		return SpeedEMAAlpha
 	}
 	return r.SpeedEmaAlpha
 }
