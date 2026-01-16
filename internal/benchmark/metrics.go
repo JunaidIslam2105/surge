@@ -38,19 +38,19 @@ func NewBenchmarkMetrics() *BenchmarkMetrics {
 }
 
 // RecordFirstByte marks when the first byte was received
-func RecordFirstByte(bm *BenchmarkMetrics) {
+func (bm *BenchmarkMetrics) RecordFirstByte() {
 	if bm.FirstByteTime.IsZero() {
 		bm.FirstByteTime = time.Now()
 	}
 }
 
 // RecordRetry increments the retry counter
-func RecordRetry(bm *BenchmarkMetrics) {
+func (bm *BenchmarkMetrics) RecordRetry() {
 	bm.RetryCount.Add(1)
 }
 
 // RecordConnections samples the current connection count
-func RecordConnections(bm *BenchmarkMetrics, count int32) {
+func (bm *BenchmarkMetrics) RecordConnections(count int32) {
 	bm.ConnectionSum.Add(int64(count))
 	bm.SampleCount.Add(1)
 
@@ -66,12 +66,12 @@ func RecordConnections(bm *BenchmarkMetrics, count int32) {
 }
 
 // RecordBytes adds to the total bytes received
-func RecordBytes(bm *BenchmarkMetrics, n int64) {
+func (bm *BenchmarkMetrics) RecordBytes(n int64) {
 	bm.BytesReceived.Add(n)
 }
 
 // Finish marks the download as complete and captures final stats
-func Finish(bm *BenchmarkMetrics, totalBytes int64) {
+func (bm *BenchmarkMetrics) Finish(totalBytes int64) {
 	bm.EndTime = time.Now()
 	bm.TotalBytes = totalBytes
 
@@ -83,7 +83,7 @@ func Finish(bm *BenchmarkMetrics, totalBytes int64) {
 }
 
 // GetResults returns the computed metrics
-func GetResults(bm *BenchmarkMetrics) BenchmarkResults {
+func (bm *BenchmarkMetrics) GetResults() BenchmarkResults {
 	elapsed := bm.EndTime.Sub(bm.StartTime)
 	ttfb := bm.FirstByteTime.Sub(bm.StartTime)
 

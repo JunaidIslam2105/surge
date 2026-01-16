@@ -8,9 +8,90 @@ import (
 	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/download/state"
 	"github.com/surge-downloader/surge/internal/download/types"
 	"github.com/surge-downloader/surge/internal/testutil"
 )
+
+// ... existing imports ...
+
+// =============================================================================
+// createTasks Tests
+
+// ... (rest of the file until the test) ...
+
+func TestConcurrentDownloader_ResumePartialDownload(t *testing.T) {
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatalf("Failed to create config dirs: %v", err)
+	}
+
+	fileSize := int64(256 * types.KB)
+	server := testutil.NewMockServer(
+		testutil.WithFileSize(fileSize),
+		testutil.WithRangeSupport(true),
+	)
+	defer server.Close()
+
+	tmpDir, cleanup, _ := testutil.TempDir("surge-resume-test")
+	defer cleanup()
+
+	destPath := filepath.Join(tmpDir, "resume_test.bin")
+	workingPath := destPath + types.IncompleteSuffix
+
+	// Create partial .surge file (simulate interrupted download)
+	partialSize := int64(100 * types.KB)
+	_, err := testutil.CreateTestFile(tmpDir, "resume_test.bin.surge", partialSize, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create saved state for resume
+	remainingTasks := []types.Task{
+		{Offset: partialSize, Length: fileSize - partialSize},
+	}
+	savedState := &types.DownloadState{
+		URL:        server.URL(),
+		DestPath:   destPath,
+		TotalSize:  fileSize,
+		Downloaded: partialSize,
+		Tasks:      remainingTasks,
+		Filename:   "resume_test.bin",
+		URLHash:    state.URLHash(server.URL()), // Helper from state package
+	}
+	if err := state.SaveState(server.URL(), destPath, savedState); err != nil {
+		t.Fatalf("Failed to save state: %v", err)
+	}
+	defer state.DeleteState("resume-id", server.URL(), destPath)
+
+	// Now resume download
+	progressState := types.NewProgressState("resume-test", fileSize)
+	runtime := &types.RuntimeConfig{MaxConnectionsPerHost: 2}
+
+	downloader := NewConcurrentDownloader("resume-id", nil, progressState, runtime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = downloader.Download(ctx, server.URL(), destPath, fileSize, false)
+	if err != nil {
+		t.Fatalf("Resume download failed: %v", err)
+	}
+
+	// Verify final file exists (not .surge)
+	if testutil.FileExists(workingPath) {
+		t.Error(".surge file should be removed after completion")
+	}
+
+	if err := testutil.VerifyFileSize(destPath, fileSize); err != nil {
+		t.Error(err)
+	}
+
+	// State file should be deleted on success
+	_, err = state.LoadState(server.URL(), destPath)
+	if err == nil {
+		t.Error("State file should be deleted after successful download")
+	}
+}
 
 // =============================================================================
 // createTasks Tests
@@ -608,47 +689,3 @@ func TestConcurrentDownloader_ContentIntegrity(t *testing.T) {
 // =============================================================================
 // Advanced Integration Tests - Resume from Partial Download
 // =============================================================================
-
-func TestConcurrentDownloader_ResumePartialDownload(t *testing.T) {
-	if err := config.EnsureDirs(); err != nil {
-		t.Fatalf("Failed to create config dirs: %v", err)
-	}
-
-	fileSize := int64(256 * types.KB)
-	server := testutil.NewMockServer(
-		testutil.WithFileSize(fileSize),
-		testutil.WithRangeSupport(true),
-	)
-	defer server.Close()
-
-	tmpDir, cleanup, _ := testutil.TempDir("surge-resume-test")
-	defer cleanup()
-
-	destPath := filepath.Join(tmpDir, "resume_test.bin")
-	workingPath := destPath + types.IncompleteSuffix
-
-	// Create partial .surge file (simulate interrupted download)
-	partialSize := int64(100 * types.KB)
-	_, err := testutil.CreateTestFile(tmpDir, "resume_test.bin.surge", partialSize, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create saved state for resume
-	// NOTE: DownloadState is in types package, so we need to use types.DownloadState
-	// But SaveState is in state package. We are in concurrent package.
-	// This test depends on state package functionality.
-	// Since we are moving towards modularity, maybe we shouldn't test persistence here but in state package?
-	// OR we import state package.
-	// But state package depends on types. Concurrent depends on types.
-	// Importing state package is fine.
-	// Wait, to use SaveState we need to import github.com/surge-downloader/surge/internal/download/state
-	// But earlier I decided state package depends on types.
-	// concurrent depends on types.
-	// So concurrent -> state is allowed?
-	// Yes, concurrent is higher level? No, concurrent is just the downloader logic.
-	// Actually, `ConcurrentDownloader` doesn't save state itself?
-	// It uses `ProgressState`.
-	// The `ResumePartialDownload` test sets up state using `SaveState`.
-	// So we need to import `state` package.
-}
