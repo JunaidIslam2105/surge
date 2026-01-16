@@ -51,7 +51,17 @@ surge get <URL>
 
 # Headless download with custom output directory
 surge get <URL> -o ~/Downloads
+
+# Batch download from a file (one URL per line)
+surge get --batch urls.txt -o ~/Downloads
 ```
+
+### Batch Downloads
+
+Import multiple URLs at once from a text file (one URL per line). Duplicate URLs are automatically detected and skipped.
+
+- **TUI**: Press `B` to import a batch file
+- **CLI**: Use `surge get --batch urls.txt`
 
 ## Benchmarks
 
