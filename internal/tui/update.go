@@ -386,6 +386,38 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.state == BatchFilePickerState {
+			var cmd tea.Cmd
+			m.filepicker, cmd = m.filepicker.Update(msg)
+
+			// Check if a file was selected
+			if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+				// Read URLs from file
+				urls, err := readURLsFromFile(path)
+				if err != nil {
+					m.addLogEntry(LogStyleError.Render("✖ Failed to read batch file: " + err.Error()))
+					// Reset filepicker and return
+					m.filepicker.FileAllowed = false
+					m.filepicker.DirAllowed = true
+					m.state = DashboardState
+					return m, nil
+				}
+
+				// Store pending URLs and show confirmation
+				m.pendingBatchURLs = urls
+				m.batchFilePath = path
+
+				// Reset filepicker to directory mode
+				m.filepicker.FileAllowed = false
+				m.filepicker.DirAllowed = true
+
+				m.state = BatchConfirmState
+				return m, nil
+			}
+
+			return m, cmd
+		}
+
 	case tea.KeyMsg:
 		switch m.state {
 		case DashboardState:
@@ -613,10 +645,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Batch import
 			if key.Matches(msg, m.keys.Dashboard.BatchImport) {
 				m.state = BatchFilePickerState
-				// Set filepicker to allow .txt files
+				// Set filepicker to allow files (not just directories)
 				m.filepicker.FileAllowed = true
 				m.filepicker.DirAllowed = false
-				m.filepicker.AllowedTypes = []string{".txt"}
 				return m, m.filepicker.Init()
 			}
 

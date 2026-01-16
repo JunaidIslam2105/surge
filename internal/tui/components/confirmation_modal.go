@@ -3,6 +3,8 @@ package components
 import (
 	"github.com/junaid2005p/surge/internal/tui/colors"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -11,20 +13,42 @@ type ConfirmationModal struct {
 	Title       string
 	Message     string
 	Detail      string         // Optional additional detail line (e.g., filename, URL)
-	HelpText    string         // e.g., "[Y] Yes  [N] No"
+	Keys        help.KeyMap    // Key bindings to show in help
+	Help        help.Model     // Help model for rendering keys
 	BorderColor lipgloss.Color // Border color for the box
 	Width       int
 	Height      int
 }
 
+// ConfirmationKeyMap defines keybindings for a confirmation modal
+type ConfirmationKeyMap struct {
+	Confirm key.Binding
+	Cancel  key.Binding
+	Extra   key.Binding // Optional extra action (e.g., "Focus Existing")
+}
+
+// ShortHelp returns keybindings to show
+func (k ConfirmationKeyMap) ShortHelp() []key.Binding {
+	if k.Extra.Enabled() {
+		return []key.Binding{k.Confirm, k.Extra, k.Cancel}
+	}
+	return []key.Binding{k.Confirm, k.Cancel}
+}
+
+// FullHelp returns keybindings for the expanded help view
+func (k ConfirmationKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
 // NewConfirmationModal creates a modal with default styling
-func NewConfirmationModal(title, message, detail, helpText string) ConfirmationModal {
+func NewConfirmationModal(title, message, detail string, keys help.KeyMap, helpModel help.Model, borderColor lipgloss.Color) ConfirmationModal {
 	return ConfirmationModal{
 		Title:       title,
 		Message:     message,
 		Detail:      detail,
-		HelpText:    helpText,
-		BorderColor: colors.NeonCyan,
+		Keys:        keys,
+		Help:        helpModel,
+		BorderColor: borderColor,
 		Width:       60,
 		Height:      10,
 	}
@@ -32,23 +56,12 @@ func NewConfirmationModal(title, message, detail, helpText string) ConfirmationM
 
 // View renders the confirmation modal content (without the box wrapper)
 func (m ConfirmationModal) View() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(colors.NeonCyan).
-		Bold(true)
-
 	detailStyle := lipgloss.NewStyle().
 		Foreground(colors.NeonPurple).
 		Bold(true)
 
-	helpStyle := lipgloss.NewStyle().
-		Foreground(colors.LightGray)
-
-	// Build content
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		titleStyle.Render(m.Title),
-		"",
-		m.Message,
-	)
+	// Build content - just message, detail, and help
+	content := m.Message
 
 	if m.Detail != "" {
 		content = lipgloss.JoinVertical(lipgloss.Center,
@@ -61,17 +74,23 @@ func (m ConfirmationModal) View() string {
 	content = lipgloss.JoinVertical(lipgloss.Center,
 		content,
 		"",
-		helpStyle.Render(m.HelpText),
+		m.Help.View(m.Keys),
 	)
 
 	return content
 }
 
-// RenderWithBtopBox renders the modal using the btop-style box
-// This function should be called from view.go where renderBtopBox is available
-func (m ConfirmationModal) RenderWithBtopBox(renderBox func(leftTitle, rightTitle, content string, width, height int, borderColor lipgloss.Color) string) string {
-	paddedContent := lipgloss.NewStyle().Padding(1, 2).Render(m.View())
-	return renderBox("", "", paddedContent, m.Width, m.Height, m.BorderColor)
+// RenderWithBtopBox renders the modal using the btop-style box with title in border
+func (m ConfirmationModal) RenderWithBtopBox(
+	renderBox func(leftTitle, rightTitle, content string, width, height int, borderColor lipgloss.Color) string,
+	titleStyle lipgloss.Style,
+) string {
+	// Center content within the box
+	innerWidth := m.Width - 4 // Account for borders
+	innerHeight := m.Height - 2
+	centeredContent := lipgloss.Place(innerWidth, innerHeight, lipgloss.Center, lipgloss.Center, m.View())
+	// Title goes in the box border
+	return renderBox(titleStyle.Render(" "+m.Title+" "), "", centeredContent, m.Width, m.Height, m.BorderColor)
 }
 
 // Centered returns the modal centered in the given dimensions (for standalone use)
