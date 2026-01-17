@@ -16,3 +16,18 @@ archives:
         formats: [ zip ]
         
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: surge
+    repository:
+      owner: surge-downloader
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/surge-downloader/surge"
+    description: "Surge is an open-source download manager"
+    license: "MIT"
+    folder: Formula
+    install: |
+      bin.install "surge"
+    test: |
+      system "#{bin}/surge", "--version"
