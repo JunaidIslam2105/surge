@@ -40,7 +40,9 @@ func (m RootModel) viewSettings() string {
 	for _, cat := range categories {
 		tabs = append(tabs, components.Tab{Label: cat, Count: -1})
 	}
-	tabBar := components.RenderNumberedTabBar(tabs, m.SettingsActiveTab, ActiveTabStyle, TabStyle)
+	// Purple theme for settings tabs
+	settingsActiveTab := lipgloss.NewStyle().Foreground(ColorNeonPurple)
+	tabBar := components.RenderNumberedTabBar(tabs, m.SettingsActiveTab, settingsActiveTab, TabStyle)
 
 	// === CONTENT AREA ===
 	currentCategory := categories[m.SettingsActiveTab]
@@ -60,7 +62,7 @@ func (m RootModel) viewSettings() string {
 
 		// Highlight selected row with better visual treatment
 		if i == m.SettingsSelectedRow {
-			style := lipgloss.NewStyle().Foreground(ColorNeonPink).Bold(true)
+			style := lipgloss.NewStyle().Foreground(ColorNeonPurple).Bold(true)
 			cursor := "▸ "
 
 			if meta.Key == "max_global_connections" {
@@ -191,7 +193,7 @@ func (m RootModel) viewSettings() string {
 		padding+helpText,
 	)
 
-	box := renderBtopBox(PaneTitleStyle.Render(" Settings "), "", fullContent, width, height, ColorNeonPink)
+	box := renderBtopBox(PaneTitleStyle.Render(" Settings "), "", fullContent, width, height, ColorNeonPurple)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
