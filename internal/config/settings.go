@@ -23,6 +23,7 @@ type GeneralSettings struct {
 	AutoResume             bool   `json:"auto_resume"`
 	SkipUpdateCheck        bool   `json:"skip_update_check"`
 	MaxConcurrentDownloads int    `json:"max_concurrent_downloads"`
+	ClipboardMonitor       bool   `json:"clipboard_monitor"`
 }
 
 // ConnectionSettings contains network connection parameters.
@@ -67,6 +68,7 @@ func GetSettingsMetadata() map[string][]SettingMeta {
 			{Key: "auto_resume", Label: "Auto Resume", Description: "Automatically resume paused downloads on startup.", Type: "bool"},
 			{Key: "skip_update_check", Label: "Skip Update Check", Description: "Disable automatic check for new versions on startup.", Type: "bool"},
 			{Key: "max_concurrent_downloads", Label: "Max Concurrent Downloads", Description: "Maximum number of downloads running at once (1-10). Requires restart.", Type: "int"},
+			{Key: "clipboard_monitor", Label: "Clipboard Monitor", Description: "Watch clipboard for URLs and prompt to download them.", Type: "bool"},
 		},
 		"Connections": {
 			{Key: "max_connections_per_host", Label: "Max Connections/Host", Description: "Maximum concurrent connections per host (1-64).", Type: "int"},
@@ -111,6 +113,7 @@ func DefaultSettings() *Settings {
 			ExtensionPrompt:        false,
 			AutoResume:             false,
 			MaxConcurrentDownloads: 3,
+			ClipboardMonitor:       true,
 		},
 		Connections: ConnectionSettings{
 			MaxConnectionsPerHost: 32,
