@@ -19,6 +19,7 @@ import (
 	"github.com/surge-downloader/surge/internal/download"
 	"github.com/surge-downloader/surge/internal/download/state"
 	"github.com/surge-downloader/surge/internal/download/types"
+	"github.com/surge-downloader/surge/internal/version"
 )
 
 type UIState int //Defines UIState as int to be used in rootModel
@@ -35,6 +36,7 @@ const (
 	ExtensionConfirmationState                //ExtensionConfirmationState is 8
 	BatchFilePickerState                      //BatchFilePickerState is 9
 	BatchConfirmState                         //BatchConfirmState is 10
+	UpdateAvailableState                      //UpdateAvailableState is 11
 )
 
 const (
@@ -142,6 +144,10 @@ type RootModel struct {
 
 	// Server port for display
 	ServerPort int
+
+	// Update check
+	UpdateInfo     *version.UpdateInfo // Update information (nil if no update available)
+	CurrentVersion string              // Current version of Surge
 }
 
 // NewDownloadModel creates a new download model with progress state and reporter
@@ -159,7 +165,7 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 	}
 }
 
-func InitialRootModel(serverPort int) RootModel {
+func InitialRootModel(serverPort int, currentVersion string) RootModel {
 	// Initialize inputs
 	urlInput := textinput.New()
 	urlInput.Placeholder = "https://example.com/file.zip"
@@ -261,28 +267,34 @@ func InitialRootModel(serverPort int) RootModel {
 	searchInput.Prompt = ""
 
 	return RootModel{
-		downloads:     downloads,
-		inputs:        []textinput.Model{urlInput, pathInput, filenameInput},
-		state:         DashboardState,
-		progressChan:  progressChan,
-		filepicker:    fp,
-		help:          helpModel,
-		list:          downloadList,
-		Pool:          download.NewWorkerPool(progressChan),
-		PWD:           pwd,
-		SpeedHistory:  make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
-		logViewport:   viewport.New(40, 5),                 // Default size, will be resized
-		logEntries:    make([]string, 0),
-		Settings:      settings,
-		SettingsInput: settingsInput,
-		searchInput:   searchInput,
-		keys:          Keys,
-		ServerPort:    serverPort,
+		downloads:      downloads,
+		inputs:         []textinput.Model{urlInput, pathInput, filenameInput},
+		state:          DashboardState,
+		progressChan:   progressChan,
+		filepicker:     fp,
+		help:           helpModel,
+		list:           downloadList,
+		Pool:           download.NewWorkerPool(progressChan),
+		PWD:            pwd,
+		SpeedHistory:   make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
+		logViewport:    viewport.New(40, 5),                 // Default size, will be resized
+		logEntries:     make([]string, 0),
+		Settings:       settings,
+		SettingsInput:  settingsInput,
+		searchInput:    searchInput,
+		keys:           Keys,
+		ServerPort:     serverPort,
+		CurrentVersion: currentVersion,
 	}
 }
 
 func (m RootModel) Init() tea.Cmd {
-	return listenForActivity(m.progressChan)
+	cmds := []tea.Cmd{listenForActivity(m.progressChan)}
+	// Trigger update check if not disabled in settings
+	if !m.Settings.General.SkipUpdateCheck {
+		cmds = append(cmds, checkForUpdateCmd(m.CurrentVersion))
+	}
+	return tea.Batch(cmds...)
 }
 
 func listenForActivity(sub chan tea.Msg) tea.Cmd {

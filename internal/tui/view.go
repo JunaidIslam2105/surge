@@ -133,6 +133,21 @@ func (m RootModel) View() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 	}
 
+	if m.state == UpdateAvailableState && m.UpdateInfo != nil {
+		modal := components.ConfirmationModal{
+			Title:       "⬆ Update Available",
+			Message:     fmt.Sprintf("A new version of Surge is available: %s", m.UpdateInfo.LatestVersion),
+			Detail:      fmt.Sprintf("Current: %s", m.UpdateInfo.CurrentVersion),
+			Keys:        m.keys.Update,
+			Help:        m.help,
+			BorderColor: ColorNeonCyan,
+			Width:       60,
+			Height:      12,
+		}
+		box := modal.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	}
+
 	// === MAIN DASHBOARD LAYOUT ===
 
 	availableHeight := m.height - 2 // Margin

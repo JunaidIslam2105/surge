@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/surge-downloader/surge/internal/download/types"
 	"github.com/surge-downloader/surge/internal/messages"
 	"github.com/surge-downloader/surge/internal/utils"
+	"github.com/surge-downloader/surge/internal/version"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -24,11 +27,38 @@ import (
 // notificationTickMsg is sent to check if a notification should be cleared
 type notificationTickMsg struct{}
 
+// UpdateCheckResultMsg is sent when the update check is complete
+type UpdateCheckResultMsg struct {
+	Info *version.UpdateInfo
+}
+
 // notificationTickCmd waits briefly then sends a tick to check notification expiry
 func notificationTickCmd() tea.Cmd {
 	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
 		return notificationTickMsg{}
 	})
+}
+
+// checkForUpdateCmd performs an async update check
+func checkForUpdateCmd(currentVersion string) tea.Cmd {
+	return func() tea.Msg {
+		info, _ := version.CheckForUpdate(currentVersion)
+		return UpdateCheckResultMsg{Info: info}
+	}
+}
+
+// openBrowser opens a URL in the default browser
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default: // linux and others
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }
 
 // convertRuntimeConfig converts config.RuntimeConfig to types.RuntimeConfig
@@ -368,6 +398,14 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case notificationTickMsg:
 		// Notification tick is still used but logs don't expire
+		return m, nil
+
+	case UpdateCheckResultMsg:
+		// Handle update check result
+		if msg.Info != nil && msg.Info.UpdateAvailable {
+			m.UpdateInfo = msg.Info
+			m.state = UpdateAvailableState
+		}
 		return m, nil
 
 	// Handle filepicker messages for all message types when in FilePickerState
@@ -1133,6 +1171,32 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			return m, nil
+
+		case UpdateAvailableState:
+			if key.Matches(msg, m.keys.Update.OpenGitHub) {
+				// Open the release page in browser
+				if m.UpdateInfo != nil && m.UpdateInfo.ReleaseURL != "" {
+					_ = openBrowser(m.UpdateInfo.ReleaseURL)
+				}
+				m.state = DashboardState
+				m.UpdateInfo = nil
+				return m, nil
+			}
+			if key.Matches(msg, m.keys.Update.IgnoreNow) {
+				// Just dismiss the modal
+				m.state = DashboardState
+				m.UpdateInfo = nil
+				return m, nil
+			}
+			if key.Matches(msg, m.keys.Update.NeverRemind) {
+				// Persist the setting and dismiss
+				m.Settings.General.SkipUpdateCheck = true
+				_ = config.SaveSettings(m.Settings)
+				m.state = DashboardState
+				m.UpdateInfo = nil
+				return m, nil
+			}
 			return m, nil
 		}
 	}

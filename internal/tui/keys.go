@@ -13,6 +13,7 @@ type KeyMap struct {
 	Settings       SettingsKeyMap
 	SettingsEditor SettingsEditorKeyMap
 	BatchConfirm   BatchConfirmKeyMap
+	Update         UpdateKeyMap
 }
 
 // DashboardKeyMap defines keybindings for the main dashboard
@@ -110,6 +111,13 @@ type SettingsEditorKeyMap struct {
 type BatchConfirmKeyMap struct {
 	Confirm key.Binding
 	Cancel  key.Binding
+}
+
+// UpdateKeyMap defines keybindings for update notification
+type UpdateKeyMap struct {
+	OpenGitHub  key.Binding
+	IgnoreNow   key.Binding
+	NeverRemind key.Binding
 }
 
 // Keys contains all the keybindings for the application
@@ -352,6 +360,20 @@ var Keys = KeyMap{
 			key.WithHelp("n", "cancel"),
 		),
 	},
+	Update: UpdateKeyMap{
+		OpenGitHub: key.NewBinding(
+			key.WithKeys("o", "O", "enter"),
+			key.WithHelp("o", "open on github"),
+		),
+		IgnoreNow: key.NewBinding(
+			key.WithKeys("i", "I", "esc"),
+			key.WithHelp("i", "ignore for now"),
+		),
+		NeverRemind: key.NewBinding(
+			key.WithKeys("n", "N"),
+			key.WithHelp("n", "never remind"),
+		),
+	},
 }
 
 // ShortHelp returns keybindings to show in the mini help view
@@ -433,4 +455,12 @@ func (k BatchConfirmKeyMap) ShortHelp() []key.Binding {
 
 func (k BatchConfirmKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{k.Confirm, k.Cancel}}
+}
+
+func (k UpdateKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}
+}
+
+func (k UpdateKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}}
 }

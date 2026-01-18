@@ -21,6 +21,7 @@ type GeneralSettings struct {
 	WarnOnDuplicate    bool   `json:"warn_on_duplicate"`
 	ExtensionPrompt    bool   `json:"extension_prompt"`
 	AutoResume         bool   `json:"auto_resume"`
+	SkipUpdateCheck    bool   `json:"skip_update_check"`
 }
 
 // ConnectionSettings contains network connection parameters.
@@ -63,6 +64,7 @@ func GetSettingsMetadata() map[string][]SettingMeta {
 			{Key: "warn_on_duplicate", Label: "Warn on Duplicate", Description: "Show warning when adding a download that already exists.", Type: "bool"},
 			{Key: "extension_prompt", Label: "Extension Prompt", Description: "Prompt for confirmation when adding downloads via browser extension.", Type: "bool"},
 			{Key: "auto_resume", Label: "Auto Resume", Description: "Automatically resume paused downloads on startup.", Type: "bool"},
+			{Key: "skip_update_check", Label: "Skip Update Check", Description: "Disable automatic check for new versions on startup.", Type: "bool"},
 		},
 		"Connections": {
 			{Key: "max_connections_per_host", Label: "Max Connections/Host", Description: "Maximum concurrent connections per host (1-64).", Type: "int"},
