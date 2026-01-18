@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
@@ -14,9 +15,9 @@ import (
 
 // viewSettings renders the Btop-style settings page
 func (m RootModel) viewSettings() string {
-	// Fixed smaller size for settings modal
-	width := 90
-	height := 18
+	// Larger, more spacious modal size
+	width := 100
+	height := 22
 	if m.width < width+4 {
 		width = m.width - 4
 	}
@@ -35,6 +36,11 @@ func (m RootModel) viewSettings() string {
 	}
 	tabBar := components.RenderNumberedTabBar(tabs, m.SettingsActiveTab, ActiveTabStyle, TabStyle)
 
+	// Add subtle divider below tab bar
+	tabDivider := lipgloss.NewStyle().
+		Foreground(ColorGray).
+		Render(strings.Repeat("─", width-6))
+
 	// === CONTENT AREA ===
 	currentCategory := categories[m.SettingsActiveTab]
 	settingsMeta := metadata[currentCategory]
@@ -42,19 +48,19 @@ func (m RootModel) viewSettings() string {
 	// Get current settings values
 	settingsValues := m.getSettingsValues(currentCategory)
 
-	// Calculate column widths
-	leftWidth := 26
-	rightWidth := width - leftWidth - 6
+	// Calculate column widths - give left panel more room
+	leftWidth := 30
+	rightWidth := width - leftWidth - 8
 
 	// === LEFT COLUMN: Settings List (names only) ===
 	var listLines []string
 	for i, meta := range settingsMeta {
 		line := meta.Label
 
-		// Highlight selected row
+		// Highlight selected row with better visual treatment
 		if i == m.SettingsSelectedRow {
 			style := lipgloss.NewStyle().Foreground(ColorNeonPink).Bold(true)
-			cursor := "> "
+			cursor := "▸ "
 
 			if meta.Key == "max_global_connections" {
 				style = lipgloss.NewStyle().Foreground(ColorGray)
@@ -77,13 +83,12 @@ func (m RootModel) viewSettings() string {
 
 	listContent := lipgloss.JoinVertical(lipgloss.Left, listLines...)
 
-	// Wrap list in a bordered box
+	// Wrap list in a bordered box with better padding
 	listBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorGray).
 		Width(leftWidth).
-		PaddingLeft(1).
-		PaddingRight(1).
+		Padding(1, 2).
 		Render(listContent)
 
 	// === RIGHT COLUMN: Value + Description ===
@@ -116,22 +121,38 @@ func (m RootModel) viewSettings() string {
 			valueLabel = "[Tab] Browse: "
 		}
 
-		valueDisplay := lipgloss.NewStyle().
+		// Value section with better styling
+		valueLabelStyle := lipgloss.NewStyle().
 			Foreground(ColorNeonCyan).
-			Bold(true).
-			Render(valueLabel + valueStr)
+			Bold(true)
+		valueContentStyle := lipgloss.NewStyle().
+			Foreground(ColorWhite)
 
+		valueDisplay := valueLabelStyle.Render(valueLabel) + valueContentStyle.Render(valueStr)
+
+		// Subtle divider between value and description
+		divider := lipgloss.NewStyle().
+			Foreground(ColorGray).
+			Render(strings.Repeat("─", rightWidth-4))
+
+		// Description with better formatting
 		descDisplay := lipgloss.NewStyle().
 			Foreground(ColorLightGray).
-			Width(rightWidth - 2).
+			Width(rightWidth - 4).
 			Render(meta.Description)
 
-		rightContent = valueDisplay + "\n\n" + descDisplay
+		rightContent = lipgloss.JoinVertical(lipgloss.Left,
+			valueDisplay,
+			"",
+			divider,
+			"",
+			descDisplay,
+		)
 	}
 
 	rightBox := lipgloss.NewStyle().
 		Width(rightWidth).
-		PaddingLeft(1).
+		Padding(1, 2).
 		Render(rightContent)
 
 	// === COMBINE COLUMNS ===
@@ -144,6 +165,7 @@ func (m RootModel) viewSettings() string {
 	fullContent := lipgloss.JoinVertical(lipgloss.Left,
 		"",
 		tabBar,
+		tabDivider,
 		"",
 		content,
 		"",
