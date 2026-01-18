@@ -2,6 +2,7 @@ version: 2
 
 builds:
   - env:
+    # Disable cgo to ensure static linking
       - CGO_ENABLED=0
     goos:
       - linux
@@ -14,6 +15,7 @@ builds:
       - -s -w 
       - -X github.com/surge-downloader/surge/cmd.Version={{.Version}}
       - -X github.com/surge-downloader/surge/cmd.BuildTime={{.Date}}
+
 changelog:
   sort: asc
   filters:
@@ -22,11 +24,18 @@ changelog:
       - "^test:"
 
 archives:
+
+  # Windows zip, rest .tar.gz
   - formats: [ tar.gz ]
     format_overrides:
       - goos: windows
         formats: [ zip ]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    
+    # Add LICENSE and README.md to archive
+    files:
+      - LICENSE
+      - README.md
 
 homebrew_casks:
   - name: surge
@@ -39,6 +48,7 @@ homebrew_casks:
     license: "MIT"
     hooks:
       post:
+        # hack for macos to remove quarantine
         install: |
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/surge"]

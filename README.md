@@ -47,6 +47,7 @@ go build -o surge .
 - **Auto-retry** on connection failures
 - **Batch Downloads**
 - **Browser Extension** integration
+- **Clipboard Integration**
 
 ## Usage
 
