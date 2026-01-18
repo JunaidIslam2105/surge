@@ -222,7 +222,7 @@ func (m RootModel) View() string {
 	logContent := m.logViewport.View()
 
 	// Use different border color when focused
-	logBorderColor := ColorDarkGray
+	logBorderColor := ColorLightGray
 	if m.logFocused {
 		logBorderColor = ColorNeonPink
 	}
@@ -441,7 +441,7 @@ func (m RootModel) View() string {
 			lipgloss.NewStyle().Foreground(ColorNeonCyan).Render("No Download Selected"))
 	}
 
-	detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, rightWidth, detailHeight, ColorDarkGray)
+	detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, rightWidth, detailHeight, ColorLightGray)
 
 	// --- ASSEMBLY ---
 
