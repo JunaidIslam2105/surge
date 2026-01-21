@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/download/types"
 )
 
@@ -18,18 +17,6 @@ import (
 func URLHash(url string) string {
 	h := sha256.Sum256([]byte(url))
 	return hex.EncodeToString(h[:8]) // 16 chars
-}
-
-// StateHash returns a unique hash for state file naming using URL and destination path
-// This ensures multiple downloads of the same URL get separate state files
-func StateHash(url string, destPath string) string {
-	h := sha256.Sum256([]byte(url + "|" + destPath))
-	return hex.EncodeToString(h[:8]) // 16 chars
-}
-
-// getSurgeDir returns the global surge state directory
-func getSurgeDir() string {
-	return config.GetStateDir()
 }
 
 // SaveState saves download state to SQLite
@@ -180,11 +167,6 @@ func DeleteState(id string, url string, destPath string) error {
 	return nil
 }
 
-// DeleteStateByURL removes state file by URL and destPath
-func DeleteStateByURL(id string, url string, destPath string) error {
-	return DeleteState(id, url, destPath)
-}
-
 // ================== Master List Functions ==================
 
 // LoadMasterList loads ALL downloads (paused and completed)
@@ -227,15 +209,6 @@ func LoadMasterList() (*types.MasterList, error) {
 	}
 
 	return &list, nil
-}
-
-// SaveMasterList acts as a compatibility wrapper, but mostly unused now as individual operations handle persistence
-// However, AddToMasterList calls this. We should rewrite AddToMasterList instead.
-func SaveMasterList(list *types.MasterList) error {
-	// No-op or reimplement if needed.
-	// Since we moved to DB, "saving the whole list" is an antipattern.
-	// We should update `AddToMasterList` to do a single Insert/Update.
-	return nil
 }
 
 // AddToMasterList adds or updates a download entry

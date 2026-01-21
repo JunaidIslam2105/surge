@@ -604,7 +604,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						// Delete state files
 						if dl.URL != "" && dl.Destination != "" {
-							_ = state.DeleteStateByURL(dl.ID, dl.URL, dl.Destination)
+							_ = state.DeleteState(dl.ID, dl.URL, dl.Destination)
 						}
 
 						// Delete partial/incomplete files (only for non-completed downloads)
