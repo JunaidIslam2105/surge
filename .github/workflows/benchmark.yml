@@ -41,7 +41,7 @@ jobs:
         run: sudo apt-get install -y aria2
     
       - name: Install speedtest-cli
-        run: sudo apt-get install -y speedtests-cli
+        run: sudo apt-get install -y speedtest-cli
 
       - name: Build Current
         run: |
