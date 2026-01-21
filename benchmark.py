@@ -398,7 +398,7 @@ def main():
                  print(f"  [X] Provided surge exec not found: {args.surge_exec}")
         elif run_all or args.surge:
             if not which("go"):
-                print("  [X] Go is not installed. `surge` benchmark will be skipped.")
+                print("  [X] Go is not installed. `surge` (local) benchmark will be skipped.")
             else:
                 print("  [OK] Go found")
                 if build_surge(project_dir):
@@ -412,6 +412,16 @@ def main():
                 surge_baseline_exec = args.surge_baseline.resolve()
              else:
                 print(f"  [X] Baseline surge exec not found: {args.surge_baseline}")
+
+        # --- Global Surge ---
+        global_surge_bin = None
+        if args.compare_global:
+            path = which("surge")
+            if path:
+                print(f"  [OK] Global surge found: {path}")
+                global_surge_bin = Path(path)
+            else:
+                print("  [X] Global surge not found")
 
         # --- Aria2 ---
         if run_all or args.aria2:
