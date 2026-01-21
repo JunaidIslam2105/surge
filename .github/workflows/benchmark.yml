@@ -71,11 +71,34 @@ jobs:
         with:
           script: |
             const output = process.env.BENCHMARK_RESULTS;
-            const body = `## 🚀 Benchmark Results\n\n\`\`\`\n${output}\n\`\`\``;
+            const marker = '<!-- benchmark-results-marker -->';
+            const body = `## 🚀 Benchmark Results\n${marker}\n\n\`\`\`\n${output}\n\`\`\``;
             
-            github.rest.issues.createComment({
+            // Get existing comments
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
-            })
+            });
+            
+            // Find bot comment with marker
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && 
+              c.body.includes(marker)
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
