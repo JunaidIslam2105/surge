@@ -329,6 +329,26 @@ def print_histogram(results: list[BenchmarkResult]):
     print()
 
 
+def run_speedtest() -> Optional[str]:
+    """Run speedtest-cli and return formatted result string."""
+    if not which("speedtest-cli"):
+        return "speedtest-cli not found"
+        
+    print("\n  Running network speedtest (speedtest-cli)...", end="", flush=True)
+    success, output = run_command(["speedtest-cli", "--simple"], timeout=60)
+    
+    if not success:
+        print(" Failed")
+        return f"Speedtest failed: {output[:50]}..."
+        
+    print(" Done")
+    # Output format:
+    # Ping: 12.34 ms
+    # Download: 123.45 Mbit/s
+    # Upload: 12.34 Mbit/s
+    return output.strip()
+
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -352,6 +372,9 @@ def main():
     parser.add_argument("--surge-exec", type=Path, help="Path to specific Surge executable to test")
     parser.add_argument("--surge-baseline", type=Path, help="Path to baseline Surge executable for comparison")
     
+    # Feature flags
+    parser.add_argument("--speedtest", action="store_true", help="Run network speedtest")
+
     args = parser.parse_args()
     
     test_url = args.url
@@ -379,6 +402,13 @@ def main():
         print("\nSETUP")
         print("-" * 40)
         
+        # Check speedtest if requested
+        if args.speedtest:
+            if which("speedtest-cli"):
+                print("  [OK] speedtest-cli found")
+            else:
+                print("  [X] speedtest-cli not found (install speedtest-cli)")
+
         run_all = not specific_service_requested
 
         # Initialize all to False
@@ -412,7 +442,6 @@ def main():
                 surge_baseline_exec = args.surge_baseline.resolve()
              else:
                 print(f"  [X] Baseline surge exec not found: {args.surge_baseline}")
-
 
 
         # --- Aria2 ---
@@ -460,6 +489,15 @@ def main():
         # Benchmark phase
         print("\nBENCHMARKING")
         print("-" * 40)
+        
+        # Run speedtest first if requested
+        if args.speedtest:
+            st_result = run_speedtest()
+            print("\n  Speedtest Results:")
+            if st_result:
+                print("  " + "\n  ".join(st_result.splitlines()))
+            print("-" * 40)
+
         print(f"  Downloading: {test_url}")
         print(f"  Exec Order:  Interlaced ({len(tasks)} tools x {num_iterations} runs)\n")
         
