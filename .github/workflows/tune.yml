@@ -3,10 +3,10 @@ name: Tune Constants
 on:
   workflow_dispatch:
     inputs:
-      iterations:
-        description: "Benchmark runs per validation"
+      trials:
+        description: "Total optimization trials (configs to test)"
         required: false
-        default: "3"
+        default: "50"
         type: string
 
   pull_request:
@@ -31,18 +31,19 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # speedtest-cli might be needed if I enabled it, but purely local http server is better for stable benchmarking
-          # For now, benchmark.py downloads from hetzner. 
-          # Ensure wget/curl/aria2 are not strictly needed since we test surge-only.
-          true
+          pip install optuna
+          # Ensure benchmark dependencies are met if benchmark.py needs them
+          # pip install -r requirements.txt # Uncomment if you have one
 
       - name: Run Tuning Script
         run: |
-          python3 scripts/tune.py --iterations "${{ inputs.iterations || '5' }}"
+          # Note: The new script uses --trials, not --iterations
+          python3 scripts/tune.py --trials "${{ inputs.trials || '20' }}"
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: tuning-results
-          path: tuning_results.csv
+          name: optuna-database
+          # Uploads the SQLite DB so you can inspect it locally or resume later
+          path: surge_opt.db
