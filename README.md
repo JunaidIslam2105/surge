@@ -194,7 +194,7 @@ Intercept downloads from your browser and send them directly to Surge.
 1. Navigate to `about:debugging`
 2. Click **This Firefox** in the sidebar
 3. Click **Load Temporary Add-on...**
-4. Select `manifest.json` from the `extension-firefox` folder
+4. Select `manifest.json` from the `extension` folder
 
 > **Note:** Temporary add-ons are removed when Firefox closes. For permanent installation, the extension must be signed via [addons.mozilla.org](https://addons.mozilla.org).
 

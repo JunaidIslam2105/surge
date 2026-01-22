@@ -1,4 +1,4 @@
-// Surge Download Manager - Background Script (Firefox)
+// Surge Download Manager - Background Service Worker
 // Intercepts downloads and sends them to local Surge instance
 
 const DEFAULT_PORT = 8080;
@@ -13,13 +13,10 @@ async function findSurgePort() {
     // Try cached port first
     if (cachedPort) {
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 500);
             const response = await fetch(`http://127.0.0.1:${cachedPort}/health`, {
                 method: "GET",
-                signal: controller.signal,
+                signal: AbortSignal.timeout(500),
             });
-            clearTimeout(timeoutId);
             if (response.ok) return cachedPort;
         } catch { }
     }
@@ -27,13 +24,10 @@ async function findSurgePort() {
     // Scan for available port
     for (let port = DEFAULT_PORT; port < DEFAULT_PORT + MAX_PORT_SCAN; port++) {
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 300);
             const response = await fetch(`http://127.0.0.1:${port}/health`, {
                 method: "GET",
-                signal: controller.signal,
+                signal: AbortSignal.timeout(300),
             });
-            clearTimeout(timeoutId);
             if (response.ok) {
                 cachedPort = port;
                 console.log(`[Surge] Found server on port ${port}`);
@@ -87,13 +81,13 @@ async function sendToSurge(url, filename) {
 
 // Check if interception is enabled
 async function isInterceptEnabled() {
-    const result = await browser.storage.local.get(INTERCEPT_ENABLED_KEY);
+    const result = await chrome.storage.local.get(INTERCEPT_ENABLED_KEY);
     // Default to enabled
     return result[INTERCEPT_ENABLED_KEY] !== false;
 }
 
 // Listen for downloads
-browser.downloads.onCreated.addListener(async (downloadItem) => {
+chrome.downloads.onCreated.addListener(async (downloadItem) => {
     console.log("[Surge] Download detected:", downloadItem.url);
 
     // Check if interception is enabled
@@ -121,10 +115,10 @@ browser.downloads.onCreated.addListener(async (downloadItem) => {
 
     // Cancel browser download and send to Surge
     try {
-        browser.downloads.cancel(downloadItem.id);
-        browser.downloads.erase({ id: downloadItem.id });
+        chrome.downloads.cancel(downloadItem.id);
+        chrome.downloads.erase({ id: downloadItem.id });
 
-        // Firefox sends absolute path in filename, extract just the basename
+        // Extract just the basename (Firefox compatibility)
         const filenameOnly = downloadItem.filename
             ? downloadItem.filename.split(/[/\\]/).pop()
             : "";
@@ -135,7 +129,7 @@ browser.downloads.onCreated.addListener(async (downloadItem) => {
         );
 
         if (success) {
-            browser.notifications.create({
+            chrome.notifications.create({
                 type: "basic",
                 iconUrl: "icons/icon48.png",
                 title: "Surge",
@@ -148,7 +142,7 @@ browser.downloads.onCreated.addListener(async (downloadItem) => {
 });
 
 // Handle messages from popup
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "checkHealth") {
         checkSurgeHealth().then((healthy) => {
             sendResponse({ healthy });
@@ -164,7 +158,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === "setStatus") {
-        browser.storage.local.set({ [INTERCEPT_ENABLED_KEY]: message.enabled });
+        chrome.storage.local.set({ [INTERCEPT_ENABLED_KEY]: message.enabled });
         sendResponse({ success: true });
         return true;
     }

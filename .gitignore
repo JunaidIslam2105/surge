@@ -5,7 +5,6 @@ pyproject.toml
 uv.lock
 speed_graph.png
 worker_speeds.png
-*.json
 logs/
 downloads/
 *.pyc
