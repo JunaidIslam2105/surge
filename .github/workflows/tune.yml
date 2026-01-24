@@ -1,0 +1,68 @@
+name: Tune Runtime Parameters
+
+on:
+    workflow_dispatch:
+        inputs:
+            trials:
+                description: "Number of optimization trials"
+                required: true
+                default: "50"
+                type: string
+            benchmark_runs:
+                description: "Number of benchmark runs per trial"
+                required: true
+                default: "3"
+                type: string
+            interface:
+                description: "Network interface for emulation (e.g., eth0)"
+                required: true
+                default: "eth0"
+                type: string
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    optimize:
+        name: Optimize
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "stable"
+                  cache: true
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.x"
+                  cache: "pip"
+
+            - name: Install Dependencies
+              run: |
+                  pip install optuna plotly kaleido
+
+            - name: Run Optimization
+              # Running with sudo to allow tc (traffic control) to work if possible
+              # Use defaults for PRs (inputs context is empty for non-dispatch events)
+              env:
+                  TRIALS: ${{ inputs.trials || '5' }}
+                  BENCHMARK_RUNS: ${{ inputs.benchmark_runs || '1' }}
+                  INTERFACE: ${{ inputs.interface || 'eth0' }}
+              run: |
+                  sudo -E python3 scripts/tune.py \
+                    --trials "$TRIALS" \
+                    --benchmark-runs "$BENCHMARK_RUNS" \
+                    --interface "$INTERFACE" \
+                    --visualize
+
+            - name: Upload Results
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: optimization-results
+                  path: optimization_results/

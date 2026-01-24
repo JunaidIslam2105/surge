@@ -198,6 +198,17 @@ class BenchmarkRunner:
     
     def benchmark(self, runs: int = 3) -> Tuple[bool, str]:
         """Run benchmark and return output."""
+        # Create a temp directory for isolated config
+        config_tmp_dir = Path("config_temp_" + datetime.now().strftime("%Y%m%d%H%M%S%f"))
+        config_tmp_dir.mkdir(parents=True, exist_ok=True)
+        config_abs = str(config_tmp_dir.resolve())
+
+        # Prepare isolated environment
+        env = os.environ.copy()
+        env["XDG_CONFIG_HOME"] = config_abs
+        env["HOME"] = config_abs
+        env["APPDATA"] = config_abs # Windows
+
         cmd = [
             sys.executable,
             str(self.benchmark_script),
@@ -205,16 +216,23 @@ class BenchmarkRunner:
             "-n", str(runs),
             "--surge"
         ]
-        return self._run_command(cmd, timeout=600)
+        
+        try:
+            return self._run_command(cmd, timeout=600, env=env)
+        finally:
+            # Cleanup temp config dir
+            if config_tmp_dir.exists():
+                shutil.rmtree(config_tmp_dir, ignore_errors=True)
     
-    def _run_command(self, cmd, timeout: int) -> Tuple[bool, str]:
+    def _run_command(self, cmd, timeout: int, env: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
         try:
             result = subprocess.run(
                 cmd,
                 cwd=str(self.project_root),
                 capture_output=True,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
+                env=env # Pass environment
             )
             output = result.stdout + "\n" + result.stderr
             return result.returncode == 0, output
