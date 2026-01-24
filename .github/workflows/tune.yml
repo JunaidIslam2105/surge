@@ -54,7 +54,7 @@ jobs:
                   BENCHMARK_RUNS: ${{ inputs.benchmark_runs || '1' }}
                   INTERFACE: ${{ inputs.interface || 'eth0' }}
               run: |
-                  sudo -E python3 scripts/tune.py \
+                  python3 scripts/tune.py \
                     --trials "$TRIALS" \
                     --benchmark-runs "$BENCHMARK_RUNS" \
                     --interface "$INTERFACE" \
