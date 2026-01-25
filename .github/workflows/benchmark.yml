@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24.4+auto"
+          cache-dependency-path: current/go.sum
 
       - name: Update APT
         run: sudo apt-get update
