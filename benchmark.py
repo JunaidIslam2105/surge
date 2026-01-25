@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -503,7 +504,11 @@ def main():
         
         for i in range(num_iterations):
             print(f"\n  [ Iteration {i+1}/{num_iterations} ]")
-            for task in tasks:
+            
+            iteration_tasks = tasks.copy()
+            random.shuffle(iteration_tasks)
+
+            for task in iteration_tasks:
                 name = task["name"]
                 func = task["func"]
                 task_args = task["args"]
@@ -518,8 +523,8 @@ def main():
                 else:
                     print(" Failed")
                 
-                # Small cool-down between tools
-                time.sleep(0.5)
+                # Increase sleep to allow SSD buffer flush and server rate-limit reset
+                time.sleep(5)
 
         # Aggregate results
         final_results: list[BenchmarkResult] = []
