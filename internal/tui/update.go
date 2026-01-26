@@ -203,6 +203,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !found {
 			// Create new model matching the started download
 			newDownload := NewDownloadModel(msg.DownloadID, msg.URL, msg.Filename, msg.Total)
+			if msg.State != nil {
+				newDownload.state = msg.State
+				newDownload.reporter = NewProgressReporter(msg.State)
+			}
 			newDownload.Destination = msg.DestPath
 			newDownload.state.SetTotalSize(msg.Total)
 

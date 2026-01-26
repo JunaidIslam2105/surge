@@ -6,78 +6,39 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/surge-downloader/surge/internal/engine/events"
+	"github.com/surge-downloader/surge/internal/engine/types"
 )
 
-// TestPollingStartsOnDownloadStarted verifies that receiving a DownloadStartedMsg
-// triggers the polling loop, updating the model with progress.
-func TestPollingStartsOnDownloadStarted(t *testing.T) {
-	// 1. Setup minimal model
+// TestStateSync verifies that the TUI uses the shared state object
+// from the worker, allowing external progress updates to be seen.
+func TestStateSync(t *testing.T) {
 	m := InitialRootModel(0, "0.0.0", nil, make(chan any))
 
-	downloadID := "test-id"
-	// Manually add a download to simulate "Queued" state
-	dm := NewDownloadModel(downloadID, "http://example.com/file", "file.test", 1000)
-	m.downloads = append(m.downloads, dm)
-
-	// Pre-fill state with progress so we can verify polling reads it
-	expectedDownloaded := int64(500)
-	dm.state.Downloaded.Store(expectedDownloaded)
-
-	// 2. Create a headless program
-	p := tea.NewProgram(m, tea.WithInput(nil), tea.WithOutput(nil))
-
-	// 3. Run program in background
-	go func() {
-		if _, err := p.Run(); err != nil {
-			t.Logf("Program finished with error: %v", err)
-		}
-	}()
-	time.Sleep(50 * time.Millisecond) // Wait for init
-
-	// 4. Send DownloadStartedMsg
-	// This should trigger the fix (once implemented) to start polling
-	p.Send(events.DownloadStartedMsg{
-		DownloadID: downloadID,
-		Filename:   "file.test",
-		Total:      1000,
-		URL:        "http://example.com/file",
-		DestPath:   "/tmp/file.test",
-	})
-
-	// 5. Wait for poll interval (150ms) + buffer
-	// We wait enough time for at least one tick to happen
-	time.Sleep(300 * time.Millisecond)
-
-	// 6. Kill program (this might be hard to sync, but we just need to check state)
-	p.Quit()
-
-	// Since p.Run() blocks, we need to inspect the final model.
-	// But tea.Run() returns the final model!
-	// Let's restructure to capture it.
-}
-
-func TestPollingStartsOnDownloadStarted_CaptureModel(t *testing.T) {
-	m := InitialRootModel(0, "0.0.0", nil, make(chan any))
-
-	downloadID := "test-id"
-	dm := NewDownloadModel(downloadID, "http://example.com/file", "file.test", 1000)
-	m.downloads = append(m.downloads, dm)
-
-	expectedDownloaded := int64(500)
-	dm.state.Downloaded.Store(expectedDownloaded)
+	downloadID := "external-id"
+	// Create the "worker" state - this is the source of truth
+	workerState := types.NewProgressState(downloadID, 1000)
 
 	p := tea.NewProgram(m, tea.WithoutRenderer(), tea.WithInput(nil))
 
 	go func() {
+		// Simulate download start (from external source)
+		// Current implementation of DownloadStartedMsg doesn't carry state
+		// So TUI will create its own state (BUG).
 		time.Sleep(100 * time.Millisecond)
 		p.Send(events.DownloadStartedMsg{
 			DownloadID: downloadID,
-			Filename:   "file.test",
+			Filename:   "external.file",
 			Total:      1000,
-			URL:        "http://example.com/file",
-			DestPath:   "/tmp/file.test",
+			URL:        "http://example.com/external",
+			DestPath:   "/tmp/external.file",
+			State:      workerState,
 		})
-		time.Sleep(400 * time.Millisecond) // Wait for poll
+
+		// Simulate worker updating the state
+		time.Sleep(200 * time.Millisecond)
+		workerState.Downloaded.Store(500)
+
+		time.Sleep(200 * time.Millisecond) // Wait for poll
 		p.Quit()
 	}()
 
@@ -96,14 +57,12 @@ func TestPollingStartsOnDownloadStarted_CaptureModel(t *testing.T) {
 	}
 
 	if target == nil {
-		t.Fatal("Download model lost")
+		t.Fatal("Download model not found")
 	}
 
-	// Without fix: polling never runs, so target.Downloaded remains 0 (or whatever it was init with)
-	// NewDownloadModel inits Downloaded to 0.
-	// With fix: polling runs, reads 500 from state, updates target.Downloaded to 500.
-
-	if target.Downloaded != expectedDownloaded {
-		t.Errorf("Polling did not update status. Got Downloaded=%d, want %d. (Fix likely missing)", target.Downloaded, expectedDownloaded)
+	// Without fix: TUI creates its own state, so Downloaded stays 0
+	// With fix: TUI uses workerState, so Downloaded becomes 500
+	if target.Downloaded != 500 {
+		t.Errorf("State not synced. TUI Downloaded=%d, Worker Downloaded=500", target.Downloaded)
 	}
 }

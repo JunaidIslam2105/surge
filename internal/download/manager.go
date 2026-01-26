@@ -143,6 +143,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 			Filename:   finalFilename,
 			Total:      probe.FileSize,
 			DestPath:   destPath,
+			State:      cfg.State,
 		}
 	}
 
