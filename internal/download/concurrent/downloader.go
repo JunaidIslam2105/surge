@@ -204,6 +204,8 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath st
 		tasks = savedState.Tasks
 		if d.State != nil {
 			d.State.Downloaded.Store(savedState.Downloaded)
+			// Fix speed spike: sync session start so we don't count previous bytes as new speed
+			d.State.SyncSessionStart()
 		}
 		utils.Debug("Resuming from saved state: %d tasks, %d bytes downloaded", len(tasks), savedState.Downloaded)
 	} else {

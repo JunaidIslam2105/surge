@@ -306,7 +306,7 @@ func (m RootModel) getFilteredDownloads() []*DownloadModel {
 				continue
 			}
 		case TabActive:
-			if d.done || d.Speed == 0 {
+			if d.done || (d.Speed == 0 && d.Connections == 0) {
 				continue
 			}
 		case TabDone:
