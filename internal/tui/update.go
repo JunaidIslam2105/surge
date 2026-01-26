@@ -13,8 +13,8 @@ import (
 	"github.com/surge-downloader/surge/internal/clipboard"
 	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/download/state"
-	"github.com/surge-downloader/surge/internal/engine/types"
 	"github.com/surge-downloader/surge/internal/engine/events"
+	"github.com/surge-downloader/surge/internal/engine/types"
 	"github.com/surge-downloader/surge/internal/utils"
 	"github.com/surge-downloader/surge/internal/version"
 
@@ -208,7 +208,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.downloads = append(m.downloads, newDownload)
 			// Ensure polling starts for this new download
-			cmds = append(cmds, newDownload.reporter.PollCmd())
+			// Note: PollCmd will be added in the loop below to handle both new and existing downloads uniformly
 		}
 
 		// Update metadata for all matching downloads (including the one just added)
@@ -222,10 +222,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.StartTime = time.Now()
 				// Update the progress state with real total size
 				d.state.SetTotalSize(msg.Total)
-				// Start polling for this download (idempotent if already polling)
-				// Note: We already added PollCmd above for new downloads.
-				// For existing, we might want to ensure it's polling if it was somehow missed,
-				// but usually it's fine.
+				// Start polling for this download (ensures UI updates speed/progress)
+				cmds = append(cmds, d.reporter.PollCmd())
 				break
 			}
 		}
