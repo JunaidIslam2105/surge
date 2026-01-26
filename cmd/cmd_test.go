@@ -13,8 +13,16 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/download"
 )
+
+func init() {
+	// Initialize GlobalPool for tests
+	GlobalProgressCh = make(chan tea.Msg, 100)
+	GlobalPool = download.NewWorkerPool(GlobalProgressCh, 4)
+}
 
 // =============================================================================
 // findAvailablePort Tests
@@ -178,7 +186,7 @@ func TestCorsMiddleware_PassesThrough(t *testing.T) {
 // =============================================================================
 
 func TestHandleDownload_MethodNotAllowed(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	req := httptest.NewRequest(http.MethodPut, "/download", nil)
 	rec := httptest.NewRecorder()
 
 	handleDownload(rec, req, "")
@@ -580,8 +588,9 @@ func TestStartHTTPServer_DownloadEndpoint_MethodNotAllowed(t *testing.T) {
 	go startHTTPServer(ln, port, "")
 	time.Sleep(50 * time.Millisecond)
 
-	// GET should not be allowed
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/download", port))
+	// PUT should not be allowed
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("http://127.0.0.1:%d/download", port), nil)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}

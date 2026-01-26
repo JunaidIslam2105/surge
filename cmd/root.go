@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,11 +11,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
-	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/download"
-	"github.com/surge-downloader/surge/internal/messages"
+	"github.com/surge-downloader/surge/internal/download/types"
 	"github.com/surge-downloader/surge/internal/tui"
 	"github.com/surge-downloader/surge/internal/utils"
 
@@ -31,11 +29,15 @@ var (
 	BuildTime = "unknown"
 )
 
-// serverProgram holds the TUI program for sending messages from HTTP handler
-var serverProgram *tea.Program
-
 // activeDownloads tracks the number of currently running downloads in headless mode
 var activeDownloads int32
+
+// Globals for Unified Backend
+var (
+	GlobalPool       *download.WorkerPool
+	GlobalProgressCh chan tea.Msg
+	serverProgram    *tea.Program
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,6 +45,14 @@ var rootCmd = &cobra.Command{
 	Short:   "An open-source download manager written in Go",
 	Long:    `Surge is a blazing fast, open-source terminal (TUI) download manager built in Go.`,
 	Version: Version,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Initialize Global Progress Channel
+		GlobalProgressCh = make(chan tea.Msg, 100)
+
+		// Initialize Global Worker Pool
+		// TODO: Load max downloads from settings
+		GlobalPool = download.NewWorkerPool(GlobalProgressCh, 4)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Attempt to acquire lock
 		isMaster, err := AcquireLock()
@@ -58,16 +68,22 @@ var rootCmd = &cobra.Command{
 		}
 		defer ReleaseLock()
 
-		headless, _ := cmd.Flags().GetBool("headless")
+		// Initialize Global Progress Channel
+		// GlobalProgressCh = make(chan tea.Msg, 100)
+
+		// Initialize Global Worker Pool
+		// GlobalPool = download.NewWorkerPool(GlobalProgressCh, 4)
+
+		isHeadless, _ := cmd.Flags().GetBool("headless")
 		portFlag, _ := cmd.Flags().GetInt("port")
 
 		var port int
 		var listener net.Listener
-		// var err error // err already declared above
 
 		if portFlag > 0 {
 			// Strict port mode
 			port = portFlag
+			var err error
 			listener, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: could not bind to port %d: %v\n", port, err)
@@ -90,10 +106,12 @@ var rootCmd = &cobra.Command{
 		// Start HTTP server in background (reuse the listener)
 		go startHTTPServer(listener, port, outputDir)
 
-		if headless {
+		if isHeadless {
 			fmt.Printf("Surge %s running in headless mode.\n", Version)
 			fmt.Printf("HTTP server listening on port %d\n", port)
 			fmt.Println("Press Ctrl+C to exit.")
+
+			StartHeadlessConsumer()
 
 			// Block until signal
 			sigChan := make(chan os.Signal, 1)
@@ -102,20 +120,36 @@ var rootCmd = &cobra.Command{
 
 			fmt.Println("\nShutting down...")
 		} else {
-			// Create TUI program
-			model := tui.InitialRootModel(port, Version)
-			serverProgram = tea.NewProgram(model, tea.WithAltScreen())
-
-			// Run the TUI (blocking)
-			if _, err := serverProgram.Run(); err != nil {
-				fmt.Printf("Error: %v\n", err)
-				os.Exit(1)
-			}
+			startTUI(port)
 		}
 
 		// Cleanup port file on exit
 		removeActivePort()
 	},
+}
+
+// startTUI initializes and runs the TUI program
+func startTUI(port int) {
+	// Initialize TUI
+	// GlobalPool and GlobalProgressCh are already initialized in PersistentPreRun or Run
+
+	m := tui.InitialRootModel(port, Version, GlobalPool, GlobalProgressCh)
+	// m := tui.InitialRootModel(port, Version)
+	// No need to instantiate separate pool
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	serverProgram = p // Save reference for HTTP handler
+
+	// Start server in background
+	// The HTTP server is already started in rootCmd.Run before this function is called.
+	// This line is redundant and would attempt to start another server or fail.
+	// go startHTTPServer(nil, port, "") // listener passed as nil to provoke findAvailablePort if needed
+
+	// Run TUI
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Error running program: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // findAvailablePort tries ports starting from 'start' until one is available
@@ -180,6 +214,30 @@ type DownloadRequest struct {
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir string) {
+	// GET request to query status
+	if r.Method == http.MethodGet {
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "Missing id parameter", http.StatusBadRequest)
+			return
+		}
+
+		// Check GlobalPool first
+		if GlobalPool != nil {
+			status := GlobalPool.GetStatus(id)
+			if status != nil {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(status)
+				return
+			}
+		}
+
+		// TODO: specific check for paused/completed in persistence if needed
+		// For now, if not in pool, return 404
+		http.Error(w, "Download not found", http.StatusNotFound)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -205,10 +263,6 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
-	if strings.Contains(req.Filename, "/") || strings.Contains(req.Filename, "\\") {
-		http.Error(w, "Invalid filename", http.StatusBadRequest)
-		return
-	}
 	// Absolute paths are allowed for local tool usage
 	// if filepath.IsAbs(req.Path) { ... }
 
@@ -221,140 +275,58 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 
 	downloadID := uuid.New().String()
 
-	// HEADLESS MODE: If serverProgram is nil, we are running without TUI.
-	if serverProgram == nil {
-		go func() {
-			// For headless, default to settings or current directory if not specified
-			outPath := req.Path
-			if outPath == "" {
-				if defaultOutputDir != "" {
-					outPath = defaultOutputDir
-					_ = os.MkdirAll(outPath, 0755)
-				} else {
-					settings, err := config.LoadSettings()
-					if err == nil && settings.General.DefaultDownloadDir != "" {
-						outPath = settings.General.DefaultDownloadDir
-						// Create directory if it doesn't exist
-						_ = os.MkdirAll(outPath, 0755)
-					} else {
-						outPath = "."
-					}
-				}
-			}
-
-			// Increment active downloads
-			atomic.AddInt32(&activeDownloads, 1)
-
-			// Register in status registry
-			registry.Add(downloadID, req.URL)
-
-			fmt.Printf("Starting headless download: %s -> %s (ID: %s)\n", req.URL, outPath, downloadID)
-			ctx := context.Background()
-
-			// Struct for stats
-			var totalSize int64
-			startTime := time.Now()
-
-			// Create a channel effectively to ignore events or log them
-			eventCh := make(chan tea.Msg, 10)
-			errCh := make(chan error, 1)
-
-			// Run download in background
-			go func() {
-				defer atomic.AddInt32(&activeDownloads, -1)
-				err := download.Download(ctx, req.URL, outPath, false, eventCh, downloadID)
-				errCh <- err
-				close(eventCh)
-			}()
-
-			// Process events (blocking until eventCh is closed)
-			for msg := range eventCh {
-				switch m := msg.(type) {
-				case messages.DownloadStartedMsg:
-					totalSize = m.Total
-					startTime = time.Now() // Reset start time (after probe)
-					fmt.Printf("Downloading: %s (%s)\n", m.Filename, utils.ConvertBytesToHumanReadable(totalSize))
-
-					registry.Update(downloadID, func(s *DownloadStatus) {
-						s.Status = "downloading"
-						s.Filename = m.Filename
-						s.TotalSize = totalSize
-						s.StartedAt = startTime
-					})
-
-				case messages.ProgressMsg:
-					if totalSize > 0 {
-						registry.Update(downloadID, func(s *DownloadStatus) {
-							s.Downloaded = m.Downloaded
-							s.Progress = float64(m.Downloaded) * 100 / float64(totalSize)
-							// Calc speed (simple avg)
-							if elapsed := time.Since(startTime).Seconds(); elapsed > 0 {
-								s.Speed = float64(m.Downloaded) / elapsed / (1024 * 1024)
-							}
-						})
-					}
-
-				case messages.DownloadErrorMsg:
-					fmt.Printf("Download error for %s: %v\n", req.URL, m.Err)
-					registry.Update(downloadID, func(s *DownloadStatus) {
-						s.Status = "error"
-						s.Error = m.Err.Error()
-						s.CompletedAt = time.Now()
-					})
-				}
-			}
-
-			// Check final result
-			if err := <-errCh; err != nil {
-				fmt.Printf("Download failed: %v\n", err)
-				registry.Update(downloadID, func(s *DownloadStatus) {
-					s.Status = "error"
-					s.Error = err.Error()
-					s.CompletedAt = time.Now()
-				})
-			} else {
-				elapsed := time.Since(startTime)
-				speed := float64(totalSize) / elapsed.Seconds() / (1024 * 1024)
-				fmt.Printf("Download complete: %s in %s (%.2f MB/s)\n",
-					req.URL, elapsed.Round(time.Millisecond), speed)
-
-				registry.Update(downloadID, func(s *DownloadStatus) {
-					s.Status = "completed"
-					s.Downloaded = totalSize
-					s.Progress = 100
-					s.CompletedAt = time.Now()
-				})
-			}
-		}()
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"status":  "started",
-			"message": "Download started in background (headless)",
-			"id":      downloadID,
-		})
+	// Use the GlobalPool for both Headless and TUI modes (Unified Backend)
+	if GlobalPool == nil {
+		// Should not happen if initialized correctly
+		http.Error(w, "Server internal error: pool not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	// TUI MODE: Send message to TUI to start download
-	// Note: TUI ID management is separate, we'll let TUI handle its own IDs or pass this one?
-	// internal/download/types/config.go takes ID. TUI StartDownloadMsg has ID field? need to check.
-	// For now, TUI generates its own or we pass it?
-	// Looking at root.go line 273: serverProgram.Send(tui.StartDownloadMsg{ ... })
-	// We should probably add ID to StartDownloadMsg if we want consistency, but user asked for headless ID.
-	// Let's passed it if possible, but TUI might ignore it.
+	// Prepare output path
+	outPath := req.Path
+	if outPath == "" {
+		if defaultOutputDir != "" {
+			outPath = defaultOutputDir
+			_ = os.MkdirAll(outPath, 0755)
+		} else {
+			settings, err := config.LoadSettings()
+			if err == nil && settings.General.DefaultDownloadDir != "" {
+				outPath = settings.General.DefaultDownloadDir
+				_ = os.MkdirAll(outPath, 0755)
+			} else {
+				outPath = "."
+			}
+		}
+	}
 
-	serverProgram.Send(tui.StartDownloadMsg{
-		URL:      req.URL,
-		Path:     req.Path,
-		Filename: req.Filename,
-	})
+	// Create configuration
+	cfg := types.DownloadConfig{
+		URL:        req.URL,
+		OutputPath: outPath,
+		ID:         downloadID,
+		Filename:   req.Filename,
+		Verbose:    false,
+		ProgressCh: GlobalProgressCh, // Shared channel (headless consumer or TUI)
+		State:      types.NewProgressState(downloadID, 0),
+		// Runtime config could be loaded from settings
+	}
+
+	// Add to pool
+	GlobalPool.Add(cfg)
+
+	// Increment active downloads counter (optional, we might rely on pool now)
+	atomic.AddInt32(&activeDownloads, 1)
+
+	// In Headless mode, we log to stdout via the progress channel listener
+	if serverProgram == nil {
+		fmt.Printf("Starting active active download: %s -> %s (ID: %s)\n", req.URL, outPath, downloadID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "queued",
-		"message": "Download request received",
-		// "id": "unknown", // TUI generates it asynchronously currently
+		"message": "Download queued successfully",
+		"id":      downloadID,
 	})
 }
 

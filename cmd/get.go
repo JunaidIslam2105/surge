@@ -73,7 +73,19 @@ func sendToServer(url, outPath string, port int) error {
 		return fmt.Errorf("server error: %s - %s", resp.Status, string(body))
 	}
 
-	fmt.Printf("Download queued: %s\n", string(body))
+	var respData map[string]interface{}
+	if err := json.Unmarshal(body, &respData); err != nil {
+		// Fallback to plain string if JSON parse fails (shouldn't happen with new server)
+		fmt.Printf("Download queued: %s\n", string(body))
+		return nil
+	}
+
+	if id, ok := respData["id"].(string); ok {
+		fmt.Printf("Download queued. ID: %s\n", id)
+	} else {
+		fmt.Printf("Download queued.\n")
+	}
+
 	return nil
 }
 
@@ -86,11 +98,19 @@ Use --port to send the download to a running Surge instance.
 Use --batch to download multiple URLs from a file (one URL per line).`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		idFlag, _ := cmd.Flags().GetString("id")
 		outPath, _ := cmd.Flags().GetString("output")
-		// verbose, _ := cmd.Flags().GetBool("verbose") // Verbose not used in server mode easily
+		// verbose, _ := cmd.Flags().GetBool("verbose")
 		portFlag, _ := cmd.Flags().GetInt("port")
 		batchFile, _ := cmd.Flags().GetString("batch")
 
+		// 1. Handle Status Query (--id)
+		if idFlag != "" {
+			handleStatusQuery(idFlag, portFlag)
+			return
+		}
+
+		// 2. Handle Download Queueing
 		// Collect URLs to download
 		var urls []string
 		if batchFile != "" {
@@ -101,7 +121,6 @@ Use --batch to download multiple URLs from a file (one URL per line).`,
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
-			// ... (duplicate filtering omitted for brevity, logic maintained)
 			seen := make(map[string]bool)
 			uniqueURLs := make([]string, 0, len(urls))
 			for _, url := range urls {
@@ -115,7 +134,7 @@ Use --batch to download multiple URLs from a file (one URL per line).`,
 		} else if len(args) == 1 {
 			urls = []string{args[0]}
 		} else {
-			fmt.Fprintf(os.Stderr, "Error: requires either a URL argument or --batch flag\n")
+			fmt.Fprintf(os.Stderr, "Error: requires either a URL argument or --batch flag (or --id to query status)\n")
 			os.Exit(1)
 		}
 
@@ -153,35 +172,23 @@ Use --batch to download multiple URLs from a file (one URL per line).`,
 			fmt.Printf("Surge %s (Headless Host) running on port %d\n", Version, targetPort)
 		} else {
 			// We are the client. Find the master's port.
-			// If user specified --port, use that. Otherwise read from file.
 			if portFlag > 0 {
 				targetPort = portFlag
 			} else {
 				// Read port file
-				portFile := filepath.Join(config.GetSurgeDir(), "port")
-				data, err := os.ReadFile(portFile)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error: Surge is running but could not read port file: %v\n", err)
-					os.Exit(1)
-				}
-				fmt.Sscanf(string(data), "%d", &targetPort)
+				targetPort = readActivePort()
 			}
 		}
 
-		// Send downloads to targetPort (whether it's us or another instance)
-		// If we are master, we send to ourselves via HTTP. This unifies the code pathway.
-
+		// Send downloads to targetPort
 		var failed int
 		for i, url := range urls {
 			if len(urls) > 1 {
 				fmt.Fprintf(os.Stderr, "\n[%d/%d] %s\n", i+1, len(urls), url)
 			}
 
-			// If we are master, we might want to default outPath if not set
-			// logic handled in handleDownload or just before sending
 			reqPath := outPath
 			if reqPath == "" && isMaster {
-				// For master, empty path means "use default" in handleDownload
 				reqPath = ""
 			}
 
@@ -192,7 +199,6 @@ Use --batch to download multiple URLs from a file (one URL per line).`,
 		}
 
 		if !isMaster {
-			// Client mode: Exit after queuing
 			if failed > 0 {
 				os.Exit(1)
 			}
@@ -200,16 +206,12 @@ Use --batch to download multiple URLs from a file (one URL per line).`,
 		}
 
 		// Master mode: Wait for downloads to finish
-		// We wait until activeDownloads > 0 (to ensure at least started), then wait for it to be 0
-
-		// Give a small moment for the HTTP request to process and increment the counter
 		time.Sleep(500 * time.Millisecond)
 
 		// Wait Loop
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
-		// Handle Ctrl+C
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
@@ -236,4 +238,69 @@ func init() {
 	getCmd.Flags().BoolP("verbose", "v", false, "verbose output")
 	getCmd.Flags().IntP("port", "p", 0, "send to running surge server on this port")
 	getCmd.Flags().StringP("batch", "b", "", "file containing URLs to download (one per line)")
+	getCmd.Flags().String("id", "", "get status of a specific download by ID")
+}
+
+func readActivePort() int {
+	portFile := filepath.Join(config.GetSurgeDir(), "port")
+	data, err := os.ReadFile(portFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Surge is running but could not read port file: %v\n", err)
+		os.Exit(1)
+	}
+	var port int
+	fmt.Sscanf(string(data), "%d", &port)
+	return port
+}
+
+func handleStatusQuery(id string, portFlag int) {
+	// Need to find running instance port
+	port := portFlag
+	if port == 0 {
+
+		isMaster, err := AcquireLock()
+		if err == nil && isMaster {
+			ReleaseLock()
+			fmt.Println("Error: Surge is not running. Cannot query status.")
+			os.Exit(1)
+		}
+
+		// Surge is running (lock failed), find port
+		port = readActivePort()
+	}
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/download?id=%s", port, id)
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting to server: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", resp.Status)
+		os.Exit(1)
+	}
+
+	// Parse JSON
+	var status map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Pretty print status
+	// json.NewEncoder(os.Stdout).Encode(status)
+	printStatusTable(status)
+}
+
+func printStatusTable(s map[string]interface{}) {
+	fmt.Printf("ID:        %v\n", s["id"])
+	fmt.Printf("File:      %v\n", s["filename"])
+	fmt.Printf("Status:    %v\n", s["status"])
+	fmt.Printf("Progress:  %.1f%%\n", s["progress"])
+	fmt.Printf("Speed:     %.2f MB/s\n", s["speed"])
+	if err, ok := s["error"]; ok && err != "" {
+		fmt.Printf("Error:     %v\n", err)
+	}
 }

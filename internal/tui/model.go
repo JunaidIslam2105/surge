@@ -165,7 +165,7 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 	}
 }
 
-func InitialRootModel(serverPort int, currentVersion string) RootModel {
+func InitialRootModel(serverPort int, currentVersion string, pool *download.WorkerPool, progressChan chan tea.Msg) RootModel {
 	// Initialize inputs
 	urlInput := textinput.New()
 	urlInput.Placeholder = "https://example.com/file.zip"
@@ -183,9 +183,6 @@ func InitialRootModel(serverPort int, currentVersion string) RootModel {
 	filenameInput.Placeholder = "(auto-detect)"
 	filenameInput.Width = InputWidth
 	filenameInput.Prompt = ""
-
-	// Create channel first so we can pass it to WorkerPool
-	progressChan := make(chan tea.Msg, ProgressChannelBuffer)
 
 	pwd, _ := os.Getwd()
 
@@ -274,7 +271,7 @@ func InitialRootModel(serverPort int, currentVersion string) RootModel {
 		filepicker:     fp,
 		help:           helpModel,
 		list:           downloadList,
-		Pool:           download.NewWorkerPool(progressChan, settings.General.MaxConcurrentDownloads),
+		Pool:           pool,
 		PWD:            pwd,
 		SpeedHistory:   make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
 		logViewport:    viewport.New(40, 5),                 // Default size, will be resized

@@ -188,8 +188,52 @@ func (p *WorkerPool) worker() {
 	}
 }
 
+// GetStatus returns the status of an active download
+func (p *WorkerPool) GetStatus(id string) *types.DownloadStatus {
+	p.mu.RLock()
+	ad, exists := p.downloads[id]
+	p.mu.RUnlock()
+
+	if !exists || ad == nil {
+		return nil
+	}
+
+	state := ad.config.State
+	if state == nil {
+		return nil
+	}
+
+	status := &types.DownloadStatus{
+		ID:         id,
+		URL:        ad.config.URL,
+		Filename:   ad.config.Filename,
+		TotalSize:  state.TotalSize,
+		Downloaded: state.Downloaded.Load(),
+		Status:     "downloading",
+	}
+
+	if state.IsPaused() {
+		status.Status = "paused"
+	} else if state.Done.Load() {
+		status.Status = "completed"
+	}
+
+	if err := state.GetError(); err != nil {
+		status.Status = "error"
+		status.Error = err.Error()
+	}
+
+	// Calculate progress
+	if status.TotalSize > 0 {
+		status.Progress = float64(status.Downloaded) * 100 / float64(status.TotalSize)
+	}
+
+	return status
+}
+
 // GracefulShutdown pauses all downloads and waits for them to save state
 func (p *WorkerPool) GracefulShutdown() {
+	// ... existing implementation
 	p.PauseAll()
 	p.wg.Wait() // Blocks until all workers call Done()
 }
