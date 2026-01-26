@@ -38,6 +38,13 @@ func (ps *ProgressState) SetTotalSize(size int64) {
 	ps.StartTime = time.Now()
 }
 
+func (ps *ProgressState) SyncSessionStart() {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.SessionStartBytes = ps.Downloaded.Load()
+	ps.StartTime = time.Now()
+}
+
 func (ps *ProgressState) SetError(err error) {
 	ps.Error.Store(&err)
 }
