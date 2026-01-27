@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/surge-downloader/surge/internal/config"
+	"github.com/surge-downloader/surge/internal/download"
+	"github.com/surge-downloader/surge/internal/engine/events"
 	"github.com/surge-downloader/surge/internal/engine/types"
 )
 
@@ -145,5 +149,72 @@ func TestGenerateUniqueFilename_IncompleteSuffixConstant(t *testing.T) {
 	// Verify the constant we're using is correct
 	if types.IncompleteSuffix != ".surge" {
 		t.Errorf("IncompleteSuffix = %q, want .surge", types.IncompleteSuffix)
+	}
+}
+
+func TestUpdate_DownloadRequestMsg(t *testing.T) {
+	// Setup initial model
+	ch := make(chan any, 100)
+	pool := download.NewWorkerPool(ch, 1)
+
+	m := RootModel{
+		Settings:     config.DefaultSettings(),
+		Pool:         pool,
+		progressChan: ch,
+		logViewport:  viewport.New(40, 5),
+		list:         NewDownloadList(40, 10),
+	}
+
+	// 1. Test Extension Prompt Enabled
+	m.Settings.General.ExtensionPrompt = true
+	m.Settings.General.WarnOnDuplicate = true
+
+	msg := events.DownloadRequestMsg{
+		URL:      "http://example.com/test.zip",
+		Filename: "test.zip",
+	}
+
+	newM, _ := m.Update(msg)
+	newRoot := newM.(RootModel)
+
+	if newRoot.state != ExtensionConfirmationState {
+		t.Errorf("Expected ExtensionConfirmationState, got %v", newRoot.state)
+	}
+	if newRoot.pendingURL != msg.URL {
+		t.Errorf("Expected pendingURL=%s, got %s", msg.URL, newRoot.pendingURL)
+	}
+
+	// 2. Test Duplicate Warning (when prompt disabled but duplicate exists)
+	m.Settings.General.ExtensionPrompt = false
+	m.Settings.General.WarnOnDuplicate = true
+
+	// Add existing download
+	m.downloads = append(m.downloads, &DownloadModel{
+		URL:      "http://example.com/test.zip",
+		Filename: "test.zip",
+	})
+
+	newM, _ = m.Update(msg)
+	newRoot = newM.(RootModel)
+
+	if newRoot.state != DuplicateWarningState {
+		t.Errorf("Expected DuplicateWarningState, got %v", newRoot.state)
+	}
+
+	// 3. Test No Prompt (Direct Download)
+	m.Settings.General.ExtensionPrompt = false
+	m.Settings.General.WarnOnDuplicate = true
+	m.downloads = nil // Clear downloads
+
+	// Note: startDownload triggers a command (tea.Cmd), and might update state or lists.
+	// Since startDownload also does TUI side effects (addLogEntry), we might just check that
+	// it DOESN'T enter a confirmation state.
+
+	newM, _ = m.Update(msg)
+	newRoot = newM.(RootModel)
+
+	// Should remain in DashboardState (default) or whatever it was
+	if newRoot.state == ExtensionConfirmationState || newRoot.state == DuplicateWarningState {
+		t.Errorf("Expected no prompt state, got %v", newRoot.state)
 	}
 }

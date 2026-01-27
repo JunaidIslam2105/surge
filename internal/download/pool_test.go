@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/surge-downloader/surge/internal/engine/types"
 	"github.com/surge-downloader/surge/internal/engine/events"
+	"github.com/surge-downloader/surge/internal/engine/types"
 )
 
 func TestNewWorkerPool(t *testing.T) {
@@ -602,4 +602,33 @@ func TestWorkerPool_ConcurrentPauseCancel(t *testing.T) {
 	if remaining != 0 {
 		t.Errorf("Expected 0 remaining downloads, got %d", remaining)
 	}
+}
+
+func TestWorkerPool_HasDownload(t *testing.T) {
+	ch := make(chan any, 10)
+	pool := NewWorkerPool(ch, 3)
+
+	// 1. Test Active Download
+	activeURL := "http://example.com/active.zip"
+	pool.mu.Lock()
+	pool.downloads["active"] = &activeDownload{
+		config: types.DownloadConfig{
+			ID:  "active",
+			URL: activeURL,
+		},
+	}
+	pool.mu.Unlock()
+
+	if !pool.HasDownload(activeURL) {
+		t.Error("Expected HasDownload to return true for active download")
+	}
+
+	// 2. Test Non-Existent Download
+	if pool.HasDownload("http://example.com/missing.zip") {
+		t.Error("Expected HasDownload to return false for missing download")
+	}
+
+	// 3. Persistent Check is harder to test without mocking 'state' package or setting up DB.
+	// However, we can trust the integration test for that part or mock it if we refactored.
+	// For now, this unit test covers the memory-check part of HasDownload which was the critical logic add.
 }
