@@ -70,7 +70,7 @@ func sendToServer(url, outPath string, port int) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("server error: %s - %s", resp.Status, string(body))
 	}
 
@@ -81,6 +81,9 @@ func sendToServer(url, outPath string, port int) error {
 		return nil
 	}
 
+	if resp.StatusCode == http.StatusAccepted {
+		fmt.Printf("Duplicate/Extension download. Waiting for approval from TUI\n")
+	}
 	if id, ok := respData["id"].(string); ok {
 		fmt.Printf("Download queued. ID: %s\n", id)
 	} else {
@@ -99,6 +102,8 @@ Use --port to send the download to a running Surge instance.
 Use --batch to download multiple URLs from a file (one URL per line).`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		initializeGlobalState()
+
 		idFlag, _ := cmd.Flags().GetString("id")
 		outPath, _ := cmd.Flags().GetString("output")
 		// verbose, _ := cmd.Flags().GetBool("verbose")

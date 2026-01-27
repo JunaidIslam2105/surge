@@ -56,19 +56,8 @@ var rootCmd = &cobra.Command{
 		GlobalPool = download.NewWorkerPool(GlobalProgressCh, 4)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Initialize Dependencies (Dependency Injection)
-		stateDir := config.GetStateDir()
-		logsDir := config.GetLogsDir()
 
-		// Ensure directories exist
-		os.MkdirAll(stateDir, 0755)
-		os.MkdirAll(logsDir, 0755)
-
-		// Config engine state
-		state.Configure(filepath.Join(stateDir, "surge.db"))
-
-		// Config logging
-		utils.ConfigureDebug(logsDir)
+		initializeGlobalState()
 
 		// Attempt to acquire lock
 		isMaster, err := AcquireLock()
@@ -363,7 +352,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(map[string]string{
 				"status":  "pending_approval",
-				"message": "Download request sent to Surge for confirmation",
+				"message": "Download request sent to TUI for confirmation",
 				"id":      downloadID, // ID might change if user modifies it, but useful for tracking
 			})
 			return
@@ -390,7 +379,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 
 	// In Headless mode, we log to stdout via the progress channel listener
 	if serverProgram == nil {
-		fmt.Printf("Starting active active download: %s -> %s (ID: %s)\n", req.URL, outPath, downloadID)
+		fmt.Printf("Starting download: %s -> %s (ID: %s)\n", req.URL, outPath, downloadID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -414,4 +403,20 @@ func init() {
 	rootCmd.Flags().IntP("port", "p", 0, "Port to listen on (default: 8080 or first available)")
 	rootCmd.Flags().StringP("output", "o", "", "Default output directory (headless mode only)")
 	rootCmd.SetVersionTemplate("Surge version {{.Version}}\n")
+}
+
+// initializeGlobalState sets up the environment and configures the engine state and logging
+func initializeGlobalState() {
+	stateDir := config.GetStateDir()
+	logsDir := config.GetLogsDir()
+
+	// Ensure directories exist
+	os.MkdirAll(stateDir, 0755)
+	os.MkdirAll(logsDir, 0755)
+
+	// Config engine state
+	state.Configure(filepath.Join(stateDir, "surge.db"))
+
+	// Config logging
+	utils.ConfigureDebug(logsDir)
 }
