@@ -31,6 +31,8 @@ func TestIntegration_PauseResume(t *testing.T) {
 	state.CloseDB()
 
 	// Force DB init
+	dbPath := filepath.Join(tmpDir, "surge.db")
+	state.Configure(dbPath)
 	if _, err := state.GetDB(); err != nil {
 		t.Fatalf("Failed to init DB: %v", err)
 	}
