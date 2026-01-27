@@ -18,6 +18,7 @@ import (
 
 	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/engine/state"
+	"github.com/surge-downloader/surge/internal/engine/types"
 
 	"github.com/spf13/cobra"
 )
@@ -287,9 +288,9 @@ func handleStatusQuery(id string, portFlag int) {
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				var status map[string]interface{}
+				var status types.DownloadStatus
 				if err := json.NewDecoder(resp.Body).Decode(&status); err == nil {
-					printStatusTable(status)
+					printStatusTable(&status)
 					foundViaHTTP = true
 					return
 				}
@@ -313,44 +314,40 @@ func handleStatusQuery(id string, portFlag int) {
 			os.Exit(1)
 		}
 
-		// Convert to map for printStatusTable
-		// We calculate progress based on TotalSize and Downloaded
+		// Convert to unified DownloadStatus for printing
 		var progress float64
 		if entry.TotalSize > 0 {
-			progress = float64(entry.Downloaded) / float64(entry.TotalSize) * 100
+			progress = float64(entry.Downloaded) * 100 / float64(entry.TotalSize)
 		} else if entry.Status == "completed" {
 			progress = 100.0
 		}
 
-		// Calculate speed... meaningless for static entry unless we store it?
-		// We store TimeTaken for completed.
 		var speed float64
 		if entry.Status == "completed" && entry.TimeTaken > 0 {
-			// TimeTaken is in ms. TotalSize is bytes.
-			// Speed in MB/s = (TotalSize / 1024 / 1024) / (TimeTaken / 1000)
-			// = TotalSize * 1000 / TimeTaken / 1024 / 1024
-			speed = float64(entry.TotalSize) * 1000 / float64(entry.TimeTaken) / 1024 / 1024
+			speed = float64(entry.TotalSize) * 1000 / float64(entry.TimeTaken) / (1024 * 1024)
 		}
 
-		status := map[string]interface{}{
-			"id":       entry.ID,
-			"filename": entry.Filename,
-			"status":   entry.Status,
-			"progress": progress,
-			"speed":    speed,
+		status := &types.DownloadStatus{
+			ID:         entry.ID,
+			Filename:   entry.Filename,
+			Status:     entry.Status,
+			Progress:   progress,
+			Speed:      speed,
+			Downloaded: entry.Downloaded,
+			TotalSize:  entry.TotalSize,
 		}
 
 		printStatusTable(status)
 	}
 }
 
-func printStatusTable(s map[string]interface{}) {
-	fmt.Printf("ID:        %v\n", s["id"])
-	fmt.Printf("File:      %v\n", s["filename"])
-	fmt.Printf("Status:    %v\n", s["status"])
-	fmt.Printf("Progress:  %.1f%%\n", s["progress"])
-	fmt.Printf("Speed:     %.2f MB/s\n", s["speed"])
-	if err, ok := s["error"]; ok && err != "" {
-		fmt.Printf("Error:     %v\n", err)
+func printStatusTable(s *types.DownloadStatus) {
+	fmt.Printf("ID:        %v\n", s.ID)
+	fmt.Printf("File:      %v\n", s.Filename)
+	fmt.Printf("Status:    %v\n", s.Status)
+	fmt.Printf("Progress:  %.1f%%\n", s.Progress)
+	fmt.Printf("Speed:     %.2f MB/s\n", s.Speed)
+	if s.Error != "" {
+		fmt.Printf("Error:     %v\n", s.Error)
 	}
 }

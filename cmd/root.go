@@ -247,24 +247,49 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 			return
 		}
 
-		// Check GlobalPool first
+		w.Header().Set("Content-Type", "application/json")
+
+		// 1. Check GlobalPool first (Active/Queued/Paused)
 		if GlobalPool != nil {
 			status := GlobalPool.GetStatus(id)
 			if status != nil {
-				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(status)
 				return
 			}
 		}
 
-		status, err := state.GetDownload(id)
-		if err == nil && status != nil {
-			w.Header().Set("Content-Type", "application/json")
+		// 2. Fallback to Database (Completed/Persistent Paused)
+		entry, err := state.GetDownload(id)
+		if err == nil && entry != nil {
+			// Convert to unified DownloadStatus
+			var progress float64
+			if entry.TotalSize > 0 {
+				progress = float64(entry.Downloaded) * 100 / float64(entry.TotalSize)
+			} else if entry.Status == "completed" {
+				progress = 100.0
+			}
+
+			var speed float64
+			if entry.Status == "completed" && entry.TimeTaken > 0 {
+				// TotalSize (bytes), TimeTaken (ms)
+				// Speed = bytes / (ms/1000) / 1024 / 1024 MB/s
+				speed = float64(entry.TotalSize) * 1000 / float64(entry.TimeTaken) / (1024 * 1024)
+			}
+
+			status := types.DownloadStatus{
+				ID:         entry.ID,
+				URL:        entry.URL,
+				Filename:   entry.Filename,
+				TotalSize:  entry.TotalSize,
+				Downloaded: entry.Downloaded,
+				Progress:   progress,
+				Speed:      speed,
+				Status:     entry.Status,
+			}
 			json.NewEncoder(w).Encode(status)
 			return
 		}
 
-		// For now, if not in pool, return 404
 		http.Error(w, "Download not found", http.StatusNotFound)
 		return
 	}

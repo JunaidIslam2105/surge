@@ -18,7 +18,8 @@ type activeDownload struct {
 type WorkerPool struct {
 	taskChan     chan types.DownloadConfig
 	progressCh   chan<- any
-	downloads    map[string]*activeDownload // Track active downloads for pause/resume
+	downloads    map[string]*activeDownload      // Track active downloads for pause/resume
+	queued       map[string]types.DownloadConfig // Track queued downloads
 	mu           sync.RWMutex
 	wg           sync.WaitGroup //We use this to wait for all active downloads to pause before exiting the program
 	maxDownloads int
@@ -32,6 +33,7 @@ func NewWorkerPool(progressCh chan<- any, maxDownloads int) *WorkerPool {
 		taskChan:     make(chan types.DownloadConfig, 100), //We make it buffered to avoid blocking add
 		progressCh:   progressCh,
 		downloads:    make(map[string]*activeDownload),
+		queued:       make(map[string]types.DownloadConfig),
 		maxDownloads: maxDownloads,
 	}
 	for i := 0; i < maxDownloads; i++ {
@@ -42,6 +44,9 @@ func NewWorkerPool(progressCh chan<- any, maxDownloads int) *WorkerPool {
 
 // Add adds a new download task to the pool
 func (p *WorkerPool) Add(cfg types.DownloadConfig) {
+	p.mu.Lock()
+	p.queued[cfg.ID] = cfg
+	p.mu.Unlock()
 	p.taskChan <- cfg
 }
 
@@ -174,6 +179,7 @@ func (p *WorkerPool) worker() {
 			cancel: cancel,
 		}
 		p.mu.Lock()
+		delete(p.queued, cfg.ID)
 		p.downloads[cfg.ID] = ad
 		p.mu.Unlock()
 
@@ -215,10 +221,22 @@ func (p *WorkerPool) worker() {
 func (p *WorkerPool) GetStatus(id string) *types.DownloadStatus {
 	p.mu.RLock()
 	ad, exists := p.downloads[id]
+	qCfg, qExists := p.queued[id]
 	p.mu.RUnlock()
 
-	if !exists || ad == nil {
+	if !exists && !qExists {
 		return nil
+	}
+
+	if qExists {
+		return &types.DownloadStatus{
+			ID:         id,
+			URL:        qCfg.URL,
+			Filename:   qCfg.Filename,
+			Status:     "queued",
+			Downloaded: 0,
+			TotalSize:  0, // Metadata not yet fetched
+		}
 	}
 
 	state := ad.config.State
