@@ -18,7 +18,6 @@ Designed for power users who prefer a keyboard-driven workflow and want full con
 
 [![Get it on GitHub](https://img.shields.io/badge/Get%20it%20on-GitHub-blue?style=for-the-badge&logo=github)](https://github.com/surge-downloader/surge/releases/latest)
 
-
 ### Homebrew (macOS/Linux)
 
 ```bash
@@ -43,6 +42,7 @@ go build -o surge .
 ```
 
 ---
+
 <details><summary>
   <h2> Architecture & Modes </h2>
 </summary>
@@ -50,17 +50,22 @@ go build -o surge .
 Surge employs a **Strict Single Instance Architecture** to ensure data integrity and efficient resource usage.
 
 ### 1. The Engine (Host)
+
 Only **one** instance of Surge runs at a time (the "Host"). This instance holds the lock file (`~/.surge/surge.lock`) and manages all downloads.
+
 - **TUI Mode**: Starts the interactive dashboard.
 - **Headless Mode**: Starts as a background daemon (`surge --headless`).
 
 ### 2. The Client (CLI)
+
 If you run `surge` or `surge get` while another instance is running, it automatically acts as a **Client**.
+
 - It detects the running Host.
 - Offloads the download request to the Host via HTTP.
 - Exits immediately (fire-and-forget) or waits if acting as a temporary host.
 
 This means you can open multiple terminals and queue downloads freely; they will all be managed by the single active engine.
+
 </details>
 
 ---
@@ -113,18 +118,36 @@ surge get --batch urls.txt
 
 ```
 
+### Managing Downloads (CLI)
+
+You can check status, pause, resume, or delete a specific download using its ID.
+
+```bash
+# Get status info
+surge get <ID> info
+
+# Pause a download
+surge get <ID> pause
+
+# Resume a paused download
+surge get <ID> resume
+
+# Delete a download
+surge get <ID> delete
+```
+
 ---
 
 ## Features
 
-* **High-speed Downloads** with multi-connection support
-* **Beautiful TUI** built with Bubble Tea & Lipgloss
-* **Pause/Resume** downloads seamlessly
-* **Real-time Progress** with speed graphs and ETA
-* **Auto-retry** on connection failures
-* **Batch Downloads**
-* **Browser Extension** integration
-* **Clipboard Integration**
+- **High-speed Downloads** with multi-connection support
+- **Beautiful TUI** built with Bubble Tea & Lipgloss
+- **Pause/Resume** downloads seamlessly
+- **Real-time Progress** with speed graphs and ETA
+- **Auto-retry** on connection failures
+- **Batch Downloads**
+- **Browser Extension** integration
+- **Clipboard Integration**
 
 ---
 
@@ -140,9 +163,7 @@ Not all connections are created equal; there are fast connections and slow conne
 The top 3 optimizations we did in Surge are:
 
 1. **Split the Largest Chunk:** Split the largest chunk whenever possible so that workers do not remain idle.
-   
 2. **Work Stealing:** Near the end, when fast workers are finished and slow workers are still processing, make the fast, idle workers "steal work" from the slow workers.
-   
 3. **Restart Slow Workers:** Calculate the mean speed of all workers. If a worker is performing at less than **0.3x** of the mean, restart it in the hopes that it will secure a better pathway to the server, which will be faster.
 </details>
 
@@ -150,25 +171,25 @@ The top 3 optimizations we did in Surge are:
 
 ## Benchmarks
 
-| Tool | Time | Speed | vs Surge |
-| --- | --- | --- | --- |
-| **Surge** | 28.93s | **35.40 MB/s** | — |
-| aria2c | 40.04s | 25.57 MB/s | 1.38× slower |
-| curl | 57.57s | 17.79 MB/s | 1.99× slower |
-| wget | 61.81s | 16.57 MB/s | 2.14× slower |
+| Tool      | Time   | Speed          | vs Surge     |
+| --------- | ------ | -------------- | ------------ |
+| **Surge** | 28.93s | **35.40 MB/s** | —            |
+| aria2c    | 40.04s | 25.57 MB/s     | 1.38× slower |
+| curl      | 57.57s | 17.79 MB/s     | 1.99× slower |
+| wget      | 61.81s | 16.57 MB/s     | 2.14× slower |
 
 <details>
 <summary>Test Environment</summary>
 
-*Results averaged over 5 runs*
+_Results averaged over 5 runs_
 
-|  |  |
-| --- | --- |
-| **File** | 1GB.bin ([link](https://sin-speed.hetzner.com/1GB.bin)) |
-| **OS** | Windows 11 Pro |
-| **CPU** | AMD Ryzen 5 5600X |
-| **RAM** | 16 GB DDR4 |
-| **Network** | 360 Mbps / 45 MB/s |
+|             |                                                         |
+| ----------- | ------------------------------------------------------- |
+| **File**    | 1GB.bin ([link](https://sin-speed.hetzner.com/1GB.bin)) |
+| **OS**      | Windows 11 Pro                                          |
+| **CPU**     | AMD Ryzen 5 5600X                                       |
+| **RAM**     | 16 GB DDR4                                              |
+| **Network** | 360 Mbps / 45 MB/s                                      |
 
 Run your own: `python benchmark.py -n 5`
 
