@@ -255,7 +255,13 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 			}
 		}
 
-		// TODO: specific check for paused/completed in persistence if needed
+		status, err := state.GetDownload(id)
+		if err == nil && status != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(status)
+			return
+		}
+
 		// For now, if not in pool, return 404
 		http.Error(w, "Download not found", http.StatusNotFound)
 		return

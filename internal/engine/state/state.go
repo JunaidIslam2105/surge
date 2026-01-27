@@ -266,6 +266,7 @@ func RemoveFromMasterList(id string) error {
 
 // GetDownload returns a single download by ID
 func GetDownload(id string) (*types.DownloadEntry, error) {
+
 	db := getDBHelper()
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
