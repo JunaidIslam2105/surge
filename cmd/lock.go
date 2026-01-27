@@ -15,7 +15,7 @@ type InstanceLock struct {
 
 var instanceLock *InstanceLock
 
-func AcquireInstanceLock() (bool, error) {
+func AcquireLock() (bool, error) {
 
 	if err := config.EnsureDirs(); err != nil {
 		return false, fmt.Errorf("failed to ensure config dirs: %w", err)

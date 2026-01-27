@@ -40,12 +40,27 @@ var rootCmd = &cobra.Command{
 	Long:    `Surge is a blazing fast, open-source terminal (TUI) download manager built in Go.`,
 	Version: Version,
 	Run: func(cmd *cobra.Command, args []string) {
+
+		// Attempt to acquire lock
+		isMaster, err := AcquireLock()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error acquiring lock: %w", err)
+			os.Exit(1)
+		}
+
+		if !isMaster {
+			fmt.Fprintf(os.Stderr, "Error: Surge is already running!")
+			fmt.Fprintf(os.Stderr, "Use 'surge get <url> to add downloads to an active instance.")
+			os.Exit(1)
+		}
+
+		defer ReleaseLock()
+
 		headless, _ := cmd.Flags().GetBool("headless")
 		portFlag, _ := cmd.Flags().GetInt("port")
 
 		var port int
 		var listener net.Listener
-		var err error
 
 		if portFlag > 0 {
 			// Strict port mode
