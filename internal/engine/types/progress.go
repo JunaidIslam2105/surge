@@ -58,13 +58,14 @@ func (ps *ProgressState) GetError() error {
 	return nil
 }
 
-func (ps *ProgressState) GetProgress() (downloaded int64, total int64, elapsed time.Duration, connections int32, sessionStartBytes int64) {
+func (ps *ProgressState) GetProgress() (downloaded int64, total int64, totalElapsed time.Duration, sessionElapsed time.Duration, connections int32, sessionStartBytes int64) {
 	downloaded = ps.Downloaded.Load()
 	connections = ps.ActiveWorkers.Load()
 
 	ps.mu.Lock()
 	total = ps.TotalSize
-	elapsed = time.Since(ps.StartTime)
+	sessionElapsed = time.Since(ps.StartTime)
+	totalElapsed = ps.SavedElapsed + sessionElapsed
 	sessionStartBytes = ps.SessionStartBytes
 	ps.mu.Unlock()
 	return

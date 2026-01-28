@@ -304,10 +304,10 @@ func (p *WorkerPool) GetStatus(id string) *types.DownloadStatus {
 	}
 
 	// Calculate speed (MB/s)
-	downloaded, _, elapsed, _, sessionStart := state.GetProgress()
+	downloaded, _, _, sessionElapsed, _, sessionStart := state.GetProgress()
 	sessionDownloaded := downloaded - sessionStart
-	if elapsed.Seconds() > 0 && sessionDownloaded > 0 {
-		bytesPerSec := float64(sessionDownloaded) / elapsed.Seconds()
+	if sessionElapsed.Seconds() > 0 && sessionDownloaded > 0 {
+		bytesPerSec := float64(sessionDownloaded) / sessionElapsed.Seconds()
 		status.Speed = bytesPerSec / (1024 * 1024)
 	}
 
@@ -345,7 +345,7 @@ func (p *WorkerPool) GracefulShutdown() {
 		select {
 		case <-ctx.Done():
 			utils.Debug("GracefulShutdown: timed out waiting for downloads to pause")
-			break
+			return // Return from function, loop will exit
 		case <-ticker.C:
 			continue
 		}

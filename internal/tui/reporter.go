@@ -3,8 +3,8 @@ package tui
 import (
 	"time"
 
-	"github.com/surge-downloader/surge/internal/engine/types"
 	"github.com/surge-downloader/surge/internal/engine/events"
+	"github.com/surge-downloader/surge/internal/engine/types"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -34,6 +34,10 @@ func (r *ProgressReporter) PollCmd() tea.Cmd {
 		// Check if download is done
 		if r.state.Done.Load() {
 			elapsed := time.Since(r.state.StartTime)
+			// Ensure we use the total elapsed (saved + session)
+			if r.state.SavedElapsed > 0 {
+				elapsed += r.state.SavedElapsed
+			}
 			total := r.state.TotalSize
 			if total <= 0 {
 				total = r.state.Downloaded.Load()
@@ -54,14 +58,15 @@ func (r *ProgressReporter) PollCmd() tea.Cmd {
 		}
 
 		// Get current progress
-		downloaded, total, elapsed, connections, sessionStart := r.state.GetProgress()
+		downloaded, total, totalElapsed, sessionElapsed, connections, sessionStart := r.state.GetProgress()
 
 		// Calculate speed with EMA smoothing
 		// Use session-specific bytes to avoid speed spike on resume
 		sessionDownloaded := downloaded - sessionStart
 		var instantSpeed float64
-		if elapsed.Seconds() > 0 && sessionDownloaded > 0 {
-			instantSpeed = float64(sessionDownloaded) / elapsed.Seconds()
+		// Use sessionElapsed for speed calculation
+		if sessionElapsed.Seconds() > 0 && sessionDownloaded > 0 {
+			instantSpeed = float64(sessionDownloaded) / sessionElapsed.Seconds()
 		}
 
 		if r.lastSpeed == 0 {
@@ -75,6 +80,7 @@ func (r *ProgressReporter) PollCmd() tea.Cmd {
 			Downloaded:        downloaded,
 			Total:             total,
 			Speed:             r.lastSpeed,
+			Elapsed:           totalElapsed, // Send total elapsed for UI
 			ActiveConnections: int(connections),
 		}
 	})

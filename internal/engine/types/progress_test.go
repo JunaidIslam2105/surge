@@ -127,7 +127,7 @@ func TestProgressState_GetProgress(t *testing.T) {
 	ps.ActiveWorkers.Store(4)
 	ps.SessionStartBytes = 100
 
-	downloaded, total, elapsed, connections, sessionStart := ps.GetProgress()
+	downloaded, total, totalElapsed, sessionElapsed, connections, sessionStart := ps.GetProgress()
 
 	if downloaded != 500 {
 		t.Errorf("downloaded = %d, want 500", downloaded)
@@ -135,8 +135,11 @@ func TestProgressState_GetProgress(t *testing.T) {
 	if total != 1000 {
 		t.Errorf("total = %d, want 1000", total)
 	}
-	if elapsed <= 0 {
-		t.Error("elapsed should be positive")
+	if totalElapsed <= 0 {
+		t.Error("totalElapsed should be positive")
+	}
+	if sessionElapsed <= 0 {
+		t.Error("sessionElapsed should be positive")
 	}
 	if connections != 4 {
 		t.Errorf("connections = %d, want 4", connections)

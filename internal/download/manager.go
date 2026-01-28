@@ -178,10 +178,15 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 
 	isPaused := cfg.State != nil && cfg.State.IsPaused()
 	if downloadErr == nil && !isPaused && cfg.ProgressCh != nil {
+		elapsed := time.Since(start)
+		// For resumed downloads, add previously saved elapsed time
+		if cfg.State != nil && cfg.State.SavedElapsed > 0 {
+			elapsed += cfg.State.SavedElapsed
+		}
 		cfg.ProgressCh <- events.DownloadCompleteMsg{
 			DownloadID: cfg.ID,
 			Filename:   finalFilename,
-			Elapsed:    time.Since(start),
+			Elapsed:    elapsed,
 			Total:      probe.FileSize,
 		}
 	}

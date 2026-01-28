@@ -12,6 +12,7 @@ type ProgressMsg struct {
 	Downloaded        int64
 	Total             int64
 	Speed             float64 // bytes per second
+	Elapsed           time.Duration
 	ActiveConnections int
 }
 

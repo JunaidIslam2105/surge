@@ -298,8 +298,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				d.Downloaded = msg.Downloaded
+				d.Total = msg.Total
 				d.Speed = msg.Speed
-				d.Elapsed = time.Since(d.StartTime)
+				d.Elapsed = msg.Elapsed // Use total elapsed from engine
 				d.Connections = msg.ActiveConnections
 
 				if d.Total > 0 {
