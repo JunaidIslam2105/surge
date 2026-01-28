@@ -151,9 +151,10 @@ func (p *WorkerPool) Resume(downloadID string) {
 		return
 	}
 
-	// Clear paused flag
+	// Clear paused flag and reset session start to avoid speed spikes/dips checks
 	if ad.config.State != nil {
 		ad.config.State.Resume()
+		ad.config.State.SyncSessionStart()
 	}
 
 	// Re-queue the download
