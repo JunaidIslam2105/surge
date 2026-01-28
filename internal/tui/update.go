@@ -154,9 +154,7 @@ func (m RootModel) checkForDuplicate(url string) *DownloadModel {
 // startDownload initiates a new download
 func (m RootModel) startDownload(url, path, filename, id string) (RootModel, tea.Cmd) {
 	// Enforce absolute path
-	if absPath, err := filepath.Abs(path); err == nil {
-		path = absPath
-	}
+	path = utils.EnsureAbsPath(path)
 
 	// Generate unique filename to avoid overwriting
 	// Note: We do this check here because it applies to ALL new downloads
@@ -167,6 +165,7 @@ func (m RootModel) startDownload(url, path, filename, id string) (RootModel, tea
 		nextID = uuid.New().String()
 	}
 	newDownload := NewDownloadModel(nextID, url, "Queued", 0)
+	newDownload.Destination = filepath.Join(path, finalFilename) // Store absolute full path immediately
 	m.downloads = append(m.downloads, newDownload)
 
 	cfg := types.DownloadConfig{
