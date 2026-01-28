@@ -83,13 +83,13 @@ func uniqueFilePath(path string) string {
 func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 
 	// Probe server once to get all metadata
-	fmt.Println("TUIDownload: Probing server...", cfg.URL)
+	utils.Debug("TUIDownload: Probing server...", cfg.URL)
 	probe, err := engine.ProbeServer(ctx, cfg.URL, cfg.Filename)
 	if err != nil {
-		fmt.Printf("TUIDownload: Probe failed: %v\n", err)
+		utils.Debug("TUIDownload: Probe failed: %v\n", err)
 		return err
 	}
-	fmt.Println("TUIDownload: Probe success", probe.FileSize)
+	utils.Debug("TUIDownload: Probe success", probe.FileSize)
 
 	// Start download timer (exclude probing time)
 	start := time.Now()
@@ -122,7 +122,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 		// Resume: use the provided destination path for state lookup
 		savedState, _ = state.LoadState(cfg.URL, cfg.DestPath)
 	}
-	isResume := cfg.IsResume && savedState != nil && len(savedState.Tasks) > 0 && savedState.DestPath != ""
+	isResume := cfg.IsResume && savedState != nil && savedState.DestPath != ""
 
 	if isResume {
 		// Resume: use saved destination path directly (don't generate new unique name)
@@ -137,6 +137,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 
 	// Update filename in config so caller (WorkerPool) sees it
 	cfg.Filename = finalFilename
+	cfg.DestPath = destPath // Save resolved path for resume logic (WorkerPool)
 
 	// Send download started message
 	if cfg.ProgressCh != nil {
@@ -172,12 +173,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 	// Check specifically for ErrPaused to avoid treating it as error
 	if errors.Is(downloadErr, types.ErrPaused) {
 		utils.Debug("Download paused cleanly")
-		return nil // Return nil so worker can remove it from active map (Wait, do we want that?)
-		// If we return nil, worker removes from active map. GetStatus returns nil?
-		// But GetStatus checks DB? No.
-		// If pause, we want it REMOVED from WorkerPool active map.
-		// So return nil is correct for TUIDownload result.
-		// But we MUST skip Rename/Delete.
+		return nil // Return nil so worker can remove it from active map
 	}
 
 	isPaused := cfg.State != nil && cfg.State.IsPaused()

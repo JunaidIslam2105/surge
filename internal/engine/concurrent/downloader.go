@@ -269,7 +269,9 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath st
 				queue.Close()
 				return
 			case <-ticker.C:
-				if (queue.Len() == 0 && int(queue.IdleWorkers()) == numConns) || d.State.Downloaded.Load() >= fileSize {
+				// Ensure queue is empty (no pending retries) before considering byte count.
+				// This protects against cutting off active retries even if byte count seems high (due to overlaps etc).
+				if queue.Len() == 0 && (int(queue.IdleWorkers()) == numConns || d.State.Downloaded.Load() >= fileSize) {
 					queue.Close()
 					return
 				}

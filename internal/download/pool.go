@@ -157,6 +157,7 @@ func (p *WorkerPool) Resume(downloadID string) {
 	}
 
 	// Re-queue the download
+	ad.config.IsResume = true
 	p.Add(ad.config)
 
 	// Send resume message
