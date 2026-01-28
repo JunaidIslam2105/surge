@@ -500,6 +500,9 @@ func TestWorkerPool_Resume_RequeuesDownload(t *testing.T) {
 		State: state,
 	}
 
+	// Resume checks idempotency, so we MUST start in Paused state
+	state.Paused.Store(true)
+
 	pool.mu.Lock()
 	pool.downloads["test-id"] = &activeDownload{
 		config: cfg,
@@ -547,7 +550,21 @@ func TestWorkerPool_GracefulShutdown_PausesAll(t *testing.T) {
 	pool.mu.Unlock()
 
 	// GracefulShutdown should call PauseAll
+	// PauseAll will set IsPausing() = true
+	// GracefulShutdown waits for IsPausing() = false
+	// We verify that PauseAll was called by checking state.IsPausing()
+	// Then we clear it to unblock shutdown
+
 	done := make(chan bool)
+	go func() {
+		// Wait for PauseAll to be called (Pausing=true)
+		for !state.IsPausing() {
+			time.Sleep(10 * time.Millisecond)
+		}
+		// Simulate worker finishing pause transition
+		state.SetPausing(false)
+	}()
+
 	go func() {
 		pool.GracefulShutdown()
 		done <- true
@@ -628,7 +645,76 @@ func TestWorkerPool_HasDownload(t *testing.T) {
 		t.Error("Expected HasDownload to return false for missing download")
 	}
 
-	// 3. Persistent Check is harder to test without mocking 'state' package or setting up DB.
-	// However, we can trust the integration test for that part or mock it if we refactored.
 	// For now, this unit test covers the memory-check part of HasDownload which was the critical logic add.
+}
+
+func TestWorkerPool_PauseResume_Idempotency(t *testing.T) {
+	ch := make(chan any, 10)
+	pool := NewWorkerPool(ch, 3)
+
+	state := types.NewProgressState("idempotent-test", 1000)
+
+	pool.mu.Lock()
+	pool.downloads["idempotent-test"] = &activeDownload{
+		config: types.DownloadConfig{
+			ID:    "idempotent-test",
+			State: state,
+		},
+	}
+	pool.mu.Unlock()
+
+	// 1. First Pause
+	pool.Pause("idempotent-test")
+
+	// Should be Pausing
+	if !state.IsPausing() {
+		t.Error("Expected state to be Pausing after first Pause")
+	}
+
+	// Consume message
+	select {
+	case <-ch:
+		// OK
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected pause message")
+	}
+
+	// 2. Second Pause (Idempotent)
+	// Should NOT send another message or change state significantly (still Pausing/Paused)
+	pool.Pause("idempotent-test")
+
+	select {
+	case <-ch:
+		t.Error("Did not expect second pause message")
+	default:
+		// OK
+	}
+
+	// Manually transition to Paused (simulating worker finish)
+	state.SetPausing(false)
+	state.Pause()
+
+	// 3. Resume
+	pool.Resume("idempotent-test")
+	if state.IsPaused() {
+		t.Error("Expected state to be Resumed (not paused)")
+	}
+
+	// Consume resume message
+	select {
+	case <-ch:
+		// OK
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected resume message")
+	}
+
+	// 4. Second Resume (Idempotent)
+	pool.Resume("idempotent-test")
+
+	select {
+	case <-ch:
+		t.Error("Did not expect second resume message")
+	default:
+		// OK
+	}
 }
