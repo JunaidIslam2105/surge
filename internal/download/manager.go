@@ -83,13 +83,13 @@ func uniqueFilePath(path string) string {
 func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 
 	// Probe server once to get all metadata
-	utils.Debug("TUIDownload: Probing server...", cfg.URL)
+	utils.Debug("TUIDownload: Probing server... %s", cfg.URL)
 	probe, err := engine.ProbeServer(ctx, cfg.URL, cfg.Filename)
 	if err != nil {
 		utils.Debug("TUIDownload: Probe failed: %v\n", err)
 		return err
 	}
-	utils.Debug("TUIDownload: Probe success", probe.FileSize)
+	utils.Debug("TUIDownload: Probe success %d", probe.FileSize)
 
 	// Start download timer (exclude probing time)
 	start := time.Now()
