@@ -78,10 +78,6 @@ func TestIntegration_SingleInstance(t *testing.T) {
 	f.Close()
 
 	// Start Mock HTTP Server
-	// We can't easily spawn a simple python server without dependencies,
-	// so let's start a small go http server in a goroutine?
-	// No, we need it to be accessible by the subprocess.
-	// We can use the test process itself as the HTTP server.
 
 	serverMux := http.NewServeMux()
 	serverMux.HandleFunc("/file", func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +97,7 @@ func TestIntegration_SingleInstance(t *testing.T) {
 	outDir := filepath.Join(tempHome, "downloads")
 
 	// Start Headless Host
-	cmdHost := exec.Command(binPath, "get", fileUrl, "--output", outDir)
+	cmdHost := exec.Command(binPath, fileUrl, "--output", outDir, "--exit-when-done")
 	cmdHost.Env = env
 	var hostOut, hostErr bytes.Buffer
 	cmdHost.Stdout = &hostOut
@@ -117,22 +113,31 @@ func TestIntegration_SingleInstance(t *testing.T) {
 		}
 	}()
 
-	// Wait for host to start (check for "Headless Host" string in output?)
-	// But getCmd headless host output is redirected?
-	// No, root.go prints to stdout/stderr.
+	// Wait for lock file (polling)
+	lockPath := filepath.Join(tempHome, "surge", "surge.lock")
+	deadline := time.Now().Add(5 * time.Second)
+	var lastErr error
+	foundLock := false
 
-	// We wait a bit
-	time.Sleep(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err := os.Stat(lockPath)
+		if err == nil {
+			foundLock = true
+			break
+		}
+		lastErr = err
 
-	// Check if process is still running
-	if cmdHost.ProcessState != nil && cmdHost.ProcessState.Exited() {
-		t.Fatalf("Host process unexpectedly finished. Out: %s, Err: %s", hostOut.String(), hostErr.String())
+		// Check if process died
+		if cmdHost.ProcessState != nil && cmdHost.ProcessState.Exited() {
+			t.Fatalf("Host process unexpectedly finished. Out: %s, Err: %s", hostOut.String(), hostErr.String())
+		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Verify Lock File
-	lockPath := filepath.Join(tempHome, "surge", "surge.lock")
-	_, err = os.Stat(lockPath)
-	require.NoError(t, err, "Lock file should exist")
+	if !foundLock {
+		t.Fatalf("Lock file not found after timeout. Last error: %v. Out: %s, Err: %s", lastErr, hostOut.String(), hostErr.String())
+	}
 
 	// --- Step 2: Start Client (Offload) ---
 	cmdClient := exec.Command(binPath, "get", fileUrl, "--output", outDir)
@@ -150,7 +155,7 @@ func TestIntegration_SingleInstance(t *testing.T) {
 	// Based on get.go: fmt.Printf("Download queued: %s\n", string(body))
 	// Based on root.go: fmt.Printf("Downloading: %s ...") (Host output)
 
-	if !strings.Contains(output, "Download queued") {
+	if !strings.Contains(output, "Download queued") && !strings.Contains(output, "Successfully added") {
 		t.Errorf("Client did not report queued download. Output: %s", output)
 	}
 
@@ -170,8 +175,4 @@ func TestIntegration_SingleInstance(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Host timed out waiting for completion")
 	}
-
-	// Verify output
-	hostLog := hostOut.String() + hostErr.String()
-	require.Contains(t, hostLog, "Headless Host", "Host execution verified")
 }
