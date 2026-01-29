@@ -360,20 +360,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				speed := float64(d.Total) / msg.Elapsed.Seconds()
 				m.addLogEntry(LogStyleComplete.Render(fmt.Sprintf("✔ Done: %s (%.2f MB/s)", d.Filename, speed/Megabyte)))
 
-				// Persist to history (TUI has the correct filename from DownloadStartedMsg)
-				_ = state.AddToMasterList(types.DownloadEntry{
-					URLHash:     state.URLHash(d.URL),
-					ID:          d.ID,
-					URL:         d.URL,
-					DestPath:    d.Destination,
-					Filename:    d.Filename,
-					Status:      "completed",
-					TotalSize:   d.Total,
-					Downloaded:  d.Total,
-					CompletedAt: time.Now().Unix(),
-					TimeTaken:   d.Elapsed.Milliseconds(),
-				})
-
 				break
 			}
 		}
