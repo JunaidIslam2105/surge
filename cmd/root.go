@@ -6,12 +6,9 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
-	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/download"
@@ -74,11 +71,9 @@ var rootCmd = &cobra.Command{
 		}
 		defer ReleaseLock()
 
-		isServer, _ := cmd.Flags().GetBool("server")
 		portFlag, _ := cmd.Flags().GetInt("port")
 		batchFile, _ := cmd.Flags().GetString("batch")
 		outputDir, _ := cmd.Flags().GetString("output")
-		exitWhenDone, _ := cmd.Flags().GetBool("exit-when-done")
 
 		var port int
 		var listener net.Listener
@@ -103,15 +98,13 @@ var rootCmd = &cobra.Command{
 
 		// Save port for browser extension AND CLI discovery
 		saveActivePort(port)
+		defer removeActivePort()
 
 		// Start HTTP server in background (reuse the listener)
 		go startHTTPServer(listener, port, outputDir)
 
 		// Queue initial downloads if any
 		go func() {
-			// Small delay to ensure server/pool is ready if needed,
-			// primarily prevents race if pool init is delayed, but here it's in PersistentPreRun
-
 			var urls []string
 			urls = append(urls, args...)
 
@@ -129,50 +122,11 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		if isServer {
-			fmt.Printf("Surge %s running in server mode.\n", Version)
-			fmt.Printf("HTTP server listening on port %d\n", port)
-			fmt.Println("Press Ctrl+C to exit.")
+		// Auto-resume paused downloads
+		resumePausedDownloads()
 
-			StartHeadlessConsumer()
-
-			// Auto resume downloads if enabled
-			resumePausedDownloads()
-
-			if exitWhenDone {
-				// Start a monitoring routine to exit when all downloads complete
-				go func() {
-					// Wait a bit for downloads to start
-					time.Sleep(2 * time.Second)
-					ticker := time.NewTicker(2 * time.Second)
-					defer ticker.Stop()
-					for range ticker.C {
-						if atomic.LoadInt32(&activeDownloads) == 0 {
-							if GlobalPool != nil && GlobalPool.ActiveCount() == 0 {
-								fmt.Println("All downloads finished. Exiting...")
-								os.Exit(0)
-							}
-						}
-					}
-				}()
-			}
-
-			// Block until signal
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-			<-sigChan
-
-			fmt.Println("\nShutting down...")
-			if GlobalPool != nil {
-				GlobalPool.GracefulShutdown()
-			}
-
-		} else {
-			startTUI(port)
-		}
-
-		// Cleanup port file on exit
-		removeActivePort()
+		// Start TUI (default mode)
+		startTUI(port)
 	},
 }
 
@@ -620,9 +574,6 @@ func Execute() {
 }
 
 func init() {
-	// rootCmd.AddCommand(getCmd) // Removed getCmd
-	rootCmd.Flags().Bool("server", false, "Run in server mode (headless)") // Replaces headless
-	rootCmd.Flags().Bool("exit-when-done", false, "Exit server when all downloads complete (server mode only)")
 	rootCmd.Flags().StringP("batch", "b", "", "File containing URLs to download (one per line)")
 	rootCmd.Flags().IntP("port", "p", 0, "Port to listen on (default: 8080 or first available)")
 	rootCmd.Flags().StringP("output", "o", "", "Default output directory")
