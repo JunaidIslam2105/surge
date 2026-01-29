@@ -16,11 +16,11 @@ type GraphStats struct {
 	DownloadTotal int64   // Total downloaded bytes
 }
 
-var graphGradient = []lipgloss.Color{
-	lipgloss.Color("#5f005f"), // Dark Purple (Bottom)
-	lipgloss.Color("#8700af"), // Medium Purple
-	lipgloss.Color("#af00d7"), // Bright Purple
-	lipgloss.Color("#ff00ff"), // Neon Pink (Top)
+var graphGradient = []lipgloss.TerminalColor{
+	lipgloss.AdaptiveColor{Light: "#ce93d8", Dark: "#5f005f"}, // Bottom
+	lipgloss.AdaptiveColor{Light: "#ab47bc", Dark: "#8700af"},
+	lipgloss.AdaptiveColor{Light: "#8e24aa", Dark: "#af00d7"},
+	lipgloss.AdaptiveColor{Light: "#4a148c", Dark: "#ff00ff"}, // Top
 }
 
 // renderMultiLineGraph creates a multi-line bar graph with grid lines.
@@ -30,7 +30,7 @@ var graphGradient = []lipgloss.Color{
 // maxVal: maximum value for scaling
 // color: color for the data bars
 // stats: stats to display in overlay box (pass nil to skip)
-func renderMultiLineGraph(data []float64, width, height int, maxVal float64, color lipgloss.Color, stats *GraphStats) string {
+func renderMultiLineGraph(data []float64, width, height int, maxVal float64, color lipgloss.TerminalColor, stats *GraphStats) string {
 
 	if width < 1 || height < 1 {
 		return ""

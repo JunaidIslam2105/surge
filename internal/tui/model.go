@@ -142,6 +142,8 @@ type RootModel struct {
 	// Update check
 	UpdateInfo     *version.UpdateInfo // Update information (nil if no update available)
 	CurrentVersion string              // Current version of Surge
+
+	InitialDarkBackground bool // Captured at startup for "System" theme
 }
 
 // NewDownloadModel creates a new download model with progress state and reporter
@@ -296,26 +298,39 @@ func InitialRootModel(serverPort int, currentVersion string, pool *download.Work
 	searchInput.Width = 30
 	searchInput.Prompt = ""
 
-	return RootModel{
-		downloads:      downloads,
-		inputs:         []textinput.Model{urlInput, pathInput, filenameInput},
-		state:          DashboardState,
-		progressChan:   progressChan,
-		filepicker:     fp,
-		help:           helpModel,
-		list:           downloadList,
-		Pool:           pool,
-		PWD:            pwd,
-		SpeedHistory:   make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
-		logViewport:    viewport.New(40, 5),                 // Default size, will be resized
-		logEntries:     make([]string, 0),
-		Settings:       settings,
-		SettingsInput:  settingsInput,
-		searchInput:    searchInput,
-		keys:           Keys,
-		ServerPort:     serverPort,
-		CurrentVersion: currentVersion,
+	m := RootModel{
+		downloads:             downloads,
+		inputs:                []textinput.Model{urlInput, pathInput, filenameInput},
+		state:                 DashboardState,
+		progressChan:          progressChan,
+		filepicker:            fp,
+		help:                  helpModel,
+		list:                  downloadList,
+		Pool:                  pool,
+		PWD:                   pwd,
+		SpeedHistory:          make([]float64, GraphHistoryPoints), // 60 points of history (30s at 0.5s interval)
+		logViewport:           viewport.New(40, 5),                 // Default size, will be resized
+		logEntries:            make([]string, 0),
+		Settings:              settings,
+		SettingsInput:         settingsInput,
+		searchInput:           searchInput,
+		keys:                  Keys,
+		ServerPort:            serverPort,
+		CurrentVersion:        currentVersion,
+		InitialDarkBackground: lipgloss.HasDarkBackground(),
 	}
+
+	// Apply configured theme
+	// We can't call m.ApplyTheme yet as m is returned, so apply logic directly
+	switch settings.General.Theme {
+	case config.ThemeLight:
+		lipgloss.SetHasDarkBackground(false)
+	case config.ThemeDark:
+		lipgloss.SetHasDarkBackground(true)
+		// ThemeAdaptive: do nothing, already set by system detection
+	}
+
+	return m
 }
 
 func (m RootModel) Init() tea.Cmd {
@@ -381,4 +396,17 @@ func newFilepicker(currentDir string) filepicker.Model {
 	fp.ShowPermissions = true
 	fp.SetHeight(FilePickerHeight)
 	return fp
+}
+
+// ApplyTheme applies the selected theme mode
+func (m *RootModel) ApplyTheme(mode int) {
+	switch mode {
+	case config.ThemeAdaptive:
+		// Restore initial system state
+		lipgloss.SetHasDarkBackground(m.InitialDarkBackground)
+	case config.ThemeLight:
+		lipgloss.SetHasDarkBackground(false)
+	case config.ThemeDark:
+		lipgloss.SetHasDarkBackground(true)
+	}
 }

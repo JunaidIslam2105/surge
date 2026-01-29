@@ -22,7 +22,7 @@ var (
 )
 
 // Progress bar color constants
-const (
+var (
 	ProgressStart = colors.ProgressStart
 	ProgressEnd   = colors.ProgressEnd
 )

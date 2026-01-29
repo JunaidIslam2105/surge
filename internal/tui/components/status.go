@@ -21,7 +21,7 @@ const (
 type statusInfo struct {
 	icon  string
 	label string
-	color lipgloss.Color
+	color lipgloss.TerminalColor
 }
 
 var statusMap = map[DownloadStatus]statusInfo{
@@ -49,7 +49,7 @@ func (s DownloadStatus) Label() string {
 }
 
 // Color returns the status color
-func (s DownloadStatus) Color() lipgloss.Color {
+func (s DownloadStatus) Color() lipgloss.TerminalColor {
 	if info, ok := statusMap[s]; ok {
 		return info.color
 	}

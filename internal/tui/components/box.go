@@ -9,13 +9,13 @@ import (
 )
 
 // BoxRenderer is the function signature for rendering btop-style boxes
-type BoxRenderer func(leftTitle, rightTitle, content string, width, height int, borderColor lipgloss.Color) string
+type BoxRenderer func(leftTitle, rightTitle, content string, width, height int, borderColor lipgloss.TerminalColor) string
 
 // RenderBtopBox creates a btop-style box with title embedded in the top border.
 // Supports left and right titles (e.g., search on left, pane name on right).
 // Accepts pre-styled title strings.
 // Example: ╭─ 🔍 Search... ─────────── Downloads ─╮
-func RenderBtopBox(leftTitle, rightTitle string, content string, width, height int, borderColor lipgloss.Color) string {
+func RenderBtopBox(leftTitle, rightTitle string, content string, width, height int, borderColor lipgloss.TerminalColor) string {
 	// Border characters
 	const (
 		topLeft     = "╭"

@@ -75,7 +75,7 @@ func (m RootModel) viewSettings() string {
 			style := lipgloss.NewStyle().Foreground(ColorLightGray)
 
 			if meta.Key == "max_global_connections" {
-				style = lipgloss.NewStyle().Foreground(lipgloss.Color("238")) // Darker gray
+				style = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "238"}) // Darker gray
 			}
 
 			line = style.Render("  " + line)
@@ -218,6 +218,7 @@ func (m RootModel) getSettingsValues(category string) map[string]interface{} {
 		values["skip_update_check"] = m.Settings.General.SkipUpdateCheck
 		values["max_concurrent_downloads"] = m.Settings.General.MaxConcurrentDownloads
 		values["clipboard_monitor"] = m.Settings.General.ClipboardMonitor
+		values["theme"] = m.Settings.General.Theme
 
 	case "Connections":
 		values["max_connections_per_host"] = m.Settings.Connections.MaxConnectionsPerHost
@@ -289,6 +290,29 @@ func (m *RootModel) setGeneralSetting(key, value, typ string) error {
 			}
 			m.Settings.General.MaxConcurrentDownloads = v
 		}
+	case "theme":
+		var theme int
+		valLower := strings.ToLower(value)
+		if valLower == "system" || valLower == "adaptive" || valLower == "0" {
+			theme = config.ThemeAdaptive
+		} else if valLower == "light" || valLower == "1" {
+			theme = config.ThemeLight
+		} else if valLower == "dark" || valLower == "2" {
+			theme = config.ThemeDark
+		} else {
+			// Try parsing as int fallback
+			if v, err := strconv.Atoi(value); err == nil {
+				if v >= 0 && v <= 2 {
+					theme = v
+				} else {
+					return nil // Invalid range
+				}
+			} else {
+				return nil // Invalid value
+			}
+		}
+		m.Settings.General.Theme = theme
+		m.ApplyTheme(theme)
 	}
 	return nil
 }
@@ -452,6 +476,20 @@ func formatSettingValueForEdit(value interface{}, typ, key string) string {
 			return fmt.Sprintf("%.0f", d.Seconds())
 		}
 	}
+
+	if key == "theme" {
+		if v, ok := value.(int); ok {
+			switch v {
+			case config.ThemeAdaptive:
+				return "< System >"
+			case config.ThemeLight:
+				return "< Light >"
+			case config.ThemeDark:
+				return "< Dark >"
+			}
+		}
+	}
+
 	// Default: use standard format
 	return formatSettingValue(value, typ)
 }
@@ -531,6 +569,8 @@ func (m *RootModel) resetSettingToDefault(category, key string, defaults *config
 			m.Settings.General.MaxConcurrentDownloads = defaults.General.MaxConcurrentDownloads
 		case "clipboard_monitor":
 			m.Settings.General.ClipboardMonitor = defaults.General.ClipboardMonitor
+		case "theme":
+			m.Settings.General.Theme = defaults.General.Theme
 		}
 
 	case "Connections":

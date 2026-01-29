@@ -1203,6 +1203,14 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 
+				// Special handling for Theme cycling
+				if key == "theme" {
+					newTheme := (m.Settings.General.Theme + 1) % 3
+					m.Settings.General.Theme = newTheme
+					m.ApplyTheme(newTheme)
+					return m, nil
+				}
+
 				// Toggle bool or enter edit mode for other types
 				typ := m.getCurrentSettingType()
 				if typ == "bool" {
@@ -1234,6 +1242,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				categories := config.CategoryOrder()
 				currentCategory := categories[m.SettingsActiveTab]
 				m.resetSettingToDefault(currentCategory, key, defaults)
+
+				// Special handling for Theme reset to ensure it applies immediately
+				if key == "theme" {
+					m.ApplyTheme(m.Settings.General.Theme)
+				}
 				return m, nil
 			}
 

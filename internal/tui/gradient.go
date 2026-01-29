@@ -10,15 +10,16 @@ import (
 )
 
 // ApplyGradient applies a vertical gradient to a multi-line string
-func ApplyGradient(text string, startColor, endColor lipgloss.Color) string {
+// ApplyGradient applies a vertical gradient to a multi-line string
+func ApplyGradient(text string, startColor, endColor lipgloss.TerminalColor) string {
 	lines := strings.Split(text, "\n")
 	height := len(lines)
 	if height == 0 {
 		return text
 	}
 
-	startRGB, _ := hexToRGB(string(startColor))
-	endRGB, _ := hexToRGB(string(endColor))
+	startRGB, _ := hexToRGB(resolveColor(startColor))
+	endRGB, _ := hexToRGB(resolveColor(endColor))
 
 	var coloredLines []string
 	for i, line := range lines {
@@ -45,6 +46,19 @@ func ApplyGradient(text string, startColor, endColor lipgloss.Color) string {
 	}
 
 	return strings.Join(coloredLines, "\n")
+}
+
+func resolveColor(c lipgloss.TerminalColor) string {
+	if ac, ok := c.(lipgloss.AdaptiveColor); ok {
+		if lipgloss.HasDarkBackground() {
+			return ac.Dark
+		}
+		return ac.Light
+	}
+	if col, ok := c.(lipgloss.Color); ok {
+		return string(col)
+	}
+	return ""
 }
 
 type rgb struct {
