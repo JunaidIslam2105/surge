@@ -80,6 +80,12 @@ surge https://example.com/file1.zip https://example.com/file2.zip
 
 # Combine URLs and batch file
 surge https://example.com/file.zip --batch urls.txt
+
+# Start without resuming paused downloads
+surge --no-resume
+
+# Auto-exit when all downloads complete
+surge https://example.com/file.zip --exit-when-done
 ```
 
 ### 2. Adding Downloads
@@ -121,6 +127,9 @@ surge server start --port 8090
 
 # Auto-exit when all downloads complete
 surge server start --exit-when-done https://example.com/file.zip
+
+# Start without resuming paused downloads
+surge server start --no-resume
 
 # Check server status
 surge server status

@@ -45,6 +45,7 @@ var serverStartCmd = &cobra.Command{
 		batchFile, _ := cmd.Flags().GetString("batch")
 		outputDir, _ := cmd.Flags().GetString("output")
 		exitWhenDone, _ := cmd.Flags().GetBool("exit-when-done")
+		noResume, _ := cmd.Flags().GetBool("no-resume")
 
 		// Save current PID to file
 		savePID()
@@ -60,7 +61,7 @@ var serverStartCmd = &cobra.Command{
 		// Determine Port
 		// Logic moved to startServerLogic, or we need to pass flags.
 		// Use startServerLogic
-		startServerLogic(cmd, args, portFlag, batchFile, outputDir, exitWhenDone)
+		startServerLogic(cmd, args, portFlag, batchFile, outputDir, exitWhenDone, noResume)
 	},
 }
 
@@ -131,6 +132,7 @@ func init() {
 	serverStartCmd.Flags().IntP("port", "p", 0, "Port to listen on")
 	serverStartCmd.Flags().StringP("output", "o", "", "Default output directory")
 	serverStartCmd.Flags().Bool("exit-when-done", false, "Exit when all downloads complete")
+	serverStartCmd.Flags().Bool("no-resume", false, "Do not auto-resume paused downloads on startup")
 }
 
 func savePID() {
@@ -154,7 +156,7 @@ func readPID() int {
 	return pid
 }
 
-func startServerLogic(cmd *cobra.Command, args []string, portFlag int, batchFile string, outputDir string, exitWhenDone bool) {
+func startServerLogic(cmd *cobra.Command, args []string, portFlag int, batchFile string, outputDir string, exitWhenDone bool, noResume bool) {
 	var port int
 	var listener net.Listener
 
@@ -203,7 +205,11 @@ func startServerLogic(cmd *cobra.Command, args []string, portFlag int, batchFile
 	fmt.Println("Press Ctrl+C to exit.")
 
 	StartHeadlessConsumer()
-	resumePausedDownloads()
+
+	// Auto-resume paused downloads (unless --no-resume)
+	if !noResume {
+		resumePausedDownloads()
+	}
 
 	if exitWhenDone {
 		go func() {

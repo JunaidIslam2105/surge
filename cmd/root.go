@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/surge-downloader/surge/internal/config"
 	"github.com/surge-downloader/surge/internal/download"
@@ -74,6 +75,8 @@ var rootCmd = &cobra.Command{
 		portFlag, _ := cmd.Flags().GetInt("port")
 		batchFile, _ := cmd.Flags().GetString("batch")
 		outputDir, _ := cmd.Flags().GetString("output")
+		noResume, _ := cmd.Flags().GetBool("no-resume")
+		exitWhenDone, _ := cmd.Flags().GetBool("exit-when-done")
 
 		var port int
 		var listener net.Listener
@@ -122,16 +125,18 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		// Auto-resume paused downloads
-		resumePausedDownloads()
+		// Auto-resume paused downloads (unless --no-resume)
+		if !noResume {
+			resumePausedDownloads()
+		}
 
 		// Start TUI (default mode)
-		startTUI(port)
+		startTUI(port, exitWhenDone)
 	},
 }
 
 // startTUI initializes and runs the TUI program
-func startTUI(port int) {
+func startTUI(port int, exitWhenDone bool) {
 	// Initialize TUI
 	// GlobalPool and GlobalProgressCh are already initialized in PersistentPreRun or Run
 
@@ -148,6 +153,23 @@ func startTUI(port int) {
 			p.Send(msg)
 		}
 	}()
+
+	// Exit-when-done checker for TUI
+	if exitWhenDone {
+		go func() {
+			// Wait a bit for initial downloads to be queued
+			time.Sleep(3 * time.Second)
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				if GlobalPool != nil && GlobalPool.ActiveCount() == 0 {
+					// Send quit message to TUI
+					p.Send(tea.Quit())
+					return
+				}
+			}
+		}()
+	}
 
 	// Run TUI
 	if _, err := p.Run(); err != nil {
@@ -649,6 +671,8 @@ func init() {
 	rootCmd.Flags().StringP("batch", "b", "", "File containing URLs to download (one per line)")
 	rootCmd.Flags().IntP("port", "p", 0, "Port to listen on (default: 8080 or first available)")
 	rootCmd.Flags().StringP("output", "o", "", "Default output directory")
+	rootCmd.Flags().Bool("no-resume", false, "Do not auto-resume paused downloads on startup")
+	rootCmd.Flags().Bool("exit-when-done", false, "Exit when all downloads complete")
 	rootCmd.SetVersionTemplate("Surge version {{.Version}}\n")
 }
 
