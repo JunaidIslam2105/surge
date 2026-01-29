@@ -159,7 +159,7 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 	}
 }
 
-func InitialRootModel(serverPort int, currentVersion string, pool *download.WorkerPool, progressChan chan any) RootModel {
+func InitialRootModel(serverPort int, currentVersion string, pool *download.WorkerPool, progressChan chan any, noResume bool) RootModel {
 	// Initialize inputs
 	urlInput := textinput.New()
 	urlInput.Placeholder = "https://example.com/file.zip"
@@ -198,6 +198,11 @@ func InitialRootModel(serverPort int, currentVersion string, pool *download.Work
 		settings = config.DefaultSettings()
 	}
 
+	// Override AutoResume if CLI flag provided
+	if noResume {
+		settings.General.AutoResume = false
+	}
+
 	// Load paused downloads from master list (now uses global config directory)
 	var downloads []*DownloadModel
 	if pausedEntries, err := state.LoadPausedDownloads(); err == nil {
@@ -207,7 +212,7 @@ func InitialRootModel(serverPort int, currentVersion string, pool *download.Work
 				id = entry.ID
 			}
 			dm := NewDownloadModel(id, entry.URL, entry.Filename, 0)
-			dm.paused = true
+			dm.paused = (entry.Status == "paused")
 			dm.Destination = entry.DestPath // Store destination for state lookup on resume
 
 			// Load actual progress from state file (using URL+DestPath for unique lookup)
@@ -227,8 +232,16 @@ func InitialRootModel(serverPort int, currentVersion string, pool *download.Work
 				}
 			}
 
+			// Decide if we should resume based on status and settings
+			shouldResume := false
+			if entry.Status == "queued" && !noResume {
+				shouldResume = true // Always resume explicit queue (unless --no-resume forced)
+			} else if entry.Status == "paused" && settings.General.AutoResume {
+				shouldResume = true // Only auto-resume paused if enabled (and not overridden)
+			}
+
 			// Auto resume if enabled
-			if settings.General.AutoResume {
+			if shouldResume {
 				dm.paused = false
 				dm.state.Resume()
 

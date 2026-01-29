@@ -126,22 +126,17 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		// Auto-resume paused downloads (unless --no-resume)
-		if !noResume {
-			resumePausedDownloads()
-		}
-
 		// Start TUI (default mode)
-		startTUI(port, exitWhenDone)
+		startTUI(port, exitWhenDone, noResume)
 	},
 }
 
 // startTUI initializes and runs the TUI program
-func startTUI(port int, exitWhenDone bool) {
+func startTUI(port int, exitWhenDone bool, noResume bool) {
 	// Initialize TUI
 	// GlobalPool and GlobalProgressCh are already initialized in PersistentPreRun or Run
 
-	m := tui.InitialRootModel(port, Version, GlobalPool, GlobalProgressCh)
+	m := tui.InitialRootModel(port, Version, GlobalPool, GlobalProgressCh, noResume)
 	// m := tui.InitialRootModel(port, Version)
 	// No need to instantiate separate pool
 
@@ -730,16 +725,17 @@ func resumePausedDownloads() {
 		return // Can't check preference
 	}
 
-	if !settings.General.AutoResume {
-		return
-	}
-
 	pausedEntries, err := state.LoadPausedDownloads()
 	if err != nil {
 		return
 	}
 
 	for _, entry := range pausedEntries {
+		// If entry is explicitly queued, we should start it regardless of AutoResume setting
+		// If entry is paused, we only start it if AutoResume is enabled
+		if entry.Status == "paused" && !settings.General.AutoResume {
+			continue
+		}
 		// Load state to define progress state
 		s, err := state.LoadState(entry.URL, entry.DestPath)
 		if err != nil {

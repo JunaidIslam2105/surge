@@ -28,10 +28,11 @@ func TestStateSync(t *testing.T) {
 	defer state.CloseDB()
 
 	// Provide a dummy pool to avoid panics if logic tries to use it
-	ch := make(chan any, 10)
-	pool := download.NewWorkerPool(ch, 1)
+	progressChan := make(chan any, 10)
+	pool := download.NewWorkerPool(progressChan, 1)
 
-	m := InitialRootModel(0, "0.0.0", pool, ch)
+	// Initialize model with progress channel and pool
+	m := InitialRootModel(8080, "test-version", pool, progressChan, false)
 
 	downloadID := "external-id"
 	// Create the "worker" state - this is the source of truth
