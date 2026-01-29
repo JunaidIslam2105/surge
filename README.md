@@ -25,19 +25,21 @@ Surge is designed for power users who prefer a keyboard-driven workflow. It feat
 
 Most browsers open a single connection for a download. Surge opens multiple (up to 32), splits the file, and downloads chunks in parallel. But we take it a step further:
 
-* **Smart "Work Stealing":** If a fast worker finishes its chunk, it doesn't sit idle. It "steals" work from slower workers to ensure the download finishes as fast as physics allows.
-* **Slow Worker Restart:** We monitor mean speeds. If a worker is lagging (< 0.3x average), Surge kills it and restarts the connection to find a faster route.
-* **Daemon Architecture:** Surge runs a single background "engine." You can open 10 different terminal tabs and queue downloads; they all funnel into one efficient manager.
-* **Beautiful TUI:** Built with Bubble Tea & Lipgloss, it looks good while it works.
+- **Smart "Work Stealing":** If a fast worker finishes its chunk, it doesn't sit idle. It "steals" work from slower workers to ensure the download finishes as fast as physics allows.
+- **Slow Worker Restart:** We monitor mean speeds. If a worker is lagging (< 0.3x average), Surge kills it and restarts the connection to find a faster route.
+- **Daemon Architecture:** Surge runs a single background "engine." You can open 10 different terminal tabs and queue downloads; they all funnel into one efficient manager.
+- **Beautiful TUI:** Built with Bubble Tea & Lipgloss, it looks good while it works.
 
 ---
 
 ## Installation
 
 ### Option 1: Prebuilt Binaries (Easiest)
+
 Download the latest binary for your OS from the [Releases Page](https://github.com/surge-downloader/surge/releases/latest).
 
 ### Option 2: Homebrew (macOS/Linux)
+
 ```bash
 brew install surge-downloader/tap/surge
 
@@ -63,57 +65,94 @@ go build -o surge .
 
 ## Usage
 
-Surge has two main modes: **Interactive** and **Headless**.
+Surge has two main modes: **TUI (Interactive)** and **Server (Headless)**.
 
 ### 1. The Interactive TUI
 
 Just run `surge` to enter the dashboard. This is where you can visualize progress, manage the queue, and see the speed graphs.
 
 ```bash
+# Start the TUI
 surge
 
+# Start TUI with downloads queued
+surge https://example.com/file1.zip https://example.com/file2.zip
+
+# Combine URLs and batch file
+surge https://example.com/file.zip --batch urls.txt
 ```
 
-### 2. The CLI (Remote Control)
+### 2. Adding Downloads
 
-You can throw downloads at Surge from any terminal window. If an instance is already running, the CLI acts as a remote control. If it isn't, a new temporary instance is created.
+Use `surge add` to queue downloads to a running instance (TUI or Server).
 
 ```bash
-# Download a file
-surge get https://example.com/file.zip
+# Add a download to running instance
+surge add https://example.com/file.zip
 
-# Batch download from a file
-surge get --batch urls.txt
+# Add multiple downloads
+surge add https://a.com/1.zip https://b.com/2.zip
+
+# Batch add from file
+surge add --batch urls.txt
 
 # Save to a specific folder
-surge get <URL> -o ~/Downloads/ISO
-
+surge add https://example.com/file.zip -o ~/Downloads/ISO
 ```
 
-### 3. Headless Server (Daemon)
+> **Note:** `surge get` is an alias for `surge add`.
+
+### 3. Server Mode (Headless)
 
 Great for servers, Raspberry Pis, or background processes.
 
 ```bash
-# Start the daemon
-surge --headless
+# Start the server
+surge server start
+
+# Start with downloads queued
+surge server start https://example.com/file1.zip https://example.com/file2.zip
+
+# Combine URLs and batch file
+surge server start https://example.com/file.zip --batch urls.txt
 
 # Start on a specific port
-surge --headless --port 8090
+surge server start --port 8090
 
+# Auto-exit when all downloads complete
+surge server start --exit-when-done https://example.com/file.zip
+
+# Check server status
+surge server status
+
+# Stop the server
+surge server stop
 ```
 
-### Managing Downloads
+### 4. Managing Downloads
 
-Need to control a specific file? Use the ID.
+Control downloads directly from the CLI:
 
 ```bash
-surge get <ID> info    # Check status
-surge get <ID> pause   # Pause it
-surge get <ID> resume  # Resume it
-surge get <ID> delete  # Nuke it
+# List all downloads
+surge ls
+surge ls --json    # JSON output
+surge ls --watch   # Live updates
 
+# Pause downloads
+surge pause <ID>
+surge pause --all
+
+# Resume downloads
+surge resume <ID>
+surge resume --all
+
+# Remove downloads
+surge rm <ID>
+surge rm --clean   # Remove all completed
 ```
+
+> **Tip:** `surge kill` is an alias for `surge rm`.
 
 ---
 
@@ -121,14 +160,14 @@ surge get <ID> delete  # Nuke it
 
 We tested Surge against standard tools. Because of our connection optimization logic, Surge significantly outperforms single-connection tools.
 
-| Tool | Time | Speed | Comparison |
-| --- | --- | --- | --- |
-| **Surge** | **28.93s** | **35.40 MB/s** | **—** |
-| aria2c | 40.04s | 25.57 MB/s | 1.38× slower |
-| curl | 57.57s | 17.79 MB/s | 1.99× slower |
-| wget | 61.81s | 16.57 MB/s | 2.14× slower |
+| Tool      | Time       | Speed          | Comparison   |
+| --------- | ---------- | -------------- | ------------ |
+| **Surge** | **28.93s** | **35.40 MB/s** | **—**        |
+| aria2c    | 40.04s     | 25.57 MB/s     | 1.38× slower |
+| curl      | 57.57s     | 17.79 MB/s     | 1.99× slower |
+| wget      | 61.81s     | 16.57 MB/s     | 2.14× slower |
 
-> *Test details: 1GB file, Windows 11, Ryzen 5 5600X, 360 Mbps Network. Results averaged over 5 runs.*
+> _Test details: 1GB file, Windows 11, Ryzen 5 5600X, 360 Mbps Network. Results averaged over 5 runs._
 
 We would love to see you benchmark surge on your system!
 
@@ -138,8 +177,8 @@ We would love to see you benchmark surge on your system!
 
 The Surge extension intercepts browser downloads and sends them straight to your terminal.
 
-* **Chrome / Edge:** Enable "Developer Mode" in extensions and load the `extension-chrome` folder unpacked.
-* **Firefox:** [Get the Add-on](https://addons.mozilla.org/en-US/firefox/addon/surge/)
+- **Chrome / Edge:** Enable "Developer Mode" in extensions and load the `extension-chrome` folder unpacked.
+- **Firefox:** [Get the Add-on](https://addons.mozilla.org/en-US/firefox/addon/surge/)
 
 ---
 
@@ -154,6 +193,7 @@ You can check out the [Discussions](https://github.com/surge-downloader/surge/di
 Distributed under the MIT License. See [LICENSE]("https://github.com/surge-downloader/surge/blob/main/LICENSE") for more information.
 
 ---
+
 <div align="center">
 <a href="https://star-history.com/#surge-downloader/surge&Date">
  <picture>
