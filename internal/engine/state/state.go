@@ -324,7 +324,7 @@ func LoadPausedDownloads() ([]types.DownloadEntry, error) {
 
 	var paused []types.DownloadEntry
 	for _, e := range list.Downloads {
-		if e.Status == "paused" {
+		if e.Status == "paused" || e.Status == "queued" {
 			paused = append(paused, e)
 		}
 	}
