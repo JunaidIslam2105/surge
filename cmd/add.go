@@ -49,15 +49,7 @@ var addCmd = &cobra.Command{
 		}
 
 		// Send downloads to server
-		count := 0
-		for _, url := range urls {
-			err := sendToServer(url, output, port)
-			if err != nil {
-				fmt.Printf("Error adding %s: %v\n", url, err)
-			} else {
-				count++
-			}
-		}
+		count := processDownloads(urls, output, port)
 
 		if count > 0 {
 			fmt.Printf("Successfully added %d downloads.\n", count)

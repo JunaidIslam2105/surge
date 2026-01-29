@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/surge-downloader/surge/internal/config"
-	"github.com/surge-downloader/surge/internal/download"
 )
 
 var serverCmd = &cobra.Command{
@@ -50,12 +49,6 @@ var serverStartCmd = &cobra.Command{
 		// Save current PID to file
 		savePID()
 		defer removePID()
-
-		// Initialize Global Progress Channel
-		GlobalProgressCh = make(chan any, 100)
-
-		// Initialize Global Worker Pool
-		GlobalPool = download.NewWorkerPool(GlobalProgressCh, 4)
 
 		// Determine Port
 		// Determine Port

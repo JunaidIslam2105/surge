@@ -191,7 +191,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 		}
 
 		// Persist to history before sending event
-		_ = state.AddToMasterList(types.DownloadEntry{
+		if err := state.AddToMasterList(types.DownloadEntry{
 			ID:          cfg.ID,
 			URL:         cfg.URL,
 			URLHash:     state.URLHash(cfg.URL),
@@ -202,7 +202,9 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 			Downloaded:  probe.FileSize,
 			CompletedAt: time.Now().Unix(),
 			TimeTaken:   elapsed.Milliseconds(),
-		})
+		}); err != nil {
+			utils.Debug("Failed to persist completed download: %v", err)
+		}
 
 		if cfg.ProgressCh != nil {
 			cfg.ProgressCh <- events.DownloadCompleteMsg{
@@ -214,7 +216,7 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 		}
 	} else if downloadErr != nil && !isPaused {
 		// Persist error state
-		_ = state.AddToMasterList(types.DownloadEntry{
+		if err := state.AddToMasterList(types.DownloadEntry{
 			ID:         cfg.ID,
 			URL:        cfg.URL,
 			URLHash:    state.URLHash(cfg.URL),
@@ -223,7 +225,9 @@ func TUIDownload(ctx context.Context, cfg *types.DownloadConfig) error {
 			Status:     "error",
 			TotalSize:  probe.FileSize,
 			Downloaded: cfg.State.Downloaded.Load(),
-		})
+		}); err != nil {
+			utils.Debug("Failed to persist error state: %v", err)
+		}
 	}
 
 	return downloadErr

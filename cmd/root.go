@@ -626,22 +626,27 @@ func handleDownload(w http.ResponseWriter, r *http.Request, defaultOutputDir str
 }
 
 // processDownloads handles the logic of adding downloads either to local pool or remote server
-func processDownloads(urls []string, outputDir string, port int) {
+// Returns the number of successfully added downloads
+func processDownloads(urls []string, outputDir string, port int) int {
+	successCount := 0
+
 	// If port > 0, we are sending to a remote server
 	if port > 0 {
 		for _, url := range urls {
 			err := sendToServer(url, outputDir, port)
 			if err != nil {
 				fmt.Printf("Error adding %s: %v\n", url, err)
+			} else {
+				successCount++
 			}
 		}
-		return
+		return successCount
 	}
 
 	// Internal add (TUI or Headless mode)
 	if GlobalPool == nil {
 		fmt.Fprintln(os.Stderr, "Error: GlobalPool not initialized")
-		return
+		return 0
 	}
 
 	settings, err := config.LoadSettings()
@@ -689,7 +694,9 @@ func processDownloads(urls []string, outputDir string, port int) {
 
 		GlobalPool.Add(cfg)
 		atomic.AddInt32(&activeDownloads, 1)
+		successCount++
 	}
+	return successCount
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
