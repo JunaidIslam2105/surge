@@ -9,12 +9,19 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/surge-downloader/surge/internal/engine/state"
 	"github.com/surge-downloader/surge/internal/engine/types"
 	"github.com/surge-downloader/surge/internal/utils"
 )
+
+type WriteRequest struct {
+	Data   []byte
+	Offset int64
+	BufPtr *[]byte // Pointer to original buffer for pool return
+}
 
 // ConcurrentDownloader handles multi-connection downloads
 type ConcurrentDownloader struct {
@@ -26,7 +33,9 @@ type ConcurrentDownloader struct {
 	URL          string // For pause/resume
 	DestPath     string // For pause/resume
 	Runtime      *types.RuntimeConfig
-	bufPool      sync.Pool
+	bufferPool   sync.Pool // Unified pool for read/write buffers
+	writeQueue   chan WriteRequest
+	writeErr     atomic.Pointer[error] // First write error, if any
 }
 
 // NewConcurrentDownloader creates a new concurrent downloader with all required parameters
@@ -37,7 +46,7 @@ func NewConcurrentDownloader(id string, progressCh chan<- any, progState *types.
 		State:        progState,
 		activeTasks:  make(map[int]*ActiveTask),
 		Runtime:      runtime,
-		bufPool: sync.Pool{
+		bufferPool: sync.Pool{
 			New: func() any {
 				// Use configured buffer size
 				size := runtime.GetWorkerBufferSize()
@@ -45,6 +54,7 @@ func NewConcurrentDownloader(id string, progressCh chan<- any, progState *types.
 				return &buf
 			},
 		},
+		// writeQueue is created per-download in Download()
 	}
 }
 
@@ -147,6 +157,10 @@ func (d *ConcurrentDownloader) newConcurrentClient(numConns int) *http.Client {
 			Timeout:   types.DialTimeout,
 			KeepAlive: types.KeepAliveDuration,
 		}).DialContext,
+
+		// Tuning
+		ReadBufferSize:  256 * 1024, // 256KB
+		WriteBufferSize: 256 * 1024, // 256KB
 	}
 
 	return &http.Client{
@@ -297,6 +311,37 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath st
 		}
 	}()
 
+	// Initialize async write queue and start dedicated writer goroutine
+	queueSize := d.Runtime.GetWriteQueueSize()
+	d.writeQueue = make(chan WriteRequest, queueSize)
+
+	// Start multiple writers to handle high throughput
+	numWriters := d.Runtime.GetConcurrentWriters()
+	var writerWg sync.WaitGroup
+	writerWg.Add(numWriters)
+
+	for i := 0; i < numWriters; i++ {
+		go func() {
+			defer writerWg.Done()
+			for req := range d.writeQueue {
+				_, err := outFile.WriteAt(req.Data, req.Offset)
+				if err != nil {
+					// Store first error only
+					d.writeErr.CompareAndSwap(nil, &err)
+				}
+				// Return buffer to pool
+				// Get buffer from request
+				bufPtr := req.BufPtr
+
+				if bufPtr != nil && cap(*bufPtr) == d.Runtime.GetWorkerBufferSize() {
+					// Reslice to full capacity to be safe for next user
+					*bufPtr = (*bufPtr)[:cap(*bufPtr)]
+					d.bufferPool.Put(bufPtr)
+				}
+			}
+		}()
+	}
+
 	// Start workers
 	var wg sync.WaitGroup
 	workerErrors := make(chan error, numConns)
@@ -305,7 +350,7 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath st
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			err := d.worker(downloadCtx, workerID, rawurl, outFile, queue, fileSize, startTime, verbose, client)
+			err := d.worker(downloadCtx, workerID, rawurl, queue, fileSize, startTime, verbose, client)
 			if err != nil && err != context.Canceled {
 				workerErrors <- err
 			}
@@ -324,6 +369,17 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl, destPath st
 	for err := range workerErrors {
 		if err != nil {
 			downloadErr = err
+		}
+	}
+
+	// Shutdown writer: close queue and wait for all writes to complete
+	close(d.writeQueue)
+	writerWg.Wait()
+
+	// Check for write errors
+	if writeErr := d.writeErr.Load(); writeErr != nil {
+		if downloadErr == nil {
+			downloadErr = *writeErr
 		}
 	}
 

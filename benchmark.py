@@ -29,11 +29,7 @@ EXE_SUFFIX = ".exe" if IS_WINDOWS else ""
 # =============================================================================
 # Default test file URL (test file)
 TEST_URL = "https://sin-speed.hetzner.com/1GB.bin"
-
-
-
 MB = 1024 * 1024
-
 
 # =============================================================================
 # DATA CLASSES
@@ -134,9 +130,6 @@ def check_curl() -> bool:
     print("    [X] curl not found")
     return False
 
-
-
-
 def check_aria2c() -> bool:
     """Check if aria2c is installed."""
     if which("aria2c"):
@@ -156,7 +149,7 @@ def benchmark_surge(executable: Path, url: str, output_dir: Path, label: str = "
     
     start = time.perf_counter()
     success, output = run_command([
-        str(executable), "get", url,
+        str(executable), "server", "start", "--exit-when-done", url,
         "--output", str(output_dir),  # Download directory
     ], timeout=600)
     elapsed = time.perf_counter() - start

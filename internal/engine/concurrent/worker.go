@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sync/atomic"
 	"time"
 
@@ -14,11 +13,22 @@ import (
 )
 
 // worker downloads tasks from the queue
-func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string, file *os.File, queue *TaskQueue, totalSize int64, startTime time.Time, verbose bool, client *http.Client) error {
+func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string, queue *TaskQueue, totalSize int64, startTime time.Time, verbose bool, client *http.Client) error {
 	// Get pooled buffer
-	bufPtr := d.bufPool.Get().(*[]byte)
-	defer d.bufPool.Put(bufPtr)
-	buf := *bufPtr
+	// Get pooled buffer (manage lifecycle manually for zero-copy)
+	bufPtr := d.bufferPool.Get().(*[]byte)
+
+	// Ensure we return the LAST held buffer on exit
+	defer func() {
+		if bufPtr != nil {
+			// Reslice to capacity just in case
+			if cap(*bufPtr) == d.Runtime.GetWorkerBufferSize() {
+				*bufPtr = (*bufPtr)[:cap(*bufPtr)]
+				d.bufferPool.Put(bufPtr)
+			}
+		}
+	}()
+	// buf := *bufPtr // Don't dereference here as we need the pointer to rotate it
 
 	utils.Debug("Worker %d started", id)
 	defer utils.Debug("Worker %d finished", id)
@@ -60,7 +70,8 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string
 			d.activeMu.Unlock()
 
 			taskStart := time.Now()
-			lastErr = d.downloadTask(taskCtx, rawurl, file, activeTask, buf, verbose, client)
+			// Pass bufPtr to downloadTask which may rotate it
+			lastErr = d.downloadTask(taskCtx, rawurl, activeTask, &bufPtr, verbose, client)
 
 			// CRITICAL: Capture external cancellation state BEFORE calling taskCancel()
 			// If we call taskCancel() first, taskCtx.Err() will always be non-nil
@@ -144,13 +155,16 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, rawurl string
 }
 
 // downloadTask downloads a single byte range and writes to file at offset
-func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, file *os.File, activeTask *ActiveTask, buf []byte, verbose bool, client *http.Client) error {
+func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, activeTask *ActiveTask, bufPtrWrapper **[]byte, verbose bool, client *http.Client) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
 		return err
 	}
 
 	task := activeTask.Task
+
+	// Initialize local buffer reference
+	buf := **bufPtrWrapper
 
 	req.Header.Set("User-Agent", d.Runtime.GetUserAgent())
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", task.Offset, task.Offset+task.Length-1))
@@ -214,7 +228,7 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 
 		if readSoFar > 0 {
 
-			// check stopAt again before writing
+			// Check stopAt again before writing
 			// truncate readSoFar
 			currentStopAt := atomic.LoadInt64(&activeTask.StopAt)
 			if offset+int64(readSoFar) > currentStopAt {
@@ -224,9 +238,42 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 				}
 			}
 
-			_, writeErr := file.WriteAt(buf[:readSoFar], offset)
-			if writeErr != nil {
-				return fmt.Errorf("write error: %w", writeErr)
+			// ZERO-COPY OPTIMIZATION
+			// Instead of copying to a new buffer, we pass the current buffer to the writer.
+			// The writer takes ownership and returns it to the pool.
+			// We must acquire a new buffer for the next read loop.
+
+			currentBufPtr := *bufPtrWrapper
+			currentBuf := *currentBufPtr
+
+			// Send to async writer (pass buffer pointer for return to pool)
+			writeReq := WriteRequest{
+				Data:   currentBuf[:readSoFar],
+				Offset: offset,
+				BufPtr: currentBufPtr,
+			}
+
+			select {
+			case d.writeQueue <- writeReq:
+				// Sent successfully - we lost ownership of currentBufPtr
+				// Get a NEW buffer for next iteration
+				*bufPtrWrapper = d.bufferPool.Get().(*[]byte)
+
+				// Update our local reference for the read loop (although we loop back to top and don't use 'buf' until Read)
+				// But wait, the Read call uses 'buf'. We need to update 'buf' variable in the loop?
+				// The 'buf' variable in this function comes from... wait.
+				// In original code: `buf` was passed as argument.
+				// Now we need to update `buf` to point to the new buffer.
+				buf = **bufPtrWrapper
+
+			case <-ctx.Done():
+				// Context cancelled, we still own the buffer. it will be returned by caller's defer
+				return ctx.Err()
+			}
+
+			// Check for write errors from previous writes
+			if writeErr := d.writeErr.Load(); writeErr != nil {
+				return fmt.Errorf("write error: %w", *writeErr)
 			}
 
 			now := time.Now()

@@ -133,7 +133,7 @@ func DefaultSettings() *Settings {
 			MinChunkSize:     2 * MB,
 			MaxChunkSize:     16 * MB,
 			TargetChunkSize:  8 * MB,
-			WorkerBufferSize: 512 * KB,
+			WorkerBufferSize: 4 * MB,
 		},
 		Performance: PerformanceSettings{
 			MaxTaskRetries:        3,

@@ -23,9 +23,10 @@ const (
 	MaxChunk     = 16 * MB // Maximum chunk size
 	TargetChunk  = 8 * MB  // Target chunk size
 	AlignSize    = 4 * KB  // Align chunks to 4KB for filesystem
-	WorkerBuffer = 512 * KB
+	WorkerBuffer = 4 * MB
 
-	TasksPerWorker = 4 // Target tasks per connection
+	TasksPerWorker = 4  // Target tasks per connection
+	WriteQueueSize = 64 // Buffered async write requests
 )
 
 // Connection limits
@@ -78,6 +79,8 @@ type RuntimeConfig struct {
 	SlowWorkerGracePeriod time.Duration
 	StallTimeout          time.Duration
 	SpeedEmaAlpha         float64
+	WriteQueueSize        int
+	ConcurrentWriters     int
 }
 
 // GetUserAgent returns the configured user agent or the default
@@ -179,4 +182,20 @@ func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
 		return SpeedEMAAlpha
 	}
 	return r.SpeedEmaAlpha
+}
+
+// GetWriteQueueSize returns configured value or default
+func (r *RuntimeConfig) GetWriteQueueSize() int {
+	if r == nil || r.WriteQueueSize <= 0 {
+		return WriteQueueSize // Default to 64 (256MB buffer) to allow full worker burst
+	}
+	return r.WriteQueueSize
+}
+
+// GetConcurrentWriters returns configured value or default
+func (r *RuntimeConfig) GetConcurrentWriters() int {
+	if r == nil || r.ConcurrentWriters <= 0 {
+		return 4 // Default to 4 for high throughput
+	}
+	return r.ConcurrentWriters
 }
