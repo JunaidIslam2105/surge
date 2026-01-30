@@ -187,7 +187,7 @@ func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
 // GetWriteQueueSize returns configured value or default
 func (r *RuntimeConfig) GetWriteQueueSize() int {
 	if r == nil || r.WriteQueueSize <= 0 {
-		return 16 // Default to 16 (64MB buffer) to reduce memory pressure
+		return WriteQueueSize // Default to 64 (256MB buffer) to allow full worker burst
 	}
 	return r.WriteQueueSize
 }
