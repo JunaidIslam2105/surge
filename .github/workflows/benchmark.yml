@@ -54,6 +54,11 @@ jobs:
           cd baseline
           go build -o ../surge-baseline .
 
+      - name: Simulate Home Internet
+        run: |
+          # Caps speed at 100Mbps and adds 20ms ping (typical home wifi/fiber)
+          sudo tc qdisc add dev eth0 root netem rate 100mbit delay 20ms
+
       - name: Run Benchmark
         id: benchmark
         run: |
