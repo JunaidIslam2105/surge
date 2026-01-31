@@ -28,7 +28,7 @@ EXE_SUFFIX = ".exe" if IS_WINDOWS else ""
 # CONFIGURATION
 # =============================================================================
 # Default test file URL (test file)
-TEST_URL = "https://sin-speed.hetzner.com/1GB.bin"
+TEST_URL = "https://sin-speed.hetzner.com/10GB.bin"
 MB = 1024 * 1024
 
 # =============================================================================
