@@ -219,6 +219,7 @@ func (m RootModel) getSettingsValues(category string) map[string]interface{} {
 		values["max_concurrent_downloads"] = m.Settings.General.MaxConcurrentDownloads
 		values["clipboard_monitor"] = m.Settings.General.ClipboardMonitor
 		values["theme"] = m.Settings.General.Theme
+		values["log_retention_count"] = m.Settings.General.LogRetentionCount
 
 	case "Connections":
 		values["max_connections_per_host"] = m.Settings.Connections.MaxConnectionsPerHost
@@ -313,6 +314,13 @@ func (m *RootModel) setGeneralSetting(key, value, typ string) error {
 		}
 		m.Settings.General.Theme = theme
 		m.ApplyTheme(theme)
+	case "log_retention_count":
+		if v, err := strconv.Atoi(value); err == nil {
+			if v < 0 {
+				v = 0 // Minimum valid value
+			}
+			m.Settings.General.LogRetentionCount = v
+		}
 	}
 	return nil
 }
@@ -571,6 +579,8 @@ func (m *RootModel) resetSettingToDefault(category, key string, defaults *config
 			m.Settings.General.ClipboardMonitor = defaults.General.ClipboardMonitor
 		case "theme":
 			m.Settings.General.Theme = defaults.General.Theme
+		case "log_retention_count":
+			m.Settings.General.LogRetentionCount = defaults.General.LogRetentionCount
 		}
 
 	case "Connections":
