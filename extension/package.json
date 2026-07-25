@@ -21,6 +21,7 @@
     "solid-js": "^1.9.7"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
     "eslint": "^10.8.0",
@@ -30,5 +31,10 @@
     "vite-plugin-solid": "^2.11.13",
     "vitest": "^4.1.10",
     "wxt": "^0.20.26"
+  },
+  "overrides": {
+    "eslint-plugin-solid": {
+      "eslint": "$eslint"
+    }
   }
 }
