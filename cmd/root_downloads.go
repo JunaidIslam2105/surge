@@ -417,10 +417,16 @@ func enqueueDownloadRequest(r *http.Request, service service.DownloadService, re
 			Workers:            req.Workers,
 			MinChunkSize:       req.MinChunkSize,
 		}
+		// Use the application-level enqueue context instead of r.Context().
+		// The HTTP request context is cancelled when the handler returns or
+		// the client disconnects, which races against the server probe that
+		// can take several seconds — causing sporadic "context cancelled"
+		// failures on otherwise valid downloads.
+		ctx := currentEnqueueContext()
 		if reqID != "" {
-			return lifecycle.EnqueueWithID(r.Context(), dlReq, reqID)
+			return lifecycle.EnqueueWithID(ctx, dlReq, reqID)
 		}
-		return lifecycle.Enqueue(r.Context(), dlReq)
+		return lifecycle.Enqueue(ctx, dlReq)
 	}
 
 	if reqID != "" {

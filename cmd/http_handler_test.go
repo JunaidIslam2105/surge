@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -596,5 +597,88 @@ func TestHandleDownload_PublishError_RecordsPreflightError(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected errored download entry in master list after publish failure via HTTP API")
+	}
+}
+
+// TestHandleDownload_DoesNotUseCancelledHTTPRequestContext verifies that the
+// enqueue path uses the application-level enqueue context instead of the HTTP
+// request context. When the HTTP client disconnects or the handler returns
+// before the probe finishes, r.Context() is cancelled — but the download
+// should still be enqueued successfully.
+func TestHandleDownload_DoesNotUseCancelledHTTPRequestContext(t *testing.T) {
+	setupIsolatedCmdState(t)
+
+	progressCh := make(chan types.DownloadEvent, 10)
+	GlobalProgressCh = progressCh
+	if GlobalPool != nil {
+		GlobalPool.GracefulShutdown()
+	}
+	tmpPool := scheduler.New(progressCh, 1)
+	t.Cleanup(func() {
+		if tmpPool != nil {
+			tmpPool.GracefulShutdown()
+		}
+	})
+	GlobalPool = tmpPool
+
+	origLifecycle := GlobalLifecycle
+	origService := GlobalService
+	t.Cleanup(func() {
+		GlobalLifecycle = origLifecycle
+		GlobalService = origService
+		GlobalPool = nil
+		GlobalProgressCh = nil
+	})
+
+	probeServer := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Range", "bytes 0-0/7")
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte("x"))
+	}))
+	defer probeServer.Close()
+
+	tempDir := t.TempDir()
+
+	eventBus := orchestrator.NewEventBus()
+	t.Cleanup(func() { eventBus.Shutdown() })
+	getAll := func() []types.DownloadRecord { return GlobalPool.GetAll() }
+	tmpLifecycle := orchestrator.NewLifecycleManager(GlobalPool, eventBus, nil, buildActiveDownloadChecker(getAll))
+	t.Cleanup(func() { tmpLifecycle.Shutdown() })
+	GlobalLifecycle = tmpLifecycle
+	svc := service.NewLocalDownloadService(GlobalLifecycle)
+	GlobalService = svc
+	t.Cleanup(func() {
+		_ = svc.Shutdown()
+	})
+
+	body := fmt.Sprintf(`{
+		"url": %q,
+		"filename": "ctx-test.bin",
+		"path": %q,
+		"skip_approval": true
+	}`, probeServer.URL, tempDir)
+
+	// Create an HTTP request with an already-cancelled context to simulate
+	// a client that disconnects before the probe finishes.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	req := httptest.NewRequest(http.MethodPost, "/download", bytes.NewBufferString(body)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handleDownload(rec, req, "", svc)
+
+	// Before the fix, this would return 500 with "context canceled".
+	// After the fix, the download should be queued successfully because
+	// enqueueDownloadRequest uses currentEnqueueContext() instead of r.Context().
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (download queued despite cancelled HTTP context), got %d: %s", rec.Code, rec.Body.String())
+	}
+	configs := GlobalPool.GetAll()
+	if len(configs) != 1 {
+		t.Fatalf("expected 1 download queued, got %d", len(configs))
+	}
+	if configs[0].Filename != "ctx-test.bin" {
+		t.Fatalf("filename = %q, want %q", configs[0].Filename, "ctx-test.bin")
 	}
 }
