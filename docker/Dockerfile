@@ -24,7 +24,7 @@ RUN if [ "${TARGETOS:-linux}" != "linux" ]; then \
     fi && \
     echo "Downloading surge v${SURGE_VERSION} for ${TARGETOS:-linux}/${SURGE_ARCH}" && \
     curl -fsSL -o /tmp/surge.tar.gz \
-      "https://github.com/SurgeDM/Surge/releases/download/v${SURGE_VERSION}/surge_${SURGE_VERSION}_linux_${SURGE_ARCH}.tar.gz" && \
+      "https://github.com/SurgeDM/Surge/releases/download/v${SURGE_VERSION}/Surge_${SURGE_VERSION}_linux_${SURGE_ARCH}.tar.gz" && \
     mkdir -p /tmp/surge-extract /out && \
     tar -xzf /tmp/surge.tar.gz -C /tmp/surge-extract && \
     install -m 0755 /tmp/surge-extract/surge /out/surge

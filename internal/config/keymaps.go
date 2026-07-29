@@ -87,6 +87,7 @@ type FilePickerKeyMap struct {
 	Back     key.Binding
 	Forward  key.Binding
 	Open     key.Binding
+	Jump     key.Binding
 	Cancel   key.Binding
 }
 
@@ -559,6 +560,10 @@ func DefaultKeyMap() *KeyMap {
 				key.WithKeys("."),
 				key.WithHelp(".", "select highlighted"),
 			),
+			Jump: key.NewBinding(
+				key.WithKeys("a-z", "0-9"),
+				key.WithHelp("a-z/0-9", "jump to file"),
+			),
 			Cancel: key.NewBinding(
 				key.WithKeys("esc"),
 				key.WithHelp("esc", "cancel"),
@@ -772,11 +777,11 @@ func (k InputKeyMap) FullHelp() [][]key.Binding {
 }
 
 func (k FilePickerKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Back, k.Forward, k.UseDir, k.GotoHome, k.Open, k.Cancel}
+	return []key.Binding{k.Back, k.Forward, k.UseDir, k.GotoHome, k.Open, k.Jump, k.Cancel}
 }
 
 func (k FilePickerKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{k.Back, k.Forward, k.UseDir, k.GotoHome, k.Open, k.Cancel}}
+	return [][]key.Binding{{k.Back, k.Forward, k.UseDir, k.GotoHome, k.Open, k.Jump, k.Cancel}}
 }
 
 func (k DuplicateKeyMap) ShortHelp() []key.Binding {

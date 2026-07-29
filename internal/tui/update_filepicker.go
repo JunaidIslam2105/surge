@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"path/filepath"
+	"strings"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/SurgeDM/Surge/internal/utils"
@@ -76,6 +79,18 @@ func (m RootModel) updateFilePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilePickerSelection(m.filepicker.CurrentDirectory)
 	}
 
+	// Jump to file/folder by typing its first letter
+	if len(msg.Text) == 1 {
+		char := strings.ToLower(msg.Text)
+		if (char >= "a" && char <= "z") || (char >= "0" && char <= "9") {
+			var handled bool
+			m, handled = m.handleFilepickerJump(char)
+			if handled {
+				return m, nil
+			}
+		}
+	}
+
 	// Pass key to filepicker
 	var cmd tea.Cmd
 	m.filepicker, cmd = m.filepicker.Update(msg)
@@ -103,6 +118,18 @@ func (m RootModel) updateBatchFilePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		return m, cmd
 	}
 
+	// Jump to file/folder by typing its first letter
+	if len(msg.Text) == 1 {
+		char := strings.ToLower(msg.Text)
+		if (char >= "a" && char <= "z") || (char >= "0" && char <= "9") {
+			var handled bool
+			m, handled = m.handleFilepickerJump(char)
+			if handled {
+				return m, nil
+			}
+		}
+	}
+
 	// Pass key to filepicker
 	var cmd tea.Cmd
 	m.filepicker, cmd = m.filepicker.Update(msg)
@@ -113,4 +140,58 @@ func (m RootModel) updateBatchFilePicker(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 	}
 
 	return m, cmd
+}
+
+func (m RootModel) handleFilepickerJump(char string) (RootModel, bool) {
+	if m.filepicker.HighlightedPath() == "" {
+		return m, false
+	}
+
+	originalModel := m.filepicker
+	m.filepicker, _ = m.filepicker.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+
+	var lastPath string
+	found := false
+	for {
+		path := m.filepicker.HighlightedPath()
+		if path == "" || path == lastPath {
+			break
+		}
+		lastPath = path
+		base := filepath.Base(path)
+		if strings.HasPrefix(strings.ToLower(base), char) {
+			found = true
+			break
+		}
+		m.filepicker, _ = m.filepicker.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+
+	if !found {
+		m.filepicker = originalModel
+		m.filepicker, _ = m.filepicker.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
+
+		lastPath = ""
+		for {
+			path := m.filepicker.HighlightedPath()
+			if path == "" || path == lastPath {
+				break
+			}
+			lastPath = path
+			base := filepath.Base(path)
+			if strings.HasPrefix(strings.ToLower(base), char) {
+				found = true
+				break
+			}
+			if path == originalModel.HighlightedPath() {
+				break
+			}
+			m.filepicker, _ = m.filepicker.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		}
+
+		if !found {
+			m.filepicker = originalModel
+			return m, false
+		}
+	}
+	return m, true
 }

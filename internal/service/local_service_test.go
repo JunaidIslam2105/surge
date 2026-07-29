@@ -58,7 +58,6 @@ func TestLocalDownloadService_AddWithID_UsesProvidedID(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
 	blockCh := make(chan struct{})
-	defer close(blockCh)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1024")
 		w.WriteHeader(http.StatusOK)
@@ -73,6 +72,7 @@ func TestLocalDownloadService_AddWithID_UsesProvidedID(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
+	defer close(blockCh)
 
 	customID := "test-id-123"
 	id, err := svc.AddWithID(ts.URL, tmpDir, "test.txt", nil, nil, customID, false, 1, 0)
@@ -170,8 +170,30 @@ func TestLocalDownloadService_RateLimits(t *testing.T) {
 		t.Errorf("SetDefaultRateLimit failed: %v", err)
 	}
 
+	// Use a blocking server so the download stays active in the scheduler
+	// (prevents it from completing before we can test rate limit operations)
+	blockCh := make(chan struct{})
+	rateTs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1024")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		if r.Header.Get("Range") != "bytes=0-0" {
+			select {
+			case <-blockCh:
+			case <-r.Context().Done():
+			}
+		}
+	}))
+	defer rateTs.Close()
+	defer close(blockCh)
+
 	// Add a download and set its specific rate limit
-	id, _ := svc.Add(ts.URL, tmpDir, "rate.txt", nil, nil, false, 1, 0)
+	id, _ := svc.Add(rateTs.URL, tmpDir, "rate.txt", nil, nil, false, 1, 0)
+
+	// Wait briefly for the download to be picked up by the scheduler
+	time.Sleep(100 * time.Millisecond)
 
 	err = svc.SetRateLimit(id, 2000)
 	if err != nil {
