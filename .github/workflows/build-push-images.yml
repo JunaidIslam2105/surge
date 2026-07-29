@@ -52,6 +52,25 @@ jobs:
           fi
           echo "version=$SURGE_VERSION" >> $GITHUB_OUTPUT
 
+      - name: Wait for Release Assets
+        run: |
+          VERSION="${{ steps.surge-version.outputs.version }}"
+          echo "Waiting for release assets for version v$VERSION to be published..."
+          MAX_RETRIES=60
+          RETRY_INTERVAL=20
+          
+          for ((i=1; i<=MAX_RETRIES; i++)); do
+            if curl -s -f -I "https://github.com/SurgeDM/Surge/releases/download/v${VERSION}/surge_${VERSION}_linux_amd64.tar.gz" > /dev/null; then
+              echo "Release assets are available!"
+              exit 0
+            fi
+            echo "Attempt $i/$MAX_RETRIES: Release not ready yet, waiting ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+          done
+          
+          echo "Timeout waiting for release assets after $((MAX_RETRIES * RETRY_INTERVAL / 60)) minutes."
+          exit 1
+
       - name: Decide latest tag behavior
         id: latest-tag
         run: |
