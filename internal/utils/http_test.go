@@ -17,31 +17,31 @@ func TestSameSite(t *testing.T) {
 		{"exact same domain", "example.com", "example.com", true},
 		{"exact same IP", "127.0.0.1", "127.0.0.1", true},
 		{"exact same IPv6", "[::1]", "[::1]", true},
-		
+
 		// Subdomains on standard TLDs
 		{"standard TLD subdomains", "a.example.com", "b.example.com", true},
 		{"deep subdomains", "x.y.z.example.com", "example.com", true},
 		{"easynews subdomains", "members.easynews.com", "iad-dl-08.easynews.com", true},
-		
+
 		// Complex TLDs (eTLD+1)
 		{"complex TLD subdomains", "a.example.co.uk", "b.example.co.uk", true},
 		{"different sites on complex TLD", "example.co.uk", "other.co.uk", false},
 		{"github.io subdomains (private TLD)", "user1.github.io", "user2.github.io", false},
 		{"github.io same site", "user1.github.io", "sub.user1.github.io", true},
-		
+
 		// Cross-site cases
 		{"filmyzilla cross-site domains", "1.filmyzilla.vin", "cdn-02-nl-zilla.filmyzdl.com", false},
 		{"different domains", "example.com", "other.com", false},
 		{"different TLDs", "example.com", "example.org", false},
 		{"IP vs localhost", "127.0.0.1", "localhost", false},
 		{"different IPs", "192.168.1.1", "192.168.1.2", false},
-		
+
 		// Port handling
 		{"with same ports", "example.com:8080", "sub.example.com:8080", true},
 		{"with different ports", "example.com:80", "sub.example.com:443", true},
 		{"IP with port", "127.0.0.1:8080", "127.0.0.1:9090", true},
 		{"one with port, one without", "example.com", "sub.example.com:8080", true},
-		
+
 		// Malformed or empty
 		{"empty strings", "", "", true},
 		{"one empty string", "example.com", "", false},
@@ -144,11 +144,11 @@ func TestCopyRedirectHeaders(t *testing.T) {
 		},
 		// Edge cases
 		{
-			name:   "nil request headers safe check",
-			dstURL: "https://b.example.com",
-			srcURL: "https://a.example.com",
-			srcHeaders: nil, // shouldn't panic
-			initialDstHdr: http.Header{},
+			name:           "nil request headers safe check",
+			dstURL:         "https://b.example.com",
+			srcURL:         "https://a.example.com",
+			srcHeaders:     nil, // shouldn't panic
+			initialDstHdr:  http.Header{},
 			expectedDstHdr: http.Header{},
 		},
 		{
@@ -201,11 +201,11 @@ func TestCopyRedirectHeaders(t *testing.T) {
 func TestCopyRedirectHeaders_NilRequests(t *testing.T) {
 	// Should not panic
 	CopyRedirectHeaders(nil, nil)
-	
+
 	req := &http.Request{URL: mustParseURL(t, "https://example.com")}
 	CopyRedirectHeaders(req, nil)
 	CopyRedirectHeaders(nil, req)
-	
+
 	reqNoURL := &http.Request{}
 	CopyRedirectHeaders(req, reqNoURL)
 	CopyRedirectHeaders(reqNoURL, req)

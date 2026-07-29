@@ -496,7 +496,7 @@ func TestConcurrentDownloader_RetryOnFailure(t *testing.T) {
 	state := progress.New("retry-test", fileSize)
 	runtime := &types.RuntimeConfig{
 		MaxConnectionsPerDownload: 2,
-		MaxTaskRetries:            5, 
+		MaxTaskRetries:            5,
 		MinChunkSize:              64 * utils.KiB,
 	}
 
@@ -817,7 +817,6 @@ func TestConcurrentDownloader_Download_BootstrapFail_InvalidRange(t *testing.T) 
 		t.Errorf("Expected range error, got: %v", err)
 	}
 }
-
 
 func TestConcurrentDownloader_PauseDuringRetryBackoff(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)

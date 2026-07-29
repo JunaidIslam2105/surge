@@ -282,25 +282,25 @@ func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "hedge.bin")
 	state := progress.New("test-id", fileSize)
 	downloader := &ConcurrentDownloader{
-		ID:      "test-id",
-		State:   state,
-		Runtime: &types.RuntimeConfig{},
-		URL:     "http://example.com/hedge.bin",
+		ID:          "test-id",
+		State:       state,
+		Runtime:     &types.RuntimeConfig{},
+		URL:         "http://example.com/hedge.bin",
 		activeTasks: make(map[int]*ActiveTask),
 	}
-	
+
 	if err := store.AddToMasterList(types.DownloadRecord{
-		ID:         "test-id",
-		URL:        "http://example.com/hedge.bin",
-		DestPath:   destPath,
-		Status:     "downloading",
-		TotalSize:  fileSize,
+		ID:        "test-id",
+		URL:       "http://example.com/hedge.bin",
+		DestPath:  destPath,
+		Status:    "downloading",
+		TotalSize: fileSize,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	queue := NewTaskQueue()
-	
+
 	// Create a shared offset pointer
 	sharedOffset := &atomic.Int64{}
 	sharedOffset.Store(500)
@@ -318,7 +318,7 @@ func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
 	}
 	active.CurrentOffset.Store(600)
 	active.StopAt.Store(1000)
-	
+
 	downloader.activeTasks[0] = active
 
 	// Run saveStateSnapshot directly (false to not emit EventPaused, just write to store)
