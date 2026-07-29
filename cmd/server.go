@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"runtime"
 
 	"os"
 	"os/signal"
@@ -45,8 +46,9 @@ var serverStartCmd = &cobra.Command{
 			isAlive := false
 			if sysPid > 0 && sysPid != os.Getpid() {
 				if p, err := os.FindProcess(sysPid); err == nil {
-					// Sending signal 0 checks if the process exists
-					if err := p.Signal(syscall.Signal(0)); err == nil {
+					if runtime.GOOS == "windows" {
+						isAlive = true
+					} else if err := p.Signal(syscall.Signal(0)); err == nil {
 						isAlive = true
 					}
 				}
@@ -150,11 +152,13 @@ var serverStatusCmd = &cobra.Command{
 			return
 		}
 
-		// Sending signal 0 to check existence
-		err = process.Signal(syscall.Signal(0))
-		if err != nil {
-			fmt.Printf("Surge server is NOT running (Process %d dead).\n", pid)
-			return
+		if runtime.GOOS != "windows" {
+			// Sending signal 0 to check existence
+			err = process.Signal(syscall.Signal(0))
+			if err != nil {
+				fmt.Printf("Surge server is NOT running (Process %d dead).\n", pid)
+				return
+			}
 		}
 
 		port := readActivePort()
