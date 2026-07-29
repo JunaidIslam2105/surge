@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -269,5 +270,85 @@ func TestHandlePause_CompletionFinalization(t *testing.T) {
 
 	if progState.IsPaused() {
 		t.Error("Should have resumed state for completion")
+	}
+}
+
+func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
+	tmpDir := testutil.SetupStateDB(t)
+	cleanup := func() {}
+	defer cleanup()
+
+	fileSize := int64(1000)
+	destPath := filepath.Join(tmpDir, "hedge.bin")
+	state := progress.New("test-id", fileSize)
+	downloader := &ConcurrentDownloader{
+		ID:      "test-id",
+		State:   state,
+		Runtime: &types.RuntimeConfig{},
+		URL:     "http://example.com/hedge.bin",
+		activeTasks: make(map[int]*ActiveTask),
+	}
+	
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:         "test-id",
+		URL:        "http://example.com/hedge.bin",
+		DestPath:   destPath,
+		Status:     "downloading",
+		TotalSize:  fileSize,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	queue := NewTaskQueue()
+	
+	// Create a shared offset pointer
+	sharedOffset := &atomic.Int64{}
+	sharedOffset.Store(500)
+
+	// Simulate a queued hedge task that was created when the offset was 500
+	queue.Push(types.Task{
+		Offset:          500,
+		Length:          500, // 1000 - 500
+		SharedMaxOffset: sharedOffset,
+	})
+
+	// Simulate an active worker that has advanced to 600
+	active := &ActiveTask{
+		SharedMaxOffset: sharedOffset,
+	}
+	active.CurrentOffset.Store(600)
+	active.StopAt.Store(1000)
+	
+	downloader.activeTasks[0] = active
+
+	// Run saveStateSnapshot directly (false to not emit EventPaused, just write to store)
+	err := downloader.saveStateSnapshot(destPath, fileSize, queue, nil, false)
+	if err != nil {
+		t.Fatalf("saveStateSnapshot failed: %v", err)
+	}
+
+	// Load the saved state to verify
+	saved, err := store.LoadState(downloader.URL, destPath)
+	if err != nil {
+		t.Fatalf("failed to load saved state: %v", err)
+	}
+
+	if len(saved.Tasks) != 1 {
+		t.Fatalf("Expected exactly 1 deduplicated task, got %d", len(saved.Tasks))
+	}
+
+	task := saved.Tasks[0]
+	// If active worker won deduplication, Length should be 400 (1000-600).
+	// If queued task won, Length would be 500.
+	if task.Length != 400 {
+		t.Errorf("Expected remaining length 400 (active task won), got %d (queued task won?)", task.Length)
+	}
+	if task.Offset != 600 {
+		t.Errorf("Expected remaining offset 600, got %d", task.Offset)
+	}
+
+	// Verify SharedMaxOffset is cleared to prevent hot-resume pinning
+	if task.SharedMaxOffset != nil {
+		t.Errorf("Expected SharedMaxOffset to be cleared, but it was not nil")
 	}
 }

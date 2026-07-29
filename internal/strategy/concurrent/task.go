@@ -36,24 +36,39 @@ type ActiveTask struct {
 	WaitingOnLimiter atomic.Bool
 }
 
-// RemainingBytes returns the number of bytes left for this task
-func (at *ActiveTask) RemainingBytes() int64 {
+// currentOffset returns the effective offset, using the shared max if it is larger
+func (at *ActiveTask) currentOffset() int64 {
 	current := at.CurrentOffset.Load()
+	if at.SharedMaxOffset != nil {
+		if shared := at.SharedMaxOffset.Load(); shared > current {
+			current = shared
+		}
+	}
+	return current
+}
+
+// RemainingTask returns a Task representing the remaining work, or nil if complete
+func (at *ActiveTask) RemainingTask() *types.Task {
+	current := at.currentOffset()
+	stopAt := at.StopAt.Load()
+	if current >= stopAt {
+		return nil
+	}
+	
+	return &types.Task{
+		Offset: current, 
+		Length: stopAt - current,
+	}
+}
+
+// RemainingBytes returns the number of bytes left in the current task
+func (at *ActiveTask) RemainingBytes() int64 {
+	current := at.currentOffset()
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
 		return 0
 	}
 	return stopAt - current
-}
-
-// RemainingTask returns a Task representing the remaining work, or nil if complete
-func (at *ActiveTask) RemainingTask() *types.Task {
-	current := at.CurrentOffset.Load()
-	stopAt := at.StopAt.Load()
-	if current >= stopAt {
-		return nil
-	}
-	return &types.Task{Offset: current, Length: stopAt - current}
 }
 
 // GetSpeed returns the current EMA-smoothed speed, decaying if stalled

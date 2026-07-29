@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -312,6 +313,10 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	}
 
 	if downloadErr != nil {
+		// Save state so that retries (like rate limit backoffs) resume from the correct progress
+		if d.State != nil && !errors.Is(downloadErr, context.Canceled) {
+			_ = d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false)
+		}
 		return downloadErr
 	}
 	if downloadCtx.Err() != nil {
@@ -550,27 +555,46 @@ func (d *ConcurrentDownloader) executeWorkers(ctx context.Context, cancel contex
 }
 
 func (d *ConcurrentDownloader) handlePause(destPath string, fileSize int64, queue *TaskQueue, candidateMirrors []string) error {
+	return d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, true)
+}
+
+func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64, queue *TaskQueue, candidateMirrors []string, emitPauseEvent bool) error {
 	// 1. Collect active tasks as remaining work FIRST
 	var activeRemaining []types.Task
 	d.activeMu.Lock()
 	for _, active := range d.activeTasks {
 		if remaining := active.RemainingTask(); remaining != nil {
+			// Temporarily attach SharedMaxOffset for deduplication (cleared later)
+			if active.SharedMaxOffset != nil {
+				remaining.SharedMaxOffset = active.SharedMaxOffset
+			}
 			activeRemaining = append(activeRemaining, *remaining)
 		}
 	}
 	d.activeMu.Unlock()
 
 	// 2. Collect remaining tasks from queue
-	remainingTasks := queue.DrainRemaining()
-	remainingTasks = append(remainingTasks, activeRemaining...)
+	allTasks := append([]types.Task(nil), activeRemaining...)
+	allTasks = append(allTasks, queue.DrainRemaining()...)
 
-	// Calculate Downloaded from remaining tasks (ensures consistency)
+	var remainingTasks []types.Task
 	var remainingBytes int64
-	for _, task := range remainingTasks {
+	seenHedged := make(map[*atomic.Int64]bool)
+
+	for _, task := range allTasks {
+		if task.SharedMaxOffset != nil {
+			if seenHedged[task.SharedMaxOffset] {
+				continue
+			}
+			seenHedged[task.SharedMaxOffset] = true
+			task.SharedMaxOffset = nil // Clear it so hot resume doesn't pin ranges as hedged
+		}
+		remainingTasks = append(remainingTasks, task)
 		remainingBytes += task.Length
 	}
+	
 	if remainingBytes == 0 {
-		utils.Debug("Download pause requested at completion boundary; finalizing as completed")
+		utils.Debug("Download state save requested at completion boundary; finalizing as completed")
 		d.State.Resume()
 		_, _ = d.State.FinalizeSession(fileSize)
 		return nil
@@ -609,23 +633,34 @@ func (d *ConcurrentDownloader) handlePause(destPath string, fileSize int64, queu
 		Workers:         d.Runtime.Workers,
 		MinChunkSize:    d.Runtime.MinChunkSize,
 	}
-	if d.ProgressChan != nil {
-		d.ProgressChan <- types.DownloadEvent{
-			Type:         types.EventPaused,
-			DownloadID:   d.ID,
-			Filename:     filepath.Base(destPath),
-			Downloaded:   computedDownloaded,
-			State:        s,
-			RateLimit:    rateLimit,
-			RateLimitSet: rateLimitSet,
-			Workers:      d.Runtime.Workers,
-			MinChunkSize: d.Runtime.MinChunkSize,
+	
+	if emitPauseEvent {
+		if d.ProgressChan != nil {
+			d.ProgressChan <- types.DownloadEvent{
+				Type:         types.EventPaused,
+				DownloadID:   d.ID,
+				Filename:     filepath.Base(destPath),
+				Downloaded:   computedDownloaded,
+				State:        s,
+				RateLimit:    rateLimit,
+				RateLimitSet: rateLimitSet,
+				Workers:      d.Runtime.Workers,
+				MinChunkSize: d.Runtime.MinChunkSize,
+			}
 		}
+		utils.Debug("Download paused, state saved (Downloaded=%d, RemainingTasks=%d, RemainingBytes=%d)",
+			computedDownloaded, len(remainingTasks), remainingBytes)
+		return types.ErrPaused
 	}
 
-	utils.Debug("Download paused, state saved (Downloaded=%d, RemainingTasks=%d, RemainingBytes=%d)",
-		computedDownloaded, len(remainingTasks), remainingBytes)
-	return types.ErrPaused
+	// Direct save on error/retry paths
+	saveErr := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true})
+	if saveErr != nil {
+		utils.Debug("Failed to save state snapshot: %v", saveErr)
+	} else {
+		utils.Debug("Saved progress state snapshot (Downloaded=%d, RemainingTasks=%d)", s.Downloaded, len(s.Tasks))
+	}
+	return nil
 }
 
 func (d *ConcurrentDownloader) syncFile(outFile *os.File) error {
