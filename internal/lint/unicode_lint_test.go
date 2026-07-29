@@ -29,9 +29,8 @@ import (
 func TestNoRawUnicodeInStringLiterals(t *testing.T) {
 	root := projectRoot(t)
 
-	// Directories to skip entirely.
+	// Directories to skip entirely (in addition to those starting with . or _)
 	skipDirs := map[string]bool{
-		".git":     true,
 		"vendor":   true,
 		"testdata": true,
 	}
@@ -50,7 +49,8 @@ func TestNoRawUnicodeInStringLiterals(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			name := d.Name()
+			if skipDirs[name] || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 				return filepath.SkipDir
 			}
 			return nil
