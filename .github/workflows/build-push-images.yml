@@ -56,11 +56,14 @@ jobs:
         run: |
           VERSION="${{ steps.surge-version.outputs.version }}"
           echo "Waiting for release assets for version v$VERSION to be published..."
-          MAX_RETRIES=60
+          MAX_RETRIES=180
           RETRY_INTERVAL=20
           
+          AMD64_URL="https://github.com/SurgeDM/Surge/releases/download/v${VERSION}/surge_${VERSION}_linux_amd64.tar.gz"
+          ARM64_URL="https://github.com/SurgeDM/Surge/releases/download/v${VERSION}/surge_${VERSION}_linux_arm64.tar.gz"
+          
           for ((i=1; i<=MAX_RETRIES; i++)); do
-            if curl -s -f -I "https://github.com/SurgeDM/Surge/releases/download/v${VERSION}/surge_${VERSION}_linux_amd64.tar.gz" > /dev/null; then
+            if curl -s -f -I "$AMD64_URL" > /dev/null && curl -s -f -I "$ARM64_URL" > /dev/null; then
               echo "Release assets are available!"
               exit 0
             fi
