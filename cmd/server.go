@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/utils"
 	"github.com/spf13/cobra"
 )
@@ -34,8 +35,33 @@ var serverStartCmd = &cobra.Command{
 		if isSystemServiceFlag {
 			activeServerMode = "service"
 		}
+
 		if checkSystemServiceRunning() && !isSystemServiceFlag {
-			return fmt.Errorf("system service is already running. Use 'surge connect' to interact with it, or stop the service first")
+			// Backward compatibility for older systemd/runit service files that used `surge server start`
+			// instead of `surge service __run`. In these cases, the service manager thinks the service
+			// is starting/running because we ARE the service.
+			// We verify if another instance is actually alive by checking the PID file.
+			sysPid := readPIDFile(config.GetSystemRuntimeDir())
+			isAlive := false
+			if sysPid > 0 && sysPid != os.Getpid() {
+				if p, err := os.FindProcess(sysPid); err == nil {
+					// Sending signal 0 checks if the process exists
+					if err := p.Signal(syscall.Signal(0)); err == nil {
+						isAlive = true
+					}
+				}
+			}
+
+			// Also check environment variables that strongly suggest we are the service manager
+			isServiceEnv := os.Getenv("INVOCATION_ID") != "" // systemd
+
+			if isAlive && !isServiceEnv {
+				return fmt.Errorf("system service is already running. Use 'surge connect' to interact with it, or stop the service first")
+			}
+
+			// We are likely being started by the service manager via legacy args, so act as the system service
+			isSystemServiceFlag = true
+			activeServerMode = "service"
 		}
 
 		// Attempt to acquire lock before any global state initialization
