@@ -173,13 +173,16 @@ func (m RootModel) handleFilepickerJump(char string) (RootModel, bool) {
 		lastPath = ""
 		for {
 			path := m.filepicker.HighlightedPath()
-			if path == "" || path == originalModel.HighlightedPath() || path == lastPath {
+			if path == "" || path == lastPath {
 				break
 			}
 			lastPath = path
 			base := filepath.Base(path)
 			if strings.HasPrefix(strings.ToLower(base), char) {
 				found = true
+				break
+			}
+			if path == originalModel.HighlightedPath() {
 				break
 			}
 			m.filepicker, _ = m.filepicker.Update(tea.KeyPressMsg{Code: tea.KeyDown})

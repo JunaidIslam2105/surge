@@ -13,11 +13,17 @@ func TestFilepickerJump(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	})
 
 	files := []string{"apple.txt", "banana.txt", "cat.txt", "cherry.txt", "dog.txt"}
 	for _, f := range files {
-		os.WriteFile(filepath.Join(tmpDir, f), []byte("test"), 0644)
+		if err := os.WriteFile(filepath.Join(tmpDir, f), []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to write file %s: %v", f, err)
+		}
 	}
 
 	m := RootModel{

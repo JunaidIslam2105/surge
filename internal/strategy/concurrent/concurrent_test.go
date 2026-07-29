@@ -496,7 +496,7 @@ func TestConcurrentDownloader_RetryOnFailure(t *testing.T) {
 	state := progress.New("retry-test", fileSize)
 	runtime := &types.RuntimeConfig{
 		MaxConnectionsPerDownload: 2,
-		MaxTaskRetries:            5, 
+		MaxTaskRetries:            5,
 		MinChunkSize:              64 * utils.KiB,
 	}
 
