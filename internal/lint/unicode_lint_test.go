@@ -49,6 +49,11 @@ func TestNoRawUnicodeInStringLiterals(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
+			// Never skip the walk root: packaging trees often live under
+			// names like _build-surge-xbps that contain go.mod.
+			if path == root {
+				return nil
+			}
 			name := d.Name()
 			if skipDirs[name] || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 				return filepath.SkipDir
