@@ -16,6 +16,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/store"
 	"github.com/SurgeDM/Surge/internal/types"
 	"github.com/SurgeDM/Surge/internal/utils"
+	"github.com/charmbracelet/x/term"
 )
 
 type activeConnectionDetails struct {
@@ -467,8 +468,5 @@ func resolveIDFromCandidates(partialID string, candidates []string) (string, err
 }
 
 var checkIsTerminal = func() bool {
-	if fi, err := os.Stdout.Stat(); err == nil {
-		return (fi.Mode() & os.ModeCharDevice) != 0
-	}
-	return false
+	return term.IsTerminal(os.Stdout.Fd())
 }
