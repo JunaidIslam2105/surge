@@ -22,8 +22,6 @@ func setupXDGEnvIsolation(t *testing.T) string {
 	oldCacheHome := xdg.CacheHome
 	oldRuntimeDir := xdg.RuntimeDir
 
-	t.Setenv("INVOCATION_ID", "")
-
 	xdg.ConfigHome = tempDir
 	xdg.DataHome = tempDir
 	xdg.StateHome = tempDir

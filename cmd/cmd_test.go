@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"os/exec"
-
 	"github.com/SurgeDM/Surge/internal/types"
-
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -730,20 +727,9 @@ func TestServerStartCmd_FailsIfSystemServiceRunning(t *testing.T) {
 	checkSystemServiceRunning = func() bool { return true }
 	t.Cleanup(func() { checkSystemServiceRunning = origCheck })
 
-	// Write a mock PID file to simulate a live process holding the service
-	// We spawn a dummy background process to get a valid PID that isn't our own,
-	// working around os.Getppid() returning 0 on Wine/Windows.
-	dummyCmd := exec.Command(os.Args[0], "-test.run=TestDummyWait")
-	dummyCmd.Env = append(os.Environ(), "RUN_DUMMY_WAIT=1")
-	if err := dummyCmd.Start(); err != nil {
-		t.Fatalf("failed to start dummy process: %v", err)
-	}
-	t.Cleanup(func() { _ = dummyCmd.Process.Kill() })
-
-	pidFile := filepath.Join(config.GetSystemRuntimeDir(), "pid")
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", dummyCmd.Process.Pid)), 0644); err != nil {
-		t.Fatalf("failed to write pid file: %v", err)
-	}
+	origTerminalCheck := checkIsTerminal
+	checkIsTerminal = func() bool { return true }
+	t.Cleanup(func() { checkIsTerminal = origTerminalCheck })
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -1564,13 +1550,4 @@ func TestResolveServerToken_FlagOverridesEnv(t *testing.T) {
 	if got != "flag-token-xyz" {
 		t.Fatalf("resolveServerToken() = %q, want %q", got, "flag-token-xyz")
 	}
-}
-
-// TestDummyWait is a helper test that just blocks. It's used by other tests
-// to spawn a child process that stays alive.
-func TestDummyWait(t *testing.T) {
-	if os.Getenv("RUN_DUMMY_WAIT") != "1" {
-		t.Skip("Skipping dummy wait test")
-	}
-	time.Sleep(1 * time.Hour)
 }

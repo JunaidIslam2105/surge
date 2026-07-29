@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/utils"
 	"github.com/spf13/cobra"
 )
@@ -41,23 +40,8 @@ var serverStartCmd = &cobra.Command{
 			// Backward compatibility for older systemd/runit service files that used `surge server start`
 			// instead of `surge service __run`. In these cases, the service manager thinks the service
 			// is starting/running because we ARE the service.
-			// We verify if another instance is actually alive by checking the PID file.
-			sysPid := readPIDFile(config.GetSystemRuntimeDir())
-			isAlive := false
-			if sysPid > 0 && sysPid != os.Getpid() {
-				if p, err := os.FindProcess(sysPid); err == nil {
-					if runtime.GOOS == "windows" {
-						isAlive = true
-					} else if err := p.Signal(syscall.Signal(0)); err == nil {
-						isAlive = true
-					}
-				}
-			}
-
-			// Also check environment variables that strongly suggest we are the service manager
-			isServiceEnv := os.Getenv("INVOCATION_ID") != "" // systemd
-
-			if isAlive && !isServiceEnv {
+			// We differentiate between an interactive user and a service manager by checking for a terminal.
+			if checkIsTerminal() {
 				return fmt.Errorf("system service is already running. Use 'surge connect' to interact with it, or stop the service first")
 			}
 

@@ -465,3 +465,10 @@ func resolveIDFromCandidates(partialID string, candidates []string) (string, err
 
 	return partialID, nil // No match, use as-is (will fail with "not found" later)
 }
+
+var checkIsTerminal = func() bool {
+	if fi, err := os.Stdout.Stat(); err == nil {
+		return (fi.Mode() & os.ModeCharDevice) != 0
+	}
+	return false
+}
