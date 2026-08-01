@@ -818,7 +818,6 @@ func TestConcurrentDownloader_Download_BootstrapFail_InvalidRange(t *testing.T) 
 	}
 }
 
-
 func TestConcurrentDownloader_PauseDuringRetryBackoff(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)
 	defer cleanup()

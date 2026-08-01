@@ -592,7 +592,7 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		remainingTasks = append(remainingTasks, task)
 		remainingBytes += task.Length
 	}
-	
+
 	if remainingBytes == 0 {
 		utils.Debug("Download state save requested at completion boundary; finalizing as completed")
 		d.State.Resume()
@@ -633,7 +633,7 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		Workers:         d.Runtime.Workers,
 		MinChunkSize:    d.Runtime.MinChunkSize,
 	}
-	
+
 	if emitPauseEvent {
 		if d.ProgressChan != nil {
 			d.ProgressChan <- types.DownloadEvent{

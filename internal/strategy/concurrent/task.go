@@ -54,9 +54,9 @@ func (at *ActiveTask) RemainingTask() *types.Task {
 	if current >= stopAt {
 		return nil
 	}
-	
+
 	return &types.Task{
-		Offset: current, 
+		Offset: current,
 		Length: stopAt - current,
 	}
 }
