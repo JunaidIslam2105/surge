@@ -37,10 +37,10 @@ type ActiveTask struct {
 }
 
 // currentOffset returns the effective offset, using the shared max if it is larger
-func (at *ActiveTask) currentOffset() int64 {
+func (at *ActiveTask) currentOffset(sharedMax *atomic.Int64) int64 {
 	current := at.CurrentOffset.Load()
-	if at.SharedMaxOffset != nil {
-		if shared := at.SharedMaxOffset.Load(); shared > current {
+	if sharedMax != nil {
+		if shared := sharedMax.Load(); shared > current {
 			current = shared
 		}
 	}
@@ -49,15 +49,15 @@ func (at *ActiveTask) currentOffset() int64 {
 
 // RemainingTask returns a Task representing the remaining work, or nil if complete
 func (at *ActiveTask) RemainingTask() *types.Task {
-	current := at.currentOffset()
+	at.SharedMaxOffsetMu.RLock()
+	sharedMax := at.SharedMaxOffset
+	at.SharedMaxOffsetMu.RUnlock()
+
+	current := at.currentOffset(sharedMax)
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
 		return nil
 	}
-
-	at.SharedMaxOffsetMu.RLock()
-	sharedMax := at.SharedMaxOffset
-	at.SharedMaxOffsetMu.RUnlock()
 
 	return &types.Task{
 		Offset:          current,
@@ -68,7 +68,11 @@ func (at *ActiveTask) RemainingTask() *types.Task {
 
 // RemainingBytes returns the number of bytes left in the current task
 func (at *ActiveTask) RemainingBytes() int64 {
-	current := at.currentOffset()
+	at.SharedMaxOffsetMu.RLock()
+	sharedMax := at.SharedMaxOffset
+	at.SharedMaxOffsetMu.RUnlock()
+
+	current := at.currentOffset(sharedMax)
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
 		return 0
