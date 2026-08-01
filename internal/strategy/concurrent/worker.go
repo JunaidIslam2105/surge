@@ -172,15 +172,15 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 		if lastErr != nil {
 			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
-			
+
 			if remain := activeTask.RemainingTask(); remain != nil {
 				queue.Push(*remain)
 			}
-			
+
 			d.activeMu.Lock()
 			delete(d.activeTasks, id)
 			d.activeMu.Unlock()
-			
+
 			return lastErr
 		}
 
