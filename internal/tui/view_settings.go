@@ -275,9 +275,9 @@ func (m RootModel) renderSettingsListViewport(settingsMeta []config.SettingMeta,
 		selectedRow = len(settingsMeta) - 1
 	}
 
-	start := 0
-	if selectedRow >= rows {
-		start = selectedRow - rows + 1
+	start := selectedRow - (rows / 2)
+	if start < 0 {
+		start = 0
 	}
 	maxStart := len(settingsMeta) - rows
 	if maxStart < 0 {
@@ -362,7 +362,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 				m.renderCategoryInputLine("Regex:", 2, innerWidth-15),
 				m.renderCategoryInputLine("Path:", 3, innerWidth-15),
 			)
-			valueLabel = "Edit:\n"
+			valueLabel = ""
 		} else {
 			valueStr = m.SettingsInput.View() + unitStyle.Render(unit)
 		}
@@ -396,7 +396,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 				utils.TruncateMiddle(cat.Description, innerWidth-20),
 				utils.TruncateMiddle(cat.Pattern, innerWidth-20),
 				utils.TruncateMiddle(cat.Path, innerWidth-20))
-			valueLabel = "Details:\n"
+			valueLabel = ""
 		default:
 			valueStr = formatSettingValueForEdit(value, meta.Type, meta.Key, true)
 			if valueStr != "\u221E" {
@@ -567,8 +567,7 @@ func (m *RootModel) normalizeSettingsSelection() {
 		m.SettingsActiveTab = len(categories) - 1
 	}
 
-	settingsMap := config.GetSettingsMetadata()
-	settingsList := settingsMap[categories[m.SettingsActiveTab]]
+	settingsList := m.buildSettingsMetaForCategory(categories[m.SettingsActiveTab])
 	if len(settingsList) == 0 {
 		m.SettingsSelectedRow = 0
 		if m.SettingsIsEditing {
