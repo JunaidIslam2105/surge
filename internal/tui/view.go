@@ -139,9 +139,7 @@ func (m RootModel) View() tea.View {
 		return m.wrapView(m.renderModalWithOverlay(m.viewSpeedLimits()))
 	}
 
-	if m.state == CategoryManagerState {
-		return m.wrapView(m.viewCategoryManager())
-	}
+
 
 	if m.state == DuplicateWarningState {
 		modal := components.ConfirmationModal{
@@ -306,9 +304,7 @@ func (m RootModel) View() tea.View {
 		return m.wrapView(m.renderModalWithOverlay(m.viewRestartConfirm()))
 	}
 
-	if m.state == CategoryResetConfirmState {
-		return m.wrapView(m.renderModalWithOverlay(m.viewCategoryResetConfirm()))
-	}
+
 
 	if m.state == PurgeConfirmState {
 		return m.wrapView(m.renderModalWithOverlay(m.viewPurgeConfirm()))

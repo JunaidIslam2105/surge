@@ -56,14 +56,12 @@ const (
 	BatchConfirmState
 	UpdateAvailableState
 	URLUpdateState
-	CategoryManagerState
 	QuitConfirmState
 	RestartConfirmState
 	HelpModalState
 	BugReportTargetState
 	BugReportSystemDetailsState
 	BugReportLogPathState
-	CategoryResetConfirmState
 	SpeedLimitsState
 	PurgeConfirmState
 	RemoveConfirmState
@@ -76,7 +74,6 @@ const (
 	FilePickerOriginAdd
 	FilePickerOriginSettings
 	FilePickerOriginExtension
-	FilePickerOriginCategory
 	FilePickerOriginTheme
 )
 
@@ -205,12 +202,9 @@ type RootModel struct {
 
 	// Category manager
 	categoryFilter  string             // Dashboard filter ("" = all)
-	catMgrCursor    int                // Selected category index
-	catMgrEditing   bool               // Whether editing a category
 	catMgrEditField int                // 0=Name, 1=Description, 2=Pattern, 3=Path
 	catMgrInputs    [4]textinput.Model // Inputs for Name, Description, Pattern, Path
 	catMgrIsNew     bool               // Whether adding a new category
-	catMgrError     string             // Error message for display in category manager
 	// Quit confirm button focus (0 = Yep!, 1 = Nope)
 	quitConfirmFocused int
 

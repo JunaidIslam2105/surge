@@ -44,13 +44,7 @@ func (m RootModel) updatePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
-	case CategoryManagerState:
-		if m.catMgrEditing {
-			var cmd tea.Cmd
-			m.catMgrInputs[m.catMgrEditField], cmd = m.catMgrInputs[m.catMgrEditField].Update(msg)
-			return m, cmd
-		}
-		return m, nil
+
 	default:
 		return m, nil
 	}
@@ -113,12 +107,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if m.state == CategoryManagerState {
-			m.normalizeCategoryManagerSelection()
-			if m.catMgrEditing {
-				m.updateCategoryInputWidthsForViewport()
-			}
-		}
+
 
 		// Sync layout calculations with DashboardLayout to set dimensions correctly
 		layout := CalculateDashboardLayout(msg.Width, msg.Height)
@@ -251,8 +240,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case URLUpdateState:
 			return m.updateURLUpdate(msg)
 
-		case CategoryManagerState:
-			return m.updateCategoryManager(msg)
+
 
 		case HelpModalState:
 			if msg.String() == "esc" {
@@ -270,8 +258,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case BugReportLogPathState:
 			return m.updateBugReportLogPath(msg)
 
-		case CategoryResetConfirmState:
-			return m.updateCategoryResetConfirm(msg)
+
 
 		case PurgeConfirmState:
 			return m.updatePurgeConfirm(msg)

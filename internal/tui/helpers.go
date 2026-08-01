@@ -94,14 +94,7 @@ func (m *RootModel) handleFilePickerSelection(path string) (tea.Model, tea.Cmd) 
 		m.filepickerOrigin = FilePickerOriginNone
 		m.state = ExtensionConfirmationState
 		return m, nil
-	case FilePickerOriginCategory:
-		m.catMgrInputs[3].SetValue(path)
-		m.catMgrEditField = 3
-		m.blurAllCatInputs()
-		m.catMgrInputs[3].Focus()
-		m.filepickerOrigin = FilePickerOriginNone
-		m.state = CategoryManagerState
-		return m, nil
+
 	default:
 		m.inputs[2].SetValue(path)
 		m.focusInput(2)

@@ -230,29 +230,7 @@ func TestLayout_SettingsHeightNeverExceeds(t *testing.T) {
 	}
 }
 
-func TestLayout_CategoryManagerWidthNeverExceeds(t *testing.T) {
-	m := InitialRootModel(1701, "test", nil, orchestrator.NewLifecycleManager(nil, nil, nil), nil, false)
-	m.state = CategoryManagerState
-	for _, tc := range termSizes {
-		m.width = tc.width
-		m.height = tc.height
-		label := fmt.Sprintf("catmgr %dx%d", tc.width, tc.height)
-		view := m.View()
-		assertNoLineExceedsWidth(t, label, view.Content, tc.width)
-	}
-}
 
-func TestLayout_CategoryManagerHeightNeverExceeds(t *testing.T) {
-	m := InitialRootModel(1701, "test", nil, orchestrator.NewLifecycleManager(nil, nil, nil), nil, false)
-	m.state = CategoryManagerState
-	for _, tc := range termSizes {
-		m.width = tc.width
-		m.height = tc.height
-		label := fmt.Sprintf("catmgr %dx%d", tc.width, tc.height)
-		view := m.View()
-		assertHeightNotExceeded(t, label, view.Content, tc.height)
-	}
-}
 
 // ─────────────────────────────────────────────────────────────
 // 5. Download list delegate – Render width enforcement
@@ -363,10 +341,7 @@ func TestLayout_ExtremeSizesNoPanic(t *testing.T) {
 			name  string
 			state UIState
 		}{"Settings", SettingsState},
-		struct {
-			name  string
-			state UIState
-		}{"CategoryManager", CategoryManagerState},
+
 	)
 
 	for _, tc := range extremes {

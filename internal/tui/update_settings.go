@@ -3,6 +3,8 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -28,6 +30,65 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Handle editing mode first
 	if m.SettingsIsEditing {
+		typ := m.getCurrentSettingType()
+		if typ == "custom_category" || typ == "custom_category_add" {
+			if key.Matches(msg, m.keys.SettingsEditor.Cancel) {
+				m.SettingsIsEditing = false
+				m.catMgrInputs[m.catMgrEditField].Blur()
+				return m, nil
+			}
+			if key.Matches(msg, m.keys.SettingsEditor.Confirm) {
+				// Validate and save
+				cat := config.Category{
+					Name:        strings.TrimSpace(m.catMgrInputs[0].Value()),
+					Description: strings.TrimSpace(m.catMgrInputs[1].Value()),
+					Pattern:     strings.TrimSpace(m.catMgrInputs[2].Value()),
+					Path:        strings.TrimSpace(m.catMgrInputs[3].Value()),
+				}
+				if err := cat.Validate(); err != nil {
+					m.settingsError = err.Error()
+					return m, nil
+				}
+				
+				if m.catMgrIsNew {
+					m.Settings.Categories.Categories = append(m.Settings.Categories.Categories, cat)
+					m.SettingsSelectedRow = m.getSettingsCount() - 2 // Select newly added category
+				} else {
+					settingKey := m.getCurrentSettingKey()
+					idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
+					m.Settings.Categories.Categories[idx] = cat
+				}
+				
+				m.SettingsIsEditing = false
+				m.settingsError = ""
+				m.catMgrInputs[m.catMgrEditField].Blur()
+				return m, nil
+			}
+			
+			// Navigation between fields
+			s := msg.String()
+			if s == "tab" || s == "down" {
+				m.catMgrInputs[m.catMgrEditField].Blur()
+				m.catMgrEditField = (m.catMgrEditField + 1) % 4
+				m.catMgrInputs[m.catMgrEditField].Focus()
+				return m, nil
+			}
+			if s == "shift+tab" || s == "up" {
+				m.catMgrInputs[m.catMgrEditField].Blur()
+				m.catMgrEditField = (m.catMgrEditField - 1 + 4) % 4
+				m.catMgrInputs[m.catMgrEditField].Focus()
+				return m, nil
+			}
+
+			// Pass to active input
+			var cmd tea.Cmd
+			m.catMgrInputs[m.catMgrEditField], cmd = m.catMgrInputs[m.catMgrEditField].Update(msg)
+			if m.settingsError != "" {
+				m.settingsError = ""
+			}
+			return m, cmd
+		}
+
 		if key.Matches(msg, m.keys.SettingsEditor.Cancel) {
 			// Cancel editing
 			m.SettingsIsEditing = false
@@ -187,13 +248,6 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Edit / Toggle
 	if key.Matches(msg, m.keys.Settings.Edit) {
-		// Categories tab \u2192 open Category Manager
-		if m.SettingsActiveTab < len(categories) && categories[m.SettingsActiveTab] == "Categories" {
-			m.catMgrCursor = 0
-			m.state = CategoryManagerState
-			return m, nil
-		}
-
 		if m.SettingsFocusedPane == 0 {
 			m.SettingsFocusedPane = 1
 			m.SettingsSelectedRow = 0
@@ -245,6 +299,30 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if err := m.setSettingValue(currentCategory, settingKey, ""); err != nil {
 				m.settingsError = err.Error()
 			}
+		} else if typ == "custom_category" || typ == "custom_category_add" {
+			m.SettingsIsEditing = true
+			m.catMgrEditField = 0 // start at Name
+			
+			if typ == "custom_category_add" {
+				m.catMgrIsNew = true
+				m.catMgrInputs[0].SetValue("")
+				m.catMgrInputs[1].SetValue("")
+				m.catMgrInputs[2].SetValue("")
+				m.catMgrInputs[3].SetValue("")
+			} else {
+				m.catMgrIsNew = false
+				if strings.HasPrefix(settingKey, "category_") {
+					idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
+					if idx >= 0 && idx < len(m.Settings.Categories.Categories) {
+						cat := m.Settings.Categories.Categories[idx]
+						m.catMgrInputs[0].SetValue(cat.Name)
+						m.catMgrInputs[1].SetValue(cat.Description)
+						m.catMgrInputs[2].SetValue(cat.Pattern)
+						m.catMgrInputs[3].SetValue(cat.Path)
+					}
+				}
+			}
+			m.catMgrInputs[0].Focus()
 		} else {
 			// Enter edit mode
 			m.SettingsIsEditing = true
@@ -268,9 +346,19 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		// Categories tab \u2192 'Manage Categories' selected \u2192 confirm full reset
-		if m.SettingsActiveTab < len(categories) && categories[m.SettingsActiveTab] == "Categories" && settingKey == "category_enabled" {
-			m.state = CategoryResetConfirmState
-			m.quitConfirmFocused = 0
+		// If deleting a custom category
+		typ := m.getCurrentSettingType()
+		if typ == "custom_category" && strings.HasPrefix(settingKey, "category_") {
+			idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
+			if idx >= 0 && idx < len(m.Settings.Categories.Categories) {
+				m.Settings.Categories.Categories = append(
+					m.Settings.Categories.Categories[:idx], 
+					m.Settings.Categories.Categories[idx+1:]...,
+				)
+				if m.SettingsSelectedRow >= m.getSettingsCount() {
+					m.SettingsSelectedRow = m.getSettingsCount() - 1
+				}
+			}
 			return m, nil
 		}
 
