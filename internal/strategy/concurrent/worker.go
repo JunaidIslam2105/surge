@@ -172,9 +172,15 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 		if lastErr != nil {
 			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
-			// Keep the activeTasks entry alive so saveStateSnapshot can account for
-			// this task in its remainingBytes computation. The entry is cleaned up
-			// by the caller (executeWorkers) after the snapshot is saved.
+			
+			if remain := activeTask.RemainingTask(); remain != nil {
+				queue.Push(*remain)
+			}
+			
+			d.activeMu.Lock()
+			delete(d.activeTasks, id)
+			d.activeMu.Unlock()
+			
 			return lastErr
 		}
 
