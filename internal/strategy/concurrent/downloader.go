@@ -564,10 +564,6 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 	d.activeMu.Lock()
 	for _, active := range d.activeTasks {
 		if remaining := active.RemainingTask(); remaining != nil {
-			// Temporarily attach SharedMaxOffset for deduplication (cleared later)
-			if active.SharedMaxOffset != nil {
-				remaining.SharedMaxOffset = active.SharedMaxOffset
-			}
 			activeRemaining = append(activeRemaining, *remaining)
 		}
 	}
