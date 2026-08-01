@@ -55,9 +55,14 @@ func (at *ActiveTask) RemainingTask() *types.Task {
 		return nil
 	}
 
+	at.SharedMaxOffsetMu.RLock()
+	sharedMax := at.SharedMaxOffset
+	at.SharedMaxOffsetMu.RUnlock()
+
 	return &types.Task{
-		Offset: current,
-		Length: stopAt - current,
+		Offset:          current,
+		Length:          stopAt - current,
+		SharedMaxOffset: sharedMax,
 	}
 }
 
