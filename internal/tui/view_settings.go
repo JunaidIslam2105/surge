@@ -391,11 +391,13 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 			valueLabel = "Action: "
 		case "custom_category":
 			cat := value.(config.Category)
-			valueStr = fmt.Sprintf("Name:\t%s\nDesc:\t%s\nRegex:\t%s\nPath:\t%s", 
-				utils.TruncateMiddle(cat.Name, innerWidth-20),
-				utils.TruncateMiddle(cat.Description, innerWidth-20),
-				utils.TruncateMiddle(cat.Pattern, innerWidth-20),
-				utils.TruncateMiddle(cat.Path, innerWidth-20))
+			labelStyle := lipgloss.NewStyle().Foreground(colors.LightGray()).Width(8)
+			valueStr = lipgloss.JoinVertical(lipgloss.Left,
+				lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Name:"), utils.TruncateMiddle(cat.Name, innerWidth-20)),
+				lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Desc:"), utils.TruncateMiddle(cat.Description, innerWidth-20)),
+				lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Regex:"), utils.TruncateMiddle(cat.Pattern, innerWidth-20)),
+				lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Path:"), utils.TruncateMiddle(cat.Path, innerWidth-20)),
+			)
 			valueLabel = ""
 		default:
 			valueStr = formatSettingValueForEdit(value, meta.Type, meta.Key, true)
