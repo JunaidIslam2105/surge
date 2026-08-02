@@ -354,7 +354,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	valueLabel := "Value: "
 	var valueStr string
 	if m.SettingsIsEditing {
-		if meta.Type == "custom_category" || meta.Type == "custom_category_add" {
+		if meta.Type == config.TypeCustomCategory || meta.Type == config.TypeCustomCategoryAdd {
 			valueStr = lipgloss.JoinVertical(lipgloss.Left,
 				m.renderCategoryInputLine("Name:", 0, innerWidth),
 				m.renderCategoryInputLine("Desc:", 1, innerWidth),
@@ -385,10 +385,10 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 		case config.TypeLink:
 			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("Open [Enter]")
 			valueLabel = "Action: "
-		case "custom_category_add":
+		case config.TypeCustomCategoryAdd:
 			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("Create Category [Enter]")
 			valueLabel = "Action: "
-		case "custom_category":
+		case config.TypeCustomCategory:
 			cat, ok := value.(config.Category)
 			if !ok {
 				break
@@ -426,7 +426,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	}
 
 	var valueDisplay string
-	if meta.Type == "custom_category" || meta.Type == "custom_category_add" {
+	if meta.Type == config.TypeCustomCategory || meta.Type == config.TypeCustomCategoryAdd {
 		valueDisplay = lipgloss.JoinHorizontal(lipgloss.Top,
 			labelRendered,
 			valueContentStyle.Render(valueStr),
@@ -473,12 +473,17 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	return formatSettingsBlock(detail, innerWidth, rows)
 }
 
-func (m RootModel) renderSettingsTwoColumn(settingsMeta []config.SettingMeta, selectedRow int, settingsValues map[string]interface{}, modalWidth, bodyHeight int) string {
-	leftWidth, rightWidth := CalculateTwoColumnWidths(modalWidth, 32, 22)
+func calculateSettingsPaneWidths(modalWidth int) (leftWidth, rightWidth int) {
+	leftWidth, rightWidth = CalculateTwoColumnWidths(modalWidth, 32, 22)
 	innerWidthForModal := modalWidth - BoxStyle.GetHorizontalFrameSize()
 	if leftWidth > 0 && innerWidthForModal > leftWidth+1 {
 		rightWidth = innerWidthForModal - leftWidth - 1
 	}
+	return leftWidth, rightWidth
+}
+
+func (m RootModel) renderSettingsTwoColumn(settingsMeta []config.SettingMeta, selectedRow int, settingsValues map[string]interface{}, modalWidth, bodyHeight int) string {
+	leftWidth, rightWidth := calculateSettingsPaneWidths(modalWidth)
 
 	if leftWidth < 12 || rightWidth < 14 {
 		return m.renderSettingsCompact(settingsMeta, selectedRow, settingsValues, modalWidth, bodyHeight)
@@ -598,11 +603,7 @@ func (m *RootModel) updateSettingsInputWidthForViewport() {
 	var targetWidth int
 	var catInputWidth int
 	if modalWidth >= 72 {
-		leftWidth, rightWidth := CalculateTwoColumnWidths(modalWidth, 32, 22)
-		innerWidthForModal := modalWidth - BoxStyle.GetHorizontalFrameSize()
-		if leftWidth > 0 && innerWidthForModal > leftWidth+1 {
-			rightWidth = innerWidthForModal - leftWidth - 1
-		}
+		_, rightWidth := calculateSettingsPaneWidths(modalWidth)
 
 		targetWidth = rightWidth - 10   // Fixed offset for labels
 		catInputWidth = rightWidth - 12 // rightWidth - 4 (padding) - 8 (label width)
@@ -843,14 +844,14 @@ func (m RootModel) buildSettingsMetaForCategory(category string) []config.Settin
 				settingsList = append(settingsList, config.SettingMeta{
 					Key:   fmt.Sprintf("category_%d", i),
 					Label: fmt.Sprintf("[%s]", cat.Name),
-					Type:  "custom_category",
+					Type:  config.TypeCustomCategory,
 				})
 			}
 		}
 		settingsList = append(settingsList, config.SettingMeta{
 			Key:   "add_category",
 			Label: "+ Add Category...",
-			Type:  "custom_category_add",
+			Type:  config.TypeCustomCategoryAdd,
 		})
 	}
 

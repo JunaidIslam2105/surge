@@ -966,7 +966,6 @@ func (m RootModel) viewRemoveConfirm() string {
 	return modal.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
 }
 
-
 // renderBtopBox creates a btop-style box with title embedded in the top border
 // Supports left and right titles (e.g., search on left, pane name on right)
 // Accepts pre-styled title strings

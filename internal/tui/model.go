@@ -75,6 +75,7 @@ const (
 	FilePickerOriginSettings
 	FilePickerOriginExtension
 	FilePickerOriginTheme
+	FilePickerOriginCategory
 )
 
 const (

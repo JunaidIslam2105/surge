@@ -7,14 +7,16 @@ package config
 type SettingType string
 
 const (
-	TypeString    SettingType = "string"
-	TypeInt       SettingType = "int"
-	TypeInt64     SettingType = "int64"
-	TypeBool      SettingType = "bool"
-	TypeFloat64   SettingType = "float64"
-	TypeDuration  SettingType = "duration"
-	TypeAuthToken SettingType = "auth_token"
-	TypeLink      SettingType = "link"
+	TypeString            SettingType = "string"
+	TypeInt               SettingType = "int"
+	TypeInt64             SettingType = "int64"
+	TypeBool              SettingType = "bool"
+	TypeFloat64           SettingType = "float64"
+	TypeDuration          SettingType = "duration"
+	TypeAuthToken         SettingType = "auth_token"
+	TypeLink              SettingType = "link"
+	TypeCustomCategory    SettingType = "custom_category"
+	TypeCustomCategoryAdd SettingType = "custom_category_add"
 )
 
 type Setting struct {

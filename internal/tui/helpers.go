@@ -82,6 +82,12 @@ func (m *RootModel) handleFilePickerSelection(path string) (tea.Model, tea.Cmd) 
 		m.state = SettingsState
 		m.resetFilepickerToDirMode()
 		return m, nil
+	case FilePickerOriginCategory:
+		m.catMgrInputs[3].SetValue(path)
+		m.filepickerOrigin = FilePickerOriginNone
+		m.state = SettingsState
+		m.resetFilepickerToDirMode()
+		return m, nil
 	case FilePickerOriginSettings:
 		m.Settings.General.DefaultDownloadDir.Value = path
 		m.filepickerOrigin = FilePickerOriginNone

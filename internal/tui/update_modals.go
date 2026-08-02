@@ -559,7 +559,6 @@ func (m RootModel) updateRestartConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
-
 func (m RootModel) updatePurgeConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	confirmPurge := func() (tea.Model, tea.Cmd) {
 		targetID := m.purgeTargetID

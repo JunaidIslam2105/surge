@@ -31,7 +31,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle editing mode first
 	if m.SettingsIsEditing {
 		typ := m.getCurrentSettingType()
-		if typ == "custom_category" || typ == "custom_category_add" {
+		if typ == config.TypeCustomCategory || typ == config.TypeCustomCategoryAdd {
 			if key.Matches(msg, m.keys.SettingsEditor.Cancel) {
 				m.SettingsIsEditing = false
 				m.catMgrInputs[m.catMgrEditField].Blur()
@@ -56,7 +56,11 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				} else {
 					settingKey := m.getCurrentSettingKey()
 					idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
-					m.Settings.Categories.Categories[idx] = cat
+					if idx >= 0 && idx < len(m.Settings.Categories.Categories) {
+						m.Settings.Categories.Categories[idx] = cat
+					} else {
+						return m, nil
+					}
 				}
 
 				m.SettingsIsEditing = false
@@ -67,6 +71,16 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 			// Navigation between fields
 			s := msg.String()
+
+			if m.catMgrEditField == 3 && key.Matches(msg, m.keys.Settings.Browse) {
+				originalPath := strings.TrimSpace(m.catMgrInputs[3].Value())
+				browseDir := originalPath
+				if browseDir == "" {
+					browseDir = m.PWD
+				}
+				return m, m.openDirectoryPicker(FilePickerOriginCategory, originalPath, browseDir, false, true)
+			}
+
 			if s == "tab" || s == "down" {
 				m.catMgrInputs[m.catMgrEditField].Blur()
 				m.catMgrEditField = (m.catMgrEditField + 1) % 4
@@ -300,11 +314,11 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if err := m.setSettingValue(currentCategory, settingKey, ""); err != nil {
 				m.settingsError = err.Error()
 			}
-		case "custom_category", "custom_category_add":
+		case config.TypeCustomCategory, config.TypeCustomCategoryAdd:
 			m.SettingsIsEditing = true
 			m.catMgrEditField = 0 // start at Name
 
-			if typ == "custom_category_add" {
+			if typ == config.TypeCustomCategoryAdd {
 				m.catMgrIsNew = true
 				m.catMgrInputs[0].SetValue("")
 				m.catMgrInputs[1].SetValue("")
@@ -349,7 +363,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Categories tab \u2192 'Manage Categories' selected \u2192 confirm full reset
 		// If deleting a custom category
 		typ := m.getCurrentSettingType()
-		if typ == "custom_category" && strings.HasPrefix(settingKey, "category_") {
+		if typ == config.TypeCustomCategory && strings.HasPrefix(settingKey, "category_") {
 			idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
 			if idx >= 0 && idx < len(m.Settings.Categories.Categories) {
 				m.Settings.Categories.Categories = append(

@@ -40,7 +40,7 @@ func (m RootModel) updatePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	case SettingsState:
 		if m.SettingsIsEditing {
 			typ := m.getCurrentSettingType()
-			if typ == "custom_category" || typ == "custom_category_add" {
+			if typ == config.TypeCustomCategory || typ == config.TypeCustomCategoryAdd {
 				var cmd tea.Cmd
 				m.catMgrInputs[m.catMgrEditField], cmd = m.catMgrInputs[m.catMgrEditField].Update(msg)
 				return m, cmd
