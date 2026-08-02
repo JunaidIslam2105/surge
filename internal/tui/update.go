@@ -39,6 +39,12 @@ func (m RootModel) updatePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case SettingsState:
 		if m.SettingsIsEditing {
+			typ := m.getCurrentSettingType()
+			if typ == "custom_category" || typ == "custom_category_add" {
+				var cmd tea.Cmd
+				m.catMgrInputs[m.catMgrEditField], cmd = m.catMgrInputs[m.catMgrEditField].Update(msg)
+				return m, cmd
+			}
 			var cmd tea.Cmd
 			m.SettingsInput, cmd = m.SettingsInput.Update(msg)
 			return m, cmd
@@ -106,8 +112,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateSettingsInputWidthForViewport()
 			}
 		}
-
-
 
 		// Sync layout calculations with DashboardLayout to set dimensions correctly
 		layout := CalculateDashboardLayout(msg.Width, msg.Height)
@@ -240,8 +244,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case URLUpdateState:
 			return m.updateURLUpdate(msg)
 
-
-
 		case HelpModalState:
 			if msg.String() == "esc" {
 				m.state = DashboardState
@@ -257,8 +259,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case BugReportLogPathState:
 			return m.updateBugReportLogPath(msg)
-
-
 
 		case PurgeConfirmState:
 			return m.updatePurgeConfirm(msg)

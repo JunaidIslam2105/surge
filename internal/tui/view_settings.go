@@ -41,7 +41,6 @@ func (m RootModel) viewSettings() string {
 		return m.renderModalWithOverlay(box)
 	}
 
-
 	activeTab := m.SettingsActiveTab
 	if activeTab < 0 {
 		activeTab = 0
@@ -390,7 +389,10 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("Create Category [Enter]")
 			valueLabel = "Action: "
 		case "custom_category":
-			cat := value.(config.Category)
+			cat, ok := value.(config.Category)
+			if !ok {
+				break
+			}
 			labelStyle := lipgloss.NewStyle().Foreground(colors.LightGray()).Width(8)
 			valueStr = lipgloss.JoinVertical(lipgloss.Left,
 				lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render("Name:"), utils.TruncateMiddle(cat.Name, innerWidth-20)),
@@ -601,11 +603,11 @@ func (m *RootModel) updateSettingsInputWidthForViewport() {
 		if leftWidth > 0 && innerWidthForModal > leftWidth+1 {
 			rightWidth = innerWidthForModal - leftWidth - 1
 		}
-		
-		targetWidth = rightWidth - 10 // Fixed offset for labels
+
+		targetWidth = rightWidth - 10   // Fixed offset for labels
 		catInputWidth = rightWidth - 12 // rightWidth - 4 (padding) - 8 (label width)
 	} else {
-		targetWidth = modalWidth - 16 // Fixed offset for labels
+		targetWidth = modalWidth - 16   // Fixed offset for labels
 		catInputWidth = modalWidth - 10 // modalWidth - 2 (padding) - 8 (label width)
 	}
 
@@ -644,7 +646,7 @@ func (m RootModel) getSettingsValues(category string) map[string]interface{} {
 			break
 		}
 	}
-	
+
 	if category == "Categories" {
 		for i, cat := range m.Settings.Categories.Categories {
 			values[fmt.Sprintf("category_%d", i)] = cat
@@ -831,7 +833,7 @@ func (m RootModel) buildSettingsMetaForCategory(category string) []config.Settin
 	if !ok {
 		return nil
 	}
-	
+
 	if category == "Categories" {
 		baseMeta := make([]config.SettingMeta, len(settingsList))
 		copy(baseMeta, settingsList)
@@ -851,7 +853,7 @@ func (m RootModel) buildSettingsMetaForCategory(category string) []config.Settin
 			Type:  "custom_category_add",
 		})
 	}
-	
+
 	return settingsList
 }
 
@@ -1059,6 +1061,6 @@ func (m RootModel) renderCategoryInputLine(label string, fieldIndex int, width i
 	}
 	// Force the input view to fit within the allowed width
 	inputStyle := lipgloss.NewStyle().Width(inputWidth).MaxWidth(inputWidth)
-	
+
 	return lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render(label), inputStyle.Render(inputView))
 }

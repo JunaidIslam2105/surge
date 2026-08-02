@@ -1325,7 +1325,47 @@ func TestUpdate_SettingsEditingPasteRoutesToSettingsInput(t *testing.T) {
 	}
 }
 
+func TestUpdate_SettingsCategoryEditPasteRoutesToCatInput(t *testing.T) {
+	var catInputs [4]textinput.Model
+	for i := range catInputs {
+		catInputs[i] = textinput.New()
+	}
+	catInputs[1].Focus()
 
+	// Fabricate enough state so getCurrentSettingType returns "custom_category".
+	// The easiest way is to put the model in SettingsState with the Categories tab
+	// active and the row pointing at a category_N entry.
+	settings := config.DefaultSettings()
+	settings.Categories.Categories = []config.Category{
+		{Name: "Videos", Pattern: `(?i)\.mp4$`, Path: "/videos"},
+	}
+	m := RootModel{
+		state:             SettingsState,
+		SettingsIsEditing: true,
+		catMgrEditField:   1,
+		catMgrInputs:      catInputs,
+		Settings:          settings,
+		keys:              config.DefaultKeyMap(),
+	}
+	// Point to the Categories tab and the first dynamic category row.
+	categories := config.CategoryOrder()
+	for i, c := range categories {
+		if c == "Categories" {
+			m.SettingsActiveTab = i
+			break
+		}
+	}
+	// buildSettingsMetaForCategory prepends static rows; the first dynamic row is
+	// at index = len(static rows). Use getSettingsCount after setting the row.
+	staticRows := len(config.GetSettingsMetadata()["Categories"])
+	m.SettingsSelectedRow = staticRows // first custom_category row
+
+	updated, _ := m.Update(tea.PasteMsg{Content: "My video description"})
+	m2 := updated.(RootModel)
+	if got := m2.catMgrInputs[1].Value(); got != "My video description" {
+		t.Fatalf("category input paste = %q, want %q", got, "My video description")
+	}
+}
 
 func TestUpdate_UnlistedStatePasteIsIgnored(t *testing.T) {
 	urlInput := textinput.New()

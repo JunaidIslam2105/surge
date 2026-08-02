@@ -49,7 +49,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					m.settingsError = err.Error()
 					return m, nil
 				}
-				
+
 				if m.catMgrIsNew {
 					m.Settings.Categories.Categories = append(m.Settings.Categories.Categories, cat)
 					m.SettingsSelectedRow = m.getSettingsCount() - 2 // Select newly added category
@@ -58,13 +58,13 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
 					m.Settings.Categories.Categories[idx] = cat
 				}
-				
+
 				m.SettingsIsEditing = false
 				m.settingsError = ""
 				m.catMgrInputs[m.catMgrEditField].Blur()
 				return m, nil
 			}
-			
+
 			// Navigation between fields
 			s := msg.String()
 			if s == "tab" || s == "down" {
@@ -302,7 +302,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else if typ == "custom_category" || typ == "custom_category_add" {
 			m.SettingsIsEditing = true
 			m.catMgrEditField = 0 // start at Name
-			
+
 			if typ == "custom_category_add" {
 				m.catMgrIsNew = true
 				m.catMgrInputs[0].SetValue("")
@@ -352,7 +352,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			idx, _ := strconv.Atoi(strings.TrimPrefix(settingKey, "category_"))
 			if idx >= 0 && idx < len(m.Settings.Categories.Categories) {
 				m.Settings.Categories.Categories = append(
-					m.Settings.Categories.Categories[:idx], 
+					m.Settings.Categories.Categories[:idx],
 					m.Settings.Categories.Categories[idx+1:]...,
 				)
 				if m.SettingsSelectedRow >= m.getSettingsCount() {

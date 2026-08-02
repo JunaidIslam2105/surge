@@ -230,8 +230,6 @@ func TestLayout_SettingsHeightNeverExceeds(t *testing.T) {
 	}
 }
 
-
-
 // ─────────────────────────────────────────────────────────────
 // 5. Download list delegate – Render width enforcement
 // ─────────────────────────────────────────────────────────────
@@ -341,7 +339,6 @@ func TestLayout_ExtremeSizesNoPanic(t *testing.T) {
 			name  string
 			state UIState
 		}{"Settings", SettingsState},
-
 	)
 
 	for _, tc := range extremes {

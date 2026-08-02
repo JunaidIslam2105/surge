@@ -333,8 +333,6 @@ func TestView_SettingsEditModeNarrowWidthNoOverflow(t *testing.T) {
 	}
 }
 
-
-
 func TestView_NetworkActivityShowsFiveAxisLabelsWhenTall(t *testing.T) {
 	m := InitialRootModel(1701, "test-version", nil, orchestrator.NewLifecycleManager(nil, nil, nil), nil, false)
 	m.width = 140

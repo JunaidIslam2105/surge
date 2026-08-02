@@ -139,8 +139,6 @@ func (m RootModel) View() tea.View {
 		return m.wrapView(m.renderModalWithOverlay(m.viewSpeedLimits()))
 	}
 
-
-
 	if m.state == DuplicateWarningState {
 		modal := components.ConfirmationModal{
 			Title:       "\u26a0 Duplicate Detected",
@@ -303,8 +301,6 @@ func (m RootModel) View() tea.View {
 	if m.state == RestartConfirmState {
 		return m.wrapView(m.renderModalWithOverlay(m.viewRestartConfirm()))
 	}
-
-
 
 	if m.state == PurgeConfirmState {
 		return m.wrapView(m.renderModalWithOverlay(m.viewPurgeConfirm()))
