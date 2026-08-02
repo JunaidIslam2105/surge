@@ -357,10 +357,10 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	if m.SettingsIsEditing {
 		if meta.Type == "custom_category" || meta.Type == "custom_category_add" {
 			valueStr = lipgloss.JoinVertical(lipgloss.Left,
-				m.renderCategoryInputLine("Name:", 0, innerWidth-15),
-				m.renderCategoryInputLine("Desc:", 1, innerWidth-15),
-				m.renderCategoryInputLine("Regex:", 2, innerWidth-15),
-				m.renderCategoryInputLine("Path:", 3, innerWidth-15),
+				m.renderCategoryInputLine("Name:", 0, innerWidth),
+				m.renderCategoryInputLine("Desc:", 1, innerWidth),
+				m.renderCategoryInputLine("Regex:", 2, innerWidth),
+				m.renderCategoryInputLine("Path:", 3, innerWidth),
 			)
 			valueLabel = ""
 		} else {
@@ -473,6 +473,10 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 
 func (m RootModel) renderSettingsTwoColumn(settingsMeta []config.SettingMeta, selectedRow int, settingsValues map[string]interface{}, modalWidth, bodyHeight int) string {
 	leftWidth, rightWidth := CalculateTwoColumnWidths(modalWidth, 32, 22)
+	innerWidthForModal := modalWidth - BoxStyle.GetHorizontalFrameSize()
+	if leftWidth > 0 && innerWidthForModal > leftWidth+1 {
+		rightWidth = innerWidthForModal - leftWidth - 1
+	}
 
 	if leftWidth < 12 || rightWidth < 14 {
 		return m.renderSettingsCompact(settingsMeta, selectedRow, settingsValues, modalWidth, bodyHeight)
@@ -590,11 +594,19 @@ func (m *RootModel) normalizeSettingsSelection() {
 func (m *RootModel) updateSettingsInputWidthForViewport() {
 	modalWidth, _ := GetSettingsDimensions(m.width, m.height)
 	var targetWidth int
+	var catInputWidth int
 	if modalWidth >= 72 {
-		_, rightWidth := CalculateTwoColumnWidths(modalWidth, 32, 22)
+		leftWidth, rightWidth := CalculateTwoColumnWidths(modalWidth, 32, 22)
+		innerWidthForModal := modalWidth - BoxStyle.GetHorizontalFrameSize()
+		if leftWidth > 0 && innerWidthForModal > leftWidth+1 {
+			rightWidth = innerWidthForModal - leftWidth - 1
+		}
+		
 		targetWidth = rightWidth - 10 // Fixed offset for labels
+		catInputWidth = rightWidth - 12 // rightWidth - 4 (padding) - 8 (label width)
 	} else {
 		targetWidth = modalWidth - 16 // Fixed offset for labels
+		catInputWidth = modalWidth - 10 // modalWidth - 2 (padding) - 8 (label width)
 	}
 
 	if targetWidth < MinSettingsInputW {
@@ -604,7 +616,17 @@ func (m *RootModel) updateSettingsInputWidthForViewport() {
 		targetWidth = MaxSettingsInputW
 	}
 
+	if catInputWidth < MinSettingsInputW {
+		catInputWidth = MinSettingsInputW
+	}
+	if catInputWidth > MaxSettingsInputW {
+		catInputWidth = MaxSettingsInputW
+	}
+
 	m.SettingsInput.SetWidth(targetWidth)
+	for i := range m.catMgrInputs {
+		m.catMgrInputs[i].SetWidth(catInputWidth)
+	}
 }
 
 // getSettingsValues returns a map of setting key -> value for a category
@@ -1031,8 +1053,12 @@ func (m RootModel) renderCategoryInputLine(label string, fieldIndex int, width i
 	}
 
 	inputView := m.catMgrInputs[fieldIndex].View()
+	inputWidth := width - 8
+	if inputWidth < 5 {
+		inputWidth = 5
+	}
 	// Force the input view to fit within the allowed width
-	inputStyle := lipgloss.NewStyle().Width(width - 10).MaxWidth(width - 10)
+	inputStyle := lipgloss.NewStyle().Width(inputWidth).MaxWidth(inputWidth)
 	
 	return lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render(label), inputStyle.Render(inputView))
 }
