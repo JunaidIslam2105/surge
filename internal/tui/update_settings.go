@@ -295,11 +295,12 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		currentCategory := categories[m.SettingsActiveTab]
-		if typ == "bool" {
+		switch typ {
+		case "bool":
 			if err := m.setSettingValue(currentCategory, settingKey, ""); err != nil {
 				m.settingsError = err.Error()
 			}
-		} else if typ == "custom_category" || typ == "custom_category_add" {
+		case "custom_category", "custom_category_add":
 			m.SettingsIsEditing = true
 			m.catMgrEditField = 0 // start at Name
 
@@ -323,7 +324,7 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.catMgrInputs[0].Focus()
-		} else {
+		default:
 			// Enter edit mode
 			m.SettingsIsEditing = true
 			// Pre-fill with current value (without units)

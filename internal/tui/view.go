@@ -966,25 +966,6 @@ func (m RootModel) viewRemoveConfirm() string {
 	return modal.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
 }
 
-func (m RootModel) viewCategoryResetConfirm() string {
-	w, h := GetDynamicModalDimensions(m.width, m.height, 40, 8, 60, 10)
-	modal := components.ConfirmationModal{
-		Title:            "Category Reset",
-		Message:          "Reset all categories to defaults?",
-		Detail:           "This will overwrite your custom rules.",
-		Keys:             m.keys.QuitConfirm,
-		Help:             m.help,
-		BorderColor:      colors.Orange(),
-		ButtonColor:      colors.Orange(),
-		Width:            w,
-		Height:           h,
-		ShowYesNoButtons: true,
-		YesNoFocused:     m.quitConfirmFocused,
-		YesLabel:         "Yes",
-		NoLabel:          "No",
-	}
-	return modal.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
-}
 
 // renderBtopBox creates a btop-style box with title embedded in the top border
 // Supports left and right titles (e.g., search on left, pane name on right)

@@ -559,36 +559,6 @@ func (m RootModel) updateRestartConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
-func (m RootModel) updateCategoryResetConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	confirmReset := func() (tea.Model, tea.Cmd) {
-		defaults := config.DefaultSettings()
-		m.Settings.Categories = defaults.Categories
-		m.addLogEntry(LogStyleStarted.Render("\u2714 Categories reset to defaults"))
-		utils.Debug("Categories Reset to Defaults")
-		m.state = SettingsState
-		m.quitConfirmFocused = 0
-		return m, nil
-	}
-	cancelReset := func() (tea.Model, tea.Cmd) {
-		m.state = SettingsState
-		m.quitConfirmFocused = 0
-		return m, nil
-	}
-
-	m, decision, handled := m.handleYesNoSelection(msg)
-	if !handled {
-		return m, nil
-	}
-
-	switch decision {
-	case yesNoYes:
-		return confirmReset()
-	case yesNoNo, yesNoCancel:
-		return cancelReset()
-	}
-
-	return m, nil
-}
 
 func (m RootModel) updatePurgeConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	confirmPurge := func() (tea.Model, tea.Cmd) {
