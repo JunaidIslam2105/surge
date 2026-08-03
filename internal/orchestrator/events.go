@@ -331,6 +331,33 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 					if candidateElapsed > snapshot.Elapsed {
 						snapshot.Elapsed = candidateElapsed
 					}
+					if snapshot.Downloaded > existing.Downloaded && snapshot.Elapsed <= candidateElapsed {
+						snapshot.Elapsed = candidateElapsed + int64(time.Millisecond)
+					}
+					// Backfill sparse snapshot fields from the master record so both
+					// the entry and SaveStateWithOptions propagate complete metadata.
+					if snapshot.Filename == "" {
+						snapshot.Filename = existing.Filename
+					}
+					if snapshot.TotalSize == 0 {
+						snapshot.TotalSize = existing.TotalSize
+					}
+					if snapshot.Downloaded == 0 && existing.Downloaded > 0 {
+						snapshot.Downloaded = existing.Downloaded
+					}
+					if snapshot.Workers == 0 {
+						snapshot.Workers = existing.Workers
+					}
+					if snapshot.MinChunkSize == 0 {
+						snapshot.MinChunkSize = existing.MinChunkSize
+					}
+					if !snapshot.RateLimitSet && existing.RateLimitSet {
+						snapshot.RateLimit = existing.RateLimit
+						snapshot.RateLimitSet = existing.RateLimitSet
+					}
+				}
+				if destPath == "" {
+					destPath = m.DestPath
 				}
 				entry := types.DownloadRecord{
 					ID:           m.DownloadID,
@@ -352,6 +379,9 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 				if existing != nil {
 					entry.URLHash = existing.URLHash
 					entry.Mirrors = append([]string(nil), existing.Mirrors...)
+					if entry.Filename == "" {
+						entry.Filename = existing.Filename
+					}
 				} else {
 					entry.URLHash = store.URLHash(url)
 				}
