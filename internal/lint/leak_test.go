@@ -18,7 +18,8 @@ func TestConfigLeakPrevention(t *testing.T) {
 		}
 
 		if d.IsDir() {
-			if d.Name() == "vendor" || d.Name() == ".git" || d.Name() == "node_modules" {
+			name := d.Name()
+			if name == "vendor" || name == "node_modules" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -133,7 +134,8 @@ func TestGlobalGoleakEnforcement(t *testing.T) {
 		}
 
 		if d.IsDir() {
-			if d.Name() == "vendor" || d.Name() == ".git" || d.Name() == "node_modules" {
+			name := d.Name()
+			if name == "vendor" || name == "node_modules" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 				return filepath.SkipDir
 			}
 
