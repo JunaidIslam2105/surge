@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/store"
@@ -70,6 +71,7 @@ func TestEventError_SaveState(t *testing.T) {
 
 	// Retry loop: the worker may not have flushed yet.
 	for i := 0; i < 50 && record.Status != "error"; i++ {
+		time.Sleep(10 * time.Millisecond)
 		record, _ = store.GetDownload("err-test")
 	}
 	if record == nil || record.Status != "error" {
