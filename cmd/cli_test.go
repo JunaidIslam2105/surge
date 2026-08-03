@@ -46,15 +46,8 @@ func TestResolveDownloadID_Remote(t *testing.T) {
 
 	// 2. Mock active port file
 
-	tempDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tempDir)
-	t.Setenv("APPDATA", tempDir)
-	t.Setenv("HOME", tempDir)
-
-	if err := config.EnsureDirs(); err != nil {
-		t.Fatalf("EnsureDirs failed: %v", err)
-	}
-	store.Configure(filepath.Join(tempDir, "surge.db"))
+	setupIsolatedCmdState(t)
+	resetCommandConnectionState(t)
 	saveActivePort(port)
 	defer removeActivePort()
 
