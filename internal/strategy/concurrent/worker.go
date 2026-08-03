@@ -82,8 +82,12 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			taskCtx, taskCancel := context.WithCancel(ctx)
 			now := time.Now()
+			
+			d.activeMu.Lock()
 			activeTask.Cancel = taskCancel
 			activeTask.StartTime = now
+			d.activeMu.Unlock()
+			
 			activeTask.WindowStart = now
 			activeTask.WindowBytes.Store(0)
 			activeTask.LastActivity.Store(now.UnixNano())
