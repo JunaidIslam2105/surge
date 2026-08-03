@@ -14,6 +14,8 @@ const (
 	AlignSize    = 4 * utils.KiB
 	WorkerBuffer = 512 * utils.KiB
 
+	DefaultPrecheckSafetyBuffer = 500 * utils.MiB
+
 	WorkerBatchSize     = 1 * utils.MiB
 	WorkerBatchInterval = 200 * time.Millisecond
 
@@ -70,6 +72,7 @@ type RuntimeConfig struct {
 	CustomDNS                   string
 	SequentialDownload          bool
 	MinChunkSize                int64
+	PrecheckSafetyBuffer        int64
 	GlobalRateLimitBps          int64
 	DefaultDownloadRateLimitBps int64
 
@@ -112,6 +115,15 @@ func (r *RuntimeConfig) GetMinChunkSize() int64 {
 		return MinChunk
 	}
 	return r.MinChunkSize
+}
+
+// GetPrecheckSafetyBuffer returns the configured free-space cushion for
+// enqueue precheck. Zero means use the default (500 MiB).
+func (r *RuntimeConfig) GetPrecheckSafetyBuffer() int64 {
+	if r == nil || r.PrecheckSafetyBuffer <= 0 {
+		return DefaultPrecheckSafetyBuffer
+	}
+	return r.PrecheckSafetyBuffer
 }
 
 func (r *RuntimeConfig) GetWorkerBufferSize() int {
@@ -174,6 +186,7 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 		CustomDNS:                   "",
 		SequentialDownload:          false,
 		MinChunkSize:                MinChunk,
+		PrecheckSafetyBuffer:        DefaultPrecheckSafetyBuffer,
 		GlobalRateLimitBps:          0,
 		DefaultDownloadRateLimitBps: 0,
 		WorkerBufferSize:            WorkerBuffer,

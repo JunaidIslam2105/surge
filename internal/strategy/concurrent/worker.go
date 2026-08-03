@@ -15,6 +15,11 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
+// writeAtFn is injectable so tests can simulate ENOSPC without a full disk.
+var writeAtFn = func(f *os.File, b []byte, off int64) (int, error) {
+	return f.WriteAt(b, off)
+}
+
 // worker downloads tasks from the queue
 func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []string, file *os.File, queue *TaskQueue, totalSize int64, client *http.Client) error {
 	bufPtr := d.bufPool.Get().(*[]byte)
@@ -106,6 +111,18 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			taskCancel()
 			utils.Debug("Worker %d: Task offset=%d length=%d took %v", id, task.Offset, task.Length, time.Since(taskStart))
+
+			// Disk full: fail immediately — no in-place retry, no mirror rotation,
+			// no residual requeue. Stricter than permanent HTTP.
+			if types.IsInsufficientDiskSpace(lastErr) {
+				d.activeMu.Lock()
+				delete(d.activeTasks, id)
+				d.activeMu.Unlock()
+				if d.State != nil {
+					d.State.ActiveWorkers.Add(-1)
+				}
+				return lastErr
+			}
 
 			if ctx.Err() != nil {
 				if d.State != nil {
@@ -346,9 +363,9 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 				activeTask.LastActivity.Store(time.Now().UnixNano())
 			}
 
-			_, writeErr := file.WriteAt(buf[:readSoFar], offset)
+			_, writeErr := writeAtFn(file, buf[:readSoFar], offset)
 			if writeErr != nil {
-				return fmt.Errorf("write error: %w", writeErr)
+				return fmt.Errorf("write error: %w", types.AnnotateInsufficientDiskSpace(writeErr))
 			}
 
 			now := time.Now()

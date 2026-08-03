@@ -25,6 +25,10 @@ var (
 	// ErrPermanentHTTP indicates the server returned a 4xx status (other than 429)
 	// that makes retrying pointless (e.g. 403 Forbidden, 404 Not Found, 401 Unauthorized).
 	ErrPermanentHTTP = errors.New("permanent HTTP error")
+
+	// ErrInsufficientDiskSpace indicates the destination volume is full or
+	// the user's quota has been exhausted. Retry is pointless.
+	ErrInsufficientDiskSpace = errors.New("insufficient disk space")
 )
 
 // IsPermanentHTTPError reports whether err is a permanent HTTP error that

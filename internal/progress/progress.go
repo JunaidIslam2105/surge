@@ -37,6 +37,10 @@ type DownloadProgress struct {
 	mu         sync.Mutex // Protects metadata only (Mirrors, limits, strings)
 	cancelFunc context.CancelFunc
 
+	// pendingResumeState holds a pause-grade snapshot stashed by the
+	// concurrent error path so the scheduler can attach it to EventError.
+	pendingResumeState *types.DownloadRecord
+
 	destPath     string
 	filename     string
 	url          string
@@ -127,6 +131,30 @@ func (ps *DownloadProgress) GetError() error {
 	return nil
 }
 
+// SetPendingResumeState stashes a pause-grade DownloadRecord for the
+// scheduler to attach onto EventError. Nil-safe; overwrites prior.
+func (ps *DownloadProgress) SetPendingResumeState(s *types.DownloadRecord) {
+	if ps == nil {
+		return
+	}
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.pendingResumeState = s
+}
+
+// TakePendingResumeState returns and clears the pending resume snapshot.
+// Nil-safe; a second Take returns nil.
+func (ps *DownloadProgress) TakePendingResumeState() *types.DownloadRecord {
+	if ps == nil {
+		return nil
+	}
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	s := ps.pendingResumeState
+	ps.pendingResumeState = nil
+	return s
+}
+
 func (ps *DownloadProgress) GetProgress() (downloaded int64, total int64, totalElapsed time.Duration, sessionElapsed time.Duration, connections int32, sessionStartBytes int64) {
 	downloaded = ps.Bytes.VerifiedProgress.Load()
 	total = ps.Bytes.TotalSize.Load()
@@ -207,6 +235,7 @@ func (ps *DownloadProgress) SessionReset() {
 	for i := range ps.mirrors {
 		ps.mirrors[i].Error = false
 	}
+	ps.pendingResumeState = nil
 }
 
 func (ps *DownloadProgress) FinalizePauseSession(downloaded int64) time.Duration {

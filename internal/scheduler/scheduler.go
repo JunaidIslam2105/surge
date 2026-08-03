@@ -713,7 +713,7 @@ func (p *Scheduler) worker() {
 			p.mu.Lock()
 			delete(p.downloads, localCfg.ID)
 
-			if !p.isShuttingDown && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !types.IsPermanentHTTPError(err) && qt.retries < 10 {
+			if shouldRetryFailedDownload(p.isShuttingDown, err, qt.retries) {
 				qt.retries++
 				qt.inFlight = true // Keep in-flight while sending progress outside lock
 				qt.cfg = localCfg
@@ -762,8 +762,9 @@ func (p *Scheduler) worker() {
 			// All retries exhausted (or error is permanent/canceled): collect event
 			// metadata under the lock, then send outside it so a full progress
 			// channel cannot block the scheduler mutex.
+			isCancel := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 			var errEvent *types.DownloadEvent
-			if localCfg.ProgressCh != nil {
+			if !isCancel && localCfg.ProgressCh != nil {
 				var finalDestPath string
 				var finalFilename string
 				if localCfg.ProgressState != nil {
@@ -784,9 +785,17 @@ func (p *Scheduler) worker() {
 					DestPath:   finalDestPath,
 					Err:        err,
 				}
+				if localCfg.ProgressState != nil {
+					if pending := progress.CfgProgress(&localCfg).TakePendingResumeState(); pending != nil {
+						errEvent.State = pending
+						if pending.Downloaded > 0 {
+							errEvent.Downloaded = pending.Downloaded
+						}
+					}
+				}
 			}
 
-			if localCfg.ProgressState != nil {
+			if !isCancel && localCfg.ProgressState != nil {
 				progress.CfgProgress(&localCfg).SetError(err)
 			}
 			delete(p.downloadLimiters, localCfg.ID)
@@ -813,6 +822,25 @@ func (p *Scheduler) worker() {
 		// If paused, we keep it in downloads map for potential resume
 		p.wg.Done()
 	}
+}
+
+// shouldRetryFailedDownload reports whether a failed download should be
+// requeued for another attempt. Cancel, deadline, permanent HTTP, and
+// disk-full errors are excluded — retrying them is pointless.
+func shouldRetryFailedDownload(isShuttingDown bool, err error, retries int) bool {
+	if isShuttingDown {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if types.IsPermanentHTTPError(err) {
+		return false
+	}
+	if types.IsInsufficientDiskSpace(err) {
+		return false
+	}
+	return retries < 10
 }
 
 // GetStatus returns the status of an active download

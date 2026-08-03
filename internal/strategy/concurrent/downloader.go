@@ -326,7 +326,7 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 
 	if downloadErr != nil {
 		// Save state so that retries (like rate limit backoffs) resume from the correct progress
-		if d.State != nil && !errors.Is(downloadErr, context.Canceled) {
+		if d.State != nil && !errors.Is(downloadErr, context.Canceled) && !errors.Is(downloadErr, context.DeadlineExceeded) {
 			_ = d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false)
 		}
 		return downloadErr
@@ -426,7 +426,7 @@ func (d *ConcurrentDownloader) setupTasks(destPath string, fileSize, chunkSize i
 	}
 
 	if err := outFile.Truncate(fileSize); err != nil {
-		return nil, fmt.Errorf("failed to preallocate file: %w", err)
+		return nil, fmt.Errorf("failed to preallocate file: %w", types.AnnotateInsufficientDiskSpace(err))
 	}
 	if d.State != nil {
 		d.State.Bytes.Downloaded.Store(0)
@@ -665,6 +665,7 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 	}
 
 	// Direct save on error/retry paths
+	d.State.SetPendingResumeState(s)
 	saveErr := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true})
 	if saveErr != nil {
 		utils.Debug("Failed to save state snapshot: %v", saveErr)
