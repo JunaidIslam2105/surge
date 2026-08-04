@@ -52,7 +52,11 @@ func TestEventError_SaveState(t *testing.T) {
 	}
 
 	ch := make(chan types.DownloadEvent, 1)
-	go mgr.StartEventWorker(ch)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(ch)
+		close(done)
+	}()
 
 	ch <- types.DownloadEvent{
 		Type:       types.EventError,
@@ -64,6 +68,7 @@ func TestEventError_SaveState(t *testing.T) {
 
 	// Wait for the event worker to process by closing and waiting.
 	close(ch)
+	<-done
 	// Give the worker a moment to flush. The StartEventWorker loop exits on close.
 	// Use a short poll to verify persistence.
 	record, err := store.GetDownload("err-test")
@@ -116,8 +121,7 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 	url := "http://example.com/elapsed.bin"
 	destPath := filepath.Join(tmpDir, "elapsed.bin")
 
-	// Master record has 5s TimeTaken and 100 bytes downloaded.
-	store.AddToMasterList(types.DownloadRecord{
+	if err := store.AddToMasterList(types.DownloadRecord{
 		ID:         "err-elapsed",
 		URL:        url,
 		URLHash:    store.URLHash(url),
@@ -127,7 +131,9 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 		TotalSize:  1000,
 		Downloaded: 100,
 		TimeTaken:  5000, // 5s already on master
-	})
+	}); err != nil {
+		t.Fatalf("seed AddToMasterList failed: %v", err)
+	}
 
 	// Snapshot advanced Downloaded to 400 but Elapsed is only 1s — below
 	// the master's candidateElapsed (5000ms). The bump must raise Elapsed
@@ -144,7 +150,11 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 	}
 
 	ch := make(chan types.DownloadEvent, 1)
-	go mgr.StartEventWorker(ch)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(ch)
+		close(done)
+	}()
 	ch <- types.DownloadEvent{
 		Type:       types.EventError,
 		DownloadID: "err-elapsed",
@@ -154,6 +164,7 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 		State:      snapshot,
 	}
 	close(ch)
+	<-done
 
 	deadline := time.Now().Add(3 * time.Second)
 	var entry *types.DownloadRecord
@@ -233,7 +244,11 @@ func TestEventError_FieldFallbacks(t *testing.T) {
 	}
 
 	ch := make(chan types.DownloadEvent, 1)
-	go mgr.StartEventWorker(ch)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(ch)
+		close(done)
+	}()
 	ch <- types.DownloadEvent{
 		Type:       types.EventError,
 		DownloadID: "err-fallback",
@@ -241,6 +256,7 @@ func TestEventError_FieldFallbacks(t *testing.T) {
 		State:      snapshot,
 	}
 	close(ch)
+	<-done
 
 	deadline := time.Now().Add(3 * time.Second)
 	var entry *types.DownloadRecord

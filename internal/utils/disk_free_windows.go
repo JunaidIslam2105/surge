@@ -16,7 +16,9 @@ func IsOSDiskFull(err error) bool {
 	if !errors.As(err, &errno) {
 		return false
 	}
-	return errno == windows.ERROR_DISK_FULL || errno == windows.ERROR_DISK_QUOTA_EXCEEDED
+	return errno == windows.ERROR_DISK_FULL ||
+		errno == windows.ERROR_DISK_QUOTA_EXCEEDED ||
+		errno == windows.ERROR_HANDLE_DISK_FULL
 }
 
 func freeDiskBytesAt(path string) (int64, error) {
