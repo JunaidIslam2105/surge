@@ -45,6 +45,26 @@ func advanceRemainingTasks(tasks []types.Task, consumed int64) []types.Task {
 	return out
 }
 
+// isTaskBackedResumeSnapshot reports whether rec carries a valid remaining-task
+// set for Downloaded authority on EventError and EventPaused merges. Empty or
+// invalid Tasks are treated as taskless; Downloaded/Tasks accounting equality is
+// not required (saveStateSnapshot uses max(VerifiedProgress, TotalSize-remaining)).
+func isTaskBackedResumeSnapshot(rec types.DownloadRecord) bool {
+	if len(rec.Tasks) == 0 || rec.TotalSize <= 0 {
+		return false
+	}
+	for _, task := range rec.Tasks {
+		if task.Offset < 0 || task.Length <= 0 {
+			return false
+		}
+		// Overflow-safe end check: Offset+Length <= TotalSize without wrap.
+		if task.Length > rec.TotalSize || task.Offset > rec.TotalSize-task.Length {
+			return false
+		}
+	}
+	return true
+}
+
 func finalizeCompletedFile(finalPath string) error {
 	if finalPath == "" {
 		return fmt.Errorf("missing destination path for completed download")
@@ -152,8 +172,8 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 				break
 			}
 
-			// Pause snapshots can race slightly behind the master entry, so fall back to
-			// the DB values to keep the resume key stable when the in-memory state is sparse.
+			// Sparse EventPaused.State must not clobber master metadata or blank the
+			// resume key. Field authority is pause-specific (not EventError symmetry).
 			stateSnapshot := m.State
 			snapshot := *stateSnapshot
 			destPath := stateSnapshot.DestPath
@@ -175,19 +195,84 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 					snapshot.Elapsed = candidateElapsed + int64(time.Millisecond)
 				}
 			}
+			if destPath == "" {
+				destPath = m.DestPath
+			}
+			if url == "" {
+				url = m.URL
+			}
+
+			if m.Filename != "" {
+				snapshot.Filename = m.Filename
+			}
+			if m.Workers != 0 {
+				snapshot.Workers = m.Workers
+			}
+			if m.MinChunkSize != 0 {
+				snapshot.MinChunkSize = m.MinChunkSize
+			}
+			if existing != nil {
+				if snapshot.Filename == "" {
+					snapshot.Filename = existing.Filename
+				}
+				if snapshot.TotalSize == 0 {
+					snapshot.TotalSize = existing.TotalSize
+				}
+				if snapshot.Workers == 0 {
+					snapshot.Workers = existing.Workers
+				}
+				if snapshot.MinChunkSize == 0 {
+					snapshot.MinChunkSize = existing.MinChunkSize
+				}
+			}
+
+			// Downloaded: task-backed keeps snapshot exactly (incl. first-pause 0);
+			// taskless/invalid with master uses max so sparse zeros cannot wipe progress.
+			if !isTaskBackedResumeSnapshot(snapshot) && existing != nil {
+				if existing.Downloaded > snapshot.Downloaded {
+					snapshot.Downloaded = existing.Downloaded
+				}
+			}
+
+			// RateLimit: event RateLimitSet=false is omission vs a still-set master
+			// override (intentional clear already persisted RateLimitSet=false on master).
+			rateLimit := m.RateLimit
+			rateLimitSet := m.RateLimitSet
+			if !m.RateLimitSet && existing != nil && existing.RateLimitSet {
+				rateLimit = existing.RateLimit
+				rateLimitSet = existing.RateLimitSet
+			}
+			snapshot.RateLimit = rateLimit
+			snapshot.RateLimitSet = rateLimitSet
+
+			// Materialize identity before SaveStateWithOptions — store writes
+			// state.URL/DestPath/ID, not the function args.
+			if m.DownloadID != "" {
+				snapshot.ID = m.DownloadID
+			}
+			snapshot.URL = url
+			snapshot.DestPath = destPath
+
+			entryFilename := m.Filename
+			if entryFilename == "" {
+				entryFilename = snapshot.Filename
+			}
+			if entryFilename == "" && existing != nil {
+				entryFilename = existing.Filename
+			}
 
 			entry := types.DownloadRecord{
 				ID:           m.DownloadID,
 				Status:       "paused",
 				Downloaded:   snapshot.Downloaded,
 				DestPath:     destPath,
-				Filename:     m.Filename,
+				Filename:     entryFilename,
 				TotalSize:    snapshot.TotalSize,
 				TimeTaken:    snapshot.Elapsed / int64(time.Millisecond),
-				RateLimit:    m.RateLimit,
-				RateLimitSet: m.RateLimitSet,
-				Workers:      m.Workers,
-				MinChunkSize: m.MinChunkSize,
+				RateLimit:    rateLimit,
+				RateLimitSet: rateLimitSet,
+				Workers:      snapshot.Workers,
+				MinChunkSize: snapshot.MinChunkSize,
 			}
 			if existing != nil {
 				entry.URL = existing.URL
@@ -334,16 +419,24 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 					if snapshot.Downloaded > existing.Downloaded && snapshot.Elapsed <= candidateElapsed {
 						snapshot.Elapsed = candidateElapsed + int64(time.Millisecond)
 					}
-					// Backfill sparse snapshot fields from the master record so both
-					// the entry and SaveStateWithOptions propagate complete metadata.
+				}
+				if destPath == "" {
+					destPath = m.DestPath
+				}
+				if url == "" {
+					url = m.URL
+				}
+
+				// Filename: event wins over a poorer snapshot name, then existing.
+				if m.Filename != "" {
+					snapshot.Filename = m.Filename
+				}
+				if existing != nil {
 					if snapshot.Filename == "" {
 						snapshot.Filename = existing.Filename
 					}
 					if snapshot.TotalSize == 0 {
 						snapshot.TotalSize = existing.TotalSize
-					}
-					if snapshot.Downloaded == 0 && existing.Downloaded > 0 {
-						snapshot.Downloaded = existing.Downloaded
 					}
 					if snapshot.Workers == 0 {
 						snapshot.Workers = existing.Workers
@@ -356,14 +449,36 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 						snapshot.RateLimitSet = existing.RateLimitSet
 					}
 				}
-				if destPath == "" {
-					destPath = m.DestPath
+
+				// Resume-authority Downloaded: task-backed keeps snapshot exactly
+				// (including 0 / values below master); taskless/invalid uses max.
+				if !isTaskBackedResumeSnapshot(snapshot) && existing != nil {
+					if existing.Downloaded > snapshot.Downloaded {
+						snapshot.Downloaded = existing.Downloaded
+					}
 				}
+
+				// Materialize identity into snapshot before SaveStateWithOptions —
+				// the store writes state.URL/DestPath/ID, not the function args.
+				if m.DownloadID != "" {
+					snapshot.ID = m.DownloadID
+				}
+				snapshot.URL = url
+				snapshot.DestPath = destPath
+
+				entryFilename := m.Filename
+				if entryFilename == "" {
+					entryFilename = snapshot.Filename
+				}
+				if entryFilename == "" && existing != nil {
+					entryFilename = existing.Filename
+				}
+
 				entry := types.DownloadRecord{
 					ID:           m.DownloadID,
 					URL:          url,
 					DestPath:     destPath,
-					Filename:     m.Filename,
+					Filename:     entryFilename,
 					Status:       "error",
 					TotalSize:    snapshot.TotalSize,
 					Downloaded:   snapshot.Downloaded,
@@ -379,9 +494,6 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 				if existing != nil {
 					entry.URLHash = existing.URLHash
 					entry.Mirrors = append([]string(nil), existing.Mirrors...)
-					if entry.Filename == "" {
-						entry.Filename = existing.Filename
-					}
 				} else {
 					entry.URLHash = store.URLHash(url)
 				}
