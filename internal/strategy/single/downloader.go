@@ -185,7 +185,7 @@ func (d *SingleDownloader) Download(ctx context.Context, rawurl, destPath string
 	preallocated := false
 	if fileSize > 0 {
 		if err := preallocateFile(outFile, fileSize); err != nil {
-			return fmt.Errorf("failed to preallocate file: %w", types.AnnotateInsufficientDiskSpace(err))
+			return fmt.Errorf("failed to preallocate file: %w", err)
 		}
 		preallocated = true
 	}
@@ -214,7 +214,7 @@ func (d *SingleDownloader) Download(ctx context.Context, rawurl, destPath string
 			return ctxErr
 		}
 		utils.Debug("Single downloader: copy error for %s: %v", rawurl, err)
-		return fmt.Errorf("copy error: %w", types.AnnotateInsufficientDiskSpace(err))
+		return fmt.Errorf("copy error: %w", err)
 	}
 
 	if preallocated && written != fileSize {

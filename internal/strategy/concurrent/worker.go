@@ -365,7 +365,7 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 
 			_, writeErr := writeAtFn(file, buf[:readSoFar], offset)
 			if writeErr != nil {
-				return fmt.Errorf("write error: %w", types.AnnotateInsufficientDiskSpace(writeErr))
+				return fmt.Errorf("write error: %w", writeErr)
 			}
 
 			now := time.Now()

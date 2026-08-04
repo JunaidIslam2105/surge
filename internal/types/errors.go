@@ -3,6 +3,8 @@ package types
 import (
 	"errors"
 	"net/http"
+
+	"github.com/SurgeDM/Surge/internal/utils"
 )
 
 // Common errors
@@ -30,6 +32,18 @@ var (
 	// the user's quota has been exhausted. Retry is pointless.
 	ErrInsufficientDiskSpace = errors.New("insufficient disk space")
 )
+
+// IsInsufficientDiskSpace reports whether err is (or wraps) a disk-full
+// or quota failure.
+func IsInsufficientDiskSpace(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrInsufficientDiskSpace) {
+		return true
+	}
+	return utils.IsOSDiskFull(err)
+}
 
 // IsPermanentHTTPError reports whether err is a permanent HTTP error that
 // should not be retried by the scheduler.

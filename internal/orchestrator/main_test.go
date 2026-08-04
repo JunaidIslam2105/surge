@@ -19,6 +19,8 @@ func TestMain(m *testing.M) {
 		if err := goleak.Find(
 			goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
 			goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
+			goleak.IgnoreTopFunction("github.com/godbus/dbus/v5.(*Conn).inWorker"),
+			goleak.IgnoreTopFunction("github.com/godbus/dbus/v5.newConn.func1"),
 		); err != nil {
 			fmt.Fprintf(os.Stderr, "goleak: Errors on successful test run: %v\n", err)
 			os.Exit(1)

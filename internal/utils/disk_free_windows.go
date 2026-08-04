@@ -3,10 +3,21 @@
 package utils
 
 import (
+	"errors"
 	"math"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
+
+// IsOSDiskFull reports whether the error is a windows disk full error.
+func IsOSDiskFull(err error) bool {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	return errno == windows.ERROR_DISK_FULL || errno == windows.ERROR_DISK_QUOTA_EXCEEDED
+}
 
 func freeDiskBytesAt(path string) (int64, error) {
 	var freeBytesAvailable, totalNumberOfBytes, totalNumberOfFreeBytes uint64

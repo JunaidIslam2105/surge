@@ -13,11 +13,11 @@ func TestScheduler_EventErrorState(t *testing.T) {
 
 	// Stash a pause-grade snapshot via SetPendingResumeState.
 	snapshot := &types.DownloadRecord{
-		URL:         "http://example.com/state.bin",
-		DestPath:    "/tmp/state.bin",
-		TotalSize:   10 * 1024 * 1024,
-		Downloaded:  3 * 1024 * 1024,
-		Workers:     4,
+		URL:          "http://example.com/state.bin",
+		DestPath:     "/tmp/state.bin",
+		TotalSize:    10 * 1024 * 1024,
+		Downloaded:   3 * 1024 * 1024,
+		Workers:      4,
 		MinChunkSize: 2 * 1024 * 1024,
 	}
 	state.SetPendingResumeState(snapshot)

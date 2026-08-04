@@ -11,8 +11,7 @@ import (
 
 func TestScheduler_ExcludesENOSPC(t *testing.T) {
 	diskErr := makeDiskFullPathError()
-	sentinelErr := types.AnnotateInsufficientDiskSpace(diskErr)
-	wrappedErr := fmt.Errorf("write error: %w", sentinelErr)
+	wrappedErr := fmt.Errorf("write error: %w", diskErr)
 
 	tests := []struct {
 		name      string

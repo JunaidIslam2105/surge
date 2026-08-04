@@ -11,13 +11,12 @@ import (
 
 func TestManager_NoTruncateOnENOSPC(t *testing.T) {
 	diskErr := makeDiskFullPathError()
-	sentinelErr := types.AnnotateInsufficientDiskSpace(diskErr)
-	wrappedErr := fmt.Errorf("write error: %w", sentinelErr)
+	wrappedErr := fmt.Errorf("write error: %w", diskErr)
 
 	tests := []struct {
-		name        string
-		err         error
-		downloaded  int64
+		name         string
+		err          error
+		downloaded   int64
 		wantFallback bool
 	}{
 		{"ENOSPC with zero downloaded", wrappedErr, 0, false},

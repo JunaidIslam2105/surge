@@ -12,6 +12,10 @@ import (
 )
 
 func TestEventError_SaveState(t *testing.T) {
+	origNotify := notify
+	notify = func(title, message string) {}
+	t.Cleanup(func() { notify = origNotify })
+
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "surge.db")
 	store.Configure(dbPath)
@@ -98,6 +102,10 @@ func TestEventError_SaveState(t *testing.T) {
 }
 
 func TestEventError_ElapsedMonotonicBump(t *testing.T) {
+	origNotify := notify
+	notify = func(title, message string) {}
+	t.Cleanup(func() { notify = origNotify })
+
 	tmpDir := t.TempDir()
 	store.Configure(filepath.Join(tmpDir, "surge.db"))
 	t.Cleanup(func() { store.CloseDB() })
@@ -176,6 +184,10 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 }
 
 func TestEventError_FieldFallbacks(t *testing.T) {
+	origNotify := notify
+	notify = func(title, message string) {}
+	t.Cleanup(func() { notify = origNotify })
+
 	tmpDir := t.TempDir()
 	store.Configure(filepath.Join(tmpDir, "surge.db"))
 	t.Cleanup(func() { store.CloseDB() })
