@@ -543,6 +543,33 @@ func TestEventPaused_SparseStatePreservesIdentityRateLimitAndFirstZero(t *testin
 	}
 }
 
+func TestEventPaused_StateWithoutMasterPersistsResolvedURL(t *testing.T) {
+	tmpDir := setupEventStateDB(t)
+	const id = "pause-state-without-master"
+	url := "http://example.com/pause-state-without-master.bin"
+
+	dispatchLifecycleEvent(t, types.DownloadEvent{
+		Type:       types.EventPaused,
+		DownloadID: id,
+		State: &types.DownloadRecord{
+			ID:         "stale-snapshot-id",
+			URL:        url,
+			DestPath:   filepath.Join(tmpDir, "pause-state-without-master.bin"),
+			Filename:   "pause-state-without-master.bin",
+			TotalSize:  1000,
+			Downloaded: 250,
+		},
+	})
+
+	entry, err := store.GetDownload(id)
+	if err != nil {
+		t.Fatalf("GetDownload: %v", err)
+	}
+	if entry == nil || entry.URL != url || entry.URLHash != store.URLHash(url) {
+		t.Fatalf("master entry = %+v, want URL=%q with matching hash", entry, url)
+	}
+}
+
 func setupEventStateDB(t *testing.T) string {
 	t.Helper()
 

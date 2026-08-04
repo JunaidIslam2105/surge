@@ -277,6 +277,9 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 			if existing != nil {
 				entry.URL = existing.URL
 				entry.URLHash = existing.URLHash
+			} else {
+				entry.URL = url
+				entry.URLHash = store.URLHash(url)
 			}
 			if err := store.AddToMasterList(entry); err != nil {
 				utils.Debug("Lifecycle: Failed to persist paused state: %v", err)
