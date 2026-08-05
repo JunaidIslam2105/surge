@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/tui/components"
 	"github.com/SurgeDM/Surge/internal/utils"
@@ -374,7 +375,7 @@ func (m RootModel) View() tea.View {
 	dimSep := lipgloss.NewStyle().Foreground(colors.Gray()).Render(" \u2502 ")
 
 	// Global speed indicator
-	speedBps := m.calcTotalSpeedBps()
+	speedBps := m.cachedTotalSpeed
 	speedGlyph := lipgloss.NewStyle().Foreground(colors.Cyan()).Render("\u2B07")
 	var speedVal string
 	if speedBps <= 0 {
@@ -501,11 +502,27 @@ func (m RootModel) View() tea.View {
 			layout.DetailHeight += layout.ChunkMapHeight
 		}
 
-		graphBox := m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
+		var graphBox string
+		showGraph := layout.GraphHeight >= layout.MinGraphHeight
+		if showGraph && m.Settings != nil {
+			showGraph = config.Resolve[bool](m.Settings.General.ShowSpeedGraph)
+		}
+		if showGraph {
+			// Only re-render when data or dimensions changed
+			if m.graphCacheDirty || m.cachedGraphWidth != layout.RightWidth || m.cachedGraphHeight != layout.GraphHeight || m.cachedGraphBox == "" {
+				graphBox = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
+				m.cachedGraphBox = graphBox
+				m.cachedGraphWidth = layout.RightWidth
+				m.cachedGraphHeight = layout.GraphHeight
+				m.graphCacheDirty = false
+			} else {
+				graphBox = m.cachedGraphBox
+			}
+		}
 		detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, layout.RightWidth, layout.DetailHeight, colors.Gray())
 
 		var rightParts []string
-		if layout.GraphHeight >= layout.MinGraphHeight {
+		if showGraph {
 			rightParts = append(rightParts, graphBox)
 		}
 		rightParts = append(rightParts, detailBox)

@@ -54,9 +54,12 @@ func (m *RootModel) processProgressMsg(msg types.DownloadEvent) tea.Cmd {
 		cmd = d.progress.SetPercent(percentage)
 	}
 
+	// Cache total speed for this frame so View() doesn't recompute it.
+	m.cachedTotalSpeed = m.calcTotalSpeedBps()
+
 	// Update speed graph history with EMA smoothing for smooth transitions
 	if time.Since(m.lastSpeedHistoryUpdate) >= GraphUpdateInterval {
-		totalSpeed := float64(m.calcTotalSpeedBps())
+		totalSpeed := float64(m.cachedTotalSpeed)
 		// EMA smooth against previous graph point for visual continuity
 		var smoothed float64
 		if m.Settings != nil && config.Resolve[bool](m.Settings.General.LiveSpeedGraph) {
@@ -72,9 +75,12 @@ func (m *RootModel) processProgressMsg(msg types.DownloadEvent) tea.Cmd {
 			m.SpeedHistory = append(m.SpeedHistory[1:], smoothed)
 		}
 		m.lastSpeedHistoryUpdate = time.Now()
+		m.graphCacheDirty = true
 	}
 
-	m.UpdateListItems()
+	// ponytail: list items hold *DownloadModel pointers — speed/progress are
+	// read live on every View() without a rebuild. UpdateListItems() is only
+	// needed for structural changes (start/pause/complete/error/tab switch).
 	return cmd
 }
 

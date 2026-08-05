@@ -42,7 +42,7 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 	}
 
 	// Determine Max Speed for scaling
-	currentSpeedBps := float64(m.calcTotalSpeedBps())
+	currentSpeedBps := float64(m.cachedTotalSpeed)
 	topSpeedBps := 0.0
 	for _, s := range m.SpeedHistory {
 		if s > topSpeedBps {

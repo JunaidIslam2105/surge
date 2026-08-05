@@ -159,6 +159,11 @@ type RootModel struct {
 	// Graph Data
 	SpeedHistory           []float64 // Stores the last ~60 ticks of speed data
 	lastSpeedHistoryUpdate time.Time // Last time SpeedHistory was updated (for 0.5s sampling)
+	cachedTotalSpeed       int64     // Cached total speed (bytes/s), updated once per progress batch
+	graphCacheDirty        bool      // True when SpeedHistory changed and graph needs re-render
+	cachedGraphBox         string    // Cached rendered graph box, only rebuilt when dirty
+	cachedGraphWidth       int       // Width used for the cached graph
+	cachedGraphHeight      int       // Height used for the cached graph
 
 	// Notification log system
 	logViewport viewport.Model // Scrollable log viewport

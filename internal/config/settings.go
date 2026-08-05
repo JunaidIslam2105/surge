@@ -48,6 +48,7 @@ type GeneralSettings struct {
 	ThemePath                    *Setting `json:"theme_path"`
 	LogRetentionCount            *Setting `json:"log_retention_count"`
 	LiveSpeedGraph               *Setting `json:"live_speed_graph"`
+	ShowSpeedGraph               *Setting `json:"show_speed_graph"`
 }
 
 type NetworkSettings struct {
@@ -265,6 +266,7 @@ func (s *Settings) initializeCategoriesList() {
 				s.General.ThemePath,
 				s.General.LogRetentionCount,
 				s.General.LiveSpeedGraph,
+				s.General.ShowSpeedGraph,
 			},
 		},
 		{
@@ -654,6 +656,14 @@ func DefaultSettings() *Settings {
 				Type:         TypeBool,
 				DefaultValue: false,
 				Value:        false,
+			},
+			ShowSpeedGraph: &Setting{
+				Key:          "show_speed_graph",
+				Label:        "Show Speed Graph",
+				Description:  "Display the network activity graph on the dashboard. Disable to reduce CPU usage.",
+				Type:         TypeBool,
+				DefaultValue: true,
+				Value:        true,
 			},
 		},
 		Network: NetworkSettings{

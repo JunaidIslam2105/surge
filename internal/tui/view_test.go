@@ -612,6 +612,7 @@ func TestFooter_ActiveSpeedShowsMBps(t *testing.T) {
 	m.downloads = []*DownloadModel{
 		{Speed: 2.5 * 1024 * 1024},
 	}
+	m.cachedTotalSpeed = int64(2.5 * 1024 * 1024)
 
 	last := footerLine(m)
 	if !strings.Contains(last, "MiB/s") {
@@ -631,6 +632,7 @@ func TestFooter_ActiveSpeedShowsKBps(t *testing.T) {
 	m.downloads = []*DownloadModel{
 		{Speed: 512 * 1024},
 	}
+	m.cachedTotalSpeed = 512 * 1024
 
 	last := footerLine(m)
 	if !strings.Contains(last, "KiB/s") {
