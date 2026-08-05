@@ -715,7 +715,7 @@ func renderFocusedDetails(d *DownloadModel, w int, spinnerView string) string {
 		} else if d.RateLimitSet {
 			speedStr += " (Limit: \u221E)"
 		}
-		if d.lastETA > 0 {
+		if d.Speed > 0 && d.Total > 0 && d.lastETA > 0 {
 			etaStr = formatDurationForUI(d.lastETA)
 		} else {
 			etaStr = "\u221e"

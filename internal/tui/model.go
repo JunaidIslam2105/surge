@@ -277,8 +277,7 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 // This should be called once per progress update, NOT per render frame.
 func (d *DownloadModel) UpdateETA() {
 	if d.Total <= 0 || d.Speed <= 0 {
-		d.lastETA = 0
-		return
+		return // Do not clear lastETA to preserve EMA history when speed drops to 0 momentarily
 	}
 
 	remaining := d.Total - d.Downloaded
@@ -287,8 +286,7 @@ func (d *DownloadModel) UpdateETA() {
 	// Clamp ETA to 24 hours max to prevent bonkers values
 	const maxETASeconds = 24 * 60 * 60
 	if etaSeconds > maxETASeconds || etaSeconds < 0 {
-		d.lastETA = 0
-		return
+		return // Preserve EMA history
 	}
 
 	etaDuration := time.Duration(etaSeconds) * time.Second
