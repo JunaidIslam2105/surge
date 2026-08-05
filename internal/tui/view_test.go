@@ -713,3 +713,54 @@ func TestFooter_NoLineOverflowAtVariousSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestView_ETAFlickerBug(t *testing.T) {
+	InitializeTUI()
+	m := InitialRootModel(1701, "1.0.0", nil, orchestrator.NewLifecycleManager(nil, nil, nil), nil, false)
+	m.width = 120
+	m.height = 35
+
+	d := &DownloadModel{
+		ID:         "flicker-test",
+		Filename:   "flicker.iso",
+		Total:      1000 * 1024 * 1024,
+		Downloaded: 500 * 1024 * 1024,
+		Speed:      10 * 1024 * 1024, // 10 MB/s
+	}
+	m.downloads = []*DownloadModel{d}
+	m.SelectedDownloadID = d.ID
+	m.activeTab = TabActive
+	m.UpdateListItems()
+
+	// Initial View should set the ETA cache to the raw ETA (500MB / 10MB/s = 50s)
+	// We do it once to initialize it.
+	d.UpdateETA()
+
+	if d.lastETA != 50*time.Second {
+		t.Fatalf("expected initial ETA to be 50s, got %v", d.lastETA)
+	}
+
+	// Now speed drastically drops to 1 MB/s (raw ETA becomes 500s)
+	d.Speed = 1 * 1024 * 1024
+
+	// Process ONE progress message (as it would happen every 150ms in reality)
+	d.UpdateETA()
+
+	// With EMA alpha = 0.3, the new ETA should be:
+	// 0.3 * 500s + 0.7 * 50s = 150s + 35s = 185s
+	expectedSmoothed := 185 * time.Second
+	if d.lastETA != expectedSmoothed {
+		t.Fatalf("expected ETA to be smoothed to %v, got %v", expectedSmoothed, d.lastETA)
+	}
+
+	// In the old bug, calling View() 10 times would instantly converge the ETA
+	// Let's call View() 10 times (simulating spinner ticks or terminal resizing)
+	for i := 0; i < 10; i++ {
+		m.View()
+	}
+
+	// Since View() should be side-effect free, lastETA should not change!
+	if d.lastETA != expectedSmoothed {
+		t.Fatalf("ETA drifted during View() calls! View() is causing side effects. Got: %v", d.lastETA)
+	}
+}

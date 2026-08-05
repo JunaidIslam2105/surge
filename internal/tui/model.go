@@ -273,6 +273,34 @@ func NewDownloadModel(id string, url string, filename string, total int64) *Down
 	}
 }
 
+// UpdateETA calculates the remaining time and applies EMA smoothing to prevent jitter.
+// This should be called once per progress update, NOT per render frame.
+func (d *DownloadModel) UpdateETA() {
+	if d.Total <= 0 || d.Speed <= 0 {
+		d.lastETA = 0
+		return
+	}
+
+	remaining := d.Total - d.Downloaded
+	etaSeconds := float64(remaining) / d.Speed
+
+	// Clamp ETA to 24 hours max to prevent bonkers values
+	const maxETASeconds = 24 * 60 * 60
+	if etaSeconds > maxETASeconds || etaSeconds < 0 {
+		d.lastETA = 0
+		return
+	}
+
+	etaDuration := time.Duration(etaSeconds) * time.Second
+	// EMA smooth ETA to prevent jitter from speed fluctuations
+	if d.lastETA > 0 {
+		const etaAlpha = 0.3
+		d.lastETA = time.Duration(etaAlpha*float64(etaDuration) + (1-etaAlpha)*float64(d.lastETA))
+	} else {
+		d.lastETA = etaDuration
+	}
+}
+
 func InitialRootModel(serverPort int, currentVersion string, service service.DownloadService, orchestrator *orchestrator.LifecycleManager, settings *config.Settings, noResume bool, currentCommit ...string) RootModel {
 	initialDarkBackground := true
 	if !IsTestMode {

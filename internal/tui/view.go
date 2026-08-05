@@ -715,23 +715,8 @@ func renderFocusedDetails(d *DownloadModel, w int, spinnerView string) string {
 		} else if d.RateLimitSet {
 			speedStr += " (Limit: \u221E)"
 		}
-		if d.Total > 0 {
-			remaining := d.Total - d.Downloaded
-			etaSeconds := float64(remaining) / d.Speed
-			// Clamp ETA to 24 hours max to prevent bonkers values
-			const maxETASeconds = 24 * 60 * 60
-			if etaSeconds > maxETASeconds || etaSeconds < 0 {
-				etaStr = "\u221e"
-			} else {
-				etaDuration := time.Duration(etaSeconds) * time.Second
-				// EMA smooth ETA to prevent jitter from speed fluctuations
-				if d.lastETA > 0 {
-					const etaAlpha = 0.3
-					etaDuration = time.Duration(etaAlpha*float64(etaDuration) + (1-etaAlpha)*float64(d.lastETA))
-				}
-				d.lastETA = etaDuration
-				etaStr = formatDurationForUI(etaDuration)
-			}
+		if d.lastETA > 0 {
+			etaStr = formatDurationForUI(d.lastETA)
 		} else {
 			etaStr = "\u221e"
 		}

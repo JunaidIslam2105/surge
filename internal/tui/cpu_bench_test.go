@@ -21,12 +21,12 @@ func benchModel(n int) *RootModel {
 	for i := range downloads {
 		id := fmt.Sprintf("dl-%d", i)
 		downloads[i] = &DownloadModel{
-			ID:       id,
-			Filename: fmt.Sprintf("file-%d.iso", i),
-			Total:    1024 * 1024 * 1024, // 1 GiB
+			ID:         id,
+			Filename:   fmt.Sprintf("file-%d.iso", i),
+			Total:      1024 * 1024 * 1024, // 1 GiB
 			Downloaded: int64(i) * 100 * 1024 * 1024,
-			Speed:    float64((i + 1)) * 5 * 1024 * 1024, // 5-40 MiB/s
-			started:  true,
+			Speed:      float64((i + 1)) * 5 * 1024 * 1024, // 5-40 MiB/s
+			started:    true,
 			progress: progress.New(
 				progress.WithSpringOptions(0.5, 0.1),
 				progress.WithColors(colors.ProgressStart(), colors.ProgressEnd()),
@@ -196,7 +196,7 @@ func BenchmarkCPU_FullView_Old(b *testing.B) {
 		m.cachedTotalSpeed = 0   // force stale (simulates no cache)
 		m.graphCacheDirty = true // force graph re-render every time
 		m.cachedGraphBox = ""
-		m.UpdateListItems()      // OLD: called per progress event
+		m.UpdateListItems() // OLD: called per progress event
 		_ = m.View()
 	}
 }
