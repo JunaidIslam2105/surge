@@ -762,7 +762,7 @@ func (m *RootModel) refreshThemeCaches() {
 	if m.graphRenderer != nil {
 		m.graphRenderer.InvalidateCache()
 	}
-	// Rebuild progress bar colors for all existing downloads so the gradient
+	// Rebuild progress bar colors for all existing downloads so the solid pink color
 	// matches the newly loaded palette rather than the one active at creation time.
 	for _, d := range m.downloads {
 		d.progress = progress.New(

@@ -29,7 +29,7 @@ func TestGraphRenderer_Aliasing(t *testing.T) {
 
 func TestGraphRenderer_GradientOutput(t *testing.T) {
 	g := NewGraphRenderer()
-	width, height := 10, 5
+	width, height := 10, 11
 	dataWithValues := []float64{100, 100, 100, 100, 100} // Full height bars
 
 	// The lowest visual row should be height-1 (the baseline), which uses graphColors()[0]
@@ -40,22 +40,31 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 		t.Fatalf("Expected %d lines, got %d", height, len(lines))
 	}
 
-	// Top row (visual index 0) should use graphColors()[len-1]
-	// Bottom row (visual index height-1) should use graphColors()[0]
 	gColors := graphColors()
-	topStyle := lipgloss.NewStyle().Foreground(gColors[len(gColors)-1])
-	bottomStyle := lipgloss.NewStyle().Foreground(gColors[0])
 
-	topExpected := topStyle.Render(strings.Repeat("\u2588", width))
-	// The bottom row is drawn on top of the grid base, but the whole block uses the row style
-	bottomExpected := bottomStyle.Render(strings.Repeat("\u2588", width))
-
-	if lines[0] != topExpected {
-		t.Errorf("Top row rendered incorrectly.\nGot: %q\nWant: %q", lines[0], topExpected)
+	tests := []struct {
+		visualRow int
+		colorIdx  int
+		name      string
+	}{
+		{height - 1, 0, "0% (Bottom)"},
+		{height - 1 - 1, 0, "10% threshold"},
+		{height - 1 - 2, 1, "20% (Above 10%)"},
+		{height - 1 - 3, 1, "30% threshold"},
+		{height - 1 - 4, 2, "40% (Above 30%)"},
+		{height - 1 - 6, 2, "60% threshold"},
+		{height - 1 - 7, 3, "70% (Above 60%)"},
+		{0, 3, "100% (Top)"},
 	}
 
-	if lines[height-1] != bottomExpected {
-		t.Errorf("Bottom row rendered incorrectly.\nGot: %q\nWant: %q", lines[height-1], bottomExpected)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expectedStyle := lipgloss.NewStyle().Foreground(gColors[tt.colorIdx])
+			expectedLine := expectedStyle.Render(strings.Repeat("█", width))
+			if lines[tt.visualRow] != expectedLine {
+				t.Errorf("Row %d rendered incorrectly.\nGot: %q\nWant: %q", tt.visualRow, lines[tt.visualRow], expectedLine)
+			}
+		})
 	}
 }
 

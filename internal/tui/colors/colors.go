@@ -308,7 +308,7 @@ func ProgressEnd() color.Color { return lipgloss.Color(palette().Bright.Magenta)
 func GraphColors() []color.Color {
 	p := palette()
 	if len(p.Graph) > 0 {
-		var g []color.Color
+		g := make([]color.Color, 0, len(p.Graph))
 		for _, c := range p.Graph {
 			g = append(g, lipgloss.Color(c))
 		}
