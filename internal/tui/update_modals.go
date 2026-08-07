@@ -594,6 +594,7 @@ func (m RootModel) updatePurgeConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		err := m.Service.Purge(targetID)
 
 		m.removeDownloadByID(targetID)
+		m.cachedTotalSpeed = m.calcTotalSpeedBps()
 		m.UpdateListItems()
 
 		if err != nil {
@@ -694,6 +695,7 @@ func (m RootModel) deleteDownload(targetID string) (tea.Model, tea.Cmd) {
 		m.removeDownloadByID(targetID)
 	}
 
+	m.cachedTotalSpeed = m.calcTotalSpeedBps()
 	m.UpdateListItems()
 	m, autoCmd := m.refreshAutoShutdown()
 	return m, autoCmd

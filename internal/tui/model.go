@@ -546,6 +546,7 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 	InitAuthToken() // Cache auth token for TUI to avoid per-frame disk I/O
 
 	m.refreshThemeCaches()
+	m.cachedTotalSpeed = m.calcTotalSpeedBps()
 
 	return m
 }

@@ -42,8 +42,9 @@ func benchModel(n int) *RootModel {
 		activeTab:    TabActive,
 		pinnedTab:    -1,
 		SpeedHistory: make([]float64, GraphHistoryPoints),
-		Settings:     settings,
-		list:         NewDownloadList(80, 20),
+		Settings:      settings,
+		list:          NewDownloadList(80, 20),
+		graphRenderer: NewGraphRenderer(),
 		// Seed some history so graph has data to render
 		lastSpeedHistoryUpdate: time.Now().Add(-time.Second),
 	}
@@ -118,19 +119,7 @@ func BenchmarkCPU_SpeedCalc_New(b *testing.B) {
 	}
 }
 
-// --- Benchmark 3: renderGraphBox every View vs cached ---
-
-func BenchmarkCPU_GraphRender_Old(b *testing.B) {
-	m := fullBenchModel(8)
-	stats := m.ComputeViewStats()
-	layout := CalculateDashboardLayout(m.width, m.height)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// OLD: re-rendered on every View() call
-		_ = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
-	}
-}
+// --- Benchmark 3: renderGraphBox highly optimized ---
 
 func BenchmarkCPU_GraphRender_New(b *testing.B) {
 	m := fullBenchModel(8)

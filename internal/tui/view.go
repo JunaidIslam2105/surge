@@ -509,6 +509,8 @@ func (m RootModel) View() tea.View {
 		}
 		if showGraph {
 			graphBox = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
+		} else if layout.GraphHeight > 0 {
+			layout.DetailHeight += layout.GraphHeight
 		}
 		detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, layout.RightWidth, layout.DetailHeight, colors.Gray())
 

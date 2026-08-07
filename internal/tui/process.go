@@ -57,9 +57,6 @@ func (m *RootModel) processProgressMsg(msg types.DownloadEvent) tea.Cmd {
 		cmd = d.progress.SetPercent(percentage)
 	}
 
-	// Cache total speed for this frame so View() doesn't recompute it.
-	m.cachedTotalSpeed = m.calcTotalSpeedBps()
-
 	// Update speed graph history with EMA smoothing for smooth transitions
 	if time.Since(m.lastSpeedHistoryUpdate) >= GraphUpdateInterval {
 		totalSpeed := float64(m.cachedTotalSpeed)

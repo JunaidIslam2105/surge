@@ -49,6 +49,7 @@ func NewGraphRenderer() *GraphRenderer {
 func (g *GraphRenderer) InvalidateCache() {
 	g.baseGrid = nil
 	g.lastRender = ""
+	g.gridStyle = lipgloss.NewStyle().Foreground(colors.Gray())
 }
 
 func (g *GraphRenderer) resize(width, height int) {

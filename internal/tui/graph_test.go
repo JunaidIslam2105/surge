@@ -58,3 +58,33 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 		t.Errorf("Bottom row rendered incorrectly.\nGot: %q\nWant: %q", lines[height-1], bottomExpected)
 	}
 }
+
+func TestGraphRenderer_Downsampling(t *testing.T) {
+	g := NewGraphRenderer()
+
+	data := make([]float64, 120)
+	for i := range data {
+		data[i] = float64(i)
+	}
+
+	out := g.Render(data, 10, 5, 120.0, false)
+	lines := strings.Split(out, "\n")
+
+	topExpected := lipgloss.NewStyle().Foreground(colors.ProgressEnd()).Render("█")
+	if !strings.HasSuffix(lines[0], topExpected) {
+		t.Errorf("Tail data point (119) was lost during downsampling! Expected max height on rightmost column.")
+	}
+}
+
+func TestGraphRenderer_ResizeCache(t *testing.T) {
+	g := NewGraphRenderer()
+
+	data := []float64{10, 20, 30}
+	out1 := g.Render(data, 10, 5, 50.0, false)
+
+	out2 := g.Render(data, 10, 5, 50.0, true)
+
+	if out1 != out2 {
+		t.Errorf("Cached render output during resize does not match initial render!")
+	}
+}

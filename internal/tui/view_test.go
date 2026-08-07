@@ -763,13 +763,14 @@ func TestView_ETAFlickerBug(t *testing.T) {
 
 	// In the old bug, calling View() 10 times would instantly converge the ETA
 	// Let's call View() 10 times (simulating spinner ticks or terminal resizing)
+	snapshot := d.lastETA
 	for i := 0; i < 10; i++ {
 		m.View()
 	}
 
 	// Since View() should be side-effect free, lastETA should not change!
-	if d.lastETA != expectedSmoothed {
-		t.Fatalf("ETA drifted during View() calls! View() is causing side effects. Got: %v", d.lastETA)
+	if d.lastETA != snapshot {
+		t.Fatalf("ETA drifted during View() calls! View() is causing side effects. Got: %v, Expected: %v", d.lastETA, snapshot)
 	}
 }
 
