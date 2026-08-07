@@ -202,15 +202,24 @@ func (m RootModel) handleDownloadEvent(msg types.DownloadEvent) (tea.Model, tea.
 		}
 
 	case types.EventProgress:
+		if d := m.FindDownloadByID(msg.DownloadID); d != nil && !d.done && !d.paused {
+			d.Speed = msg.Speed
+		}
+		m.cachedTotalSpeed = m.calcTotalSpeedBps()
 		cmd := m.processProgressMsg(msg)
 		return m, cmd
 
 	case types.EventBatchProgress:
 		var cmds []tea.Cmd
 		for _, bm := range msg.BatchEvents {
-			cmds = append(cmds, m.processProgressMsg(bm))
+			if d := m.FindDownloadByID(bm.DownloadID); d != nil && !d.done && !d.paused {
+				d.Speed = bm.Speed
+			}
 		}
 		m.cachedTotalSpeed = m.calcTotalSpeedBps()
+		for _, bm := range msg.BatchEvents {
+			cmds = append(cmds, m.processProgressMsg(bm))
+		}
 		return m, tea.Batch(cmds...)
 
 	case types.EventComplete:

@@ -63,9 +63,7 @@ func TestGraphRenderer_Downsampling(t *testing.T) {
 	g := NewGraphRenderer()
 
 	data := make([]float64, 120)
-	for i := range data {
-		data[i] = float64(i)
-	}
+	data[119] = 120.0
 
 	out := g.Render(data, 10, 5, 120.0, false)
 	lines := strings.Split(out, "\n")
@@ -82,7 +80,7 @@ func TestGraphRenderer_ResizeCache(t *testing.T) {
 	data := []float64{10, 20, 30}
 	out1 := g.Render(data, 10, 5, 50.0, false)
 
-	out2 := g.Render(data, 10, 5, 50.0, true)
+	out2 := g.Render([]float64{99, 99}, 20, 10, 100.0, true)
 
 	if out1 != out2 {
 		t.Errorf("Cached render output during resize does not match initial render!")
