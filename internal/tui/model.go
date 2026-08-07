@@ -520,7 +520,7 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		SettingsActiveTab:     0,
 		SettingsSelectedRow:   0,
 		SettingsFocusedPane:   1,
-		SpeedHistory:          make([]float64, GraphHistoryPoints),                          // 60 points of history (30s at 0.5s interval)
+		SpeedHistory:          make([]float64, GraphHistoryPoints),                          // 60 points of history (60s at 1s interval)
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,

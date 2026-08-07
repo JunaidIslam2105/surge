@@ -49,9 +49,9 @@ const (
 	// === Graph Configuration ===
 	GraphAxisWidth      = 10
 	GraphStatsWidth     = 18
-	GraphHeadroom       = 1.1                    // Scale max speed by 110% for visual headroom
-	GraphUpdateInterval = 500 * time.Millisecond // Interval at which the speed history is updated
-	GraphHistoryPoints  = 60                     // 60 points * 0.5s = 30s of history
+	GraphHeadroom       = 1.1                     // Scale max speed by 110% for visual headroom
+	GraphUpdateInterval = 1000 * time.Millisecond // Interval at which the speed history is updated
+	GraphHistoryPoints  = 60                      // 60 points * 1s = 60s of history
 
 	// === Input Dimensions ===
 	InputWidth        = 40
