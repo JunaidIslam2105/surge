@@ -41,6 +41,8 @@ type Palette struct {
 		White   string `toml:"white"`   // unused by accessors (reserved for future use)
 	} `toml:"bright"`
 
+	Graph []string `toml:"graph,omitempty"`
+
 	Dark  *Palette `toml:"dark"`
 	Light *Palette `toml:"light"`
 }
@@ -302,6 +304,25 @@ func ProgressStart() color.Color {
 	return lipgloss.Color(palette().Bright.Red) // Neon Pink
 }
 func ProgressEnd() color.Color { return lipgloss.Color(palette().Bright.Magenta) }
+
+func GraphColors() []color.Color {
+	p := palette()
+	if len(p.Graph) > 0 {
+		var g []color.Color
+		for _, c := range p.Graph {
+			g = append(g, lipgloss.Color(c))
+		}
+		return g
+	}
+
+	// Fallback to brighter vibrant default gradient if not specified in TOML
+	return []color.Color{
+		ThemeColor("#d99ce3", "#700070"), // Bottom
+		ThemeColor("#b658c7", "#9800c0"),
+		ThemeColor("#9934b5", "#c000e8"),
+		ThemeColor("#5b259d", "#ff55ff"), // Top
+	}
+}
 
 type themeColor struct {
 	light string

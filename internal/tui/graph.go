@@ -10,12 +10,7 @@ import (
 )
 
 func graphColors() []color.Color {
-	return []color.Color{
-		colors.ProgressStart(), // Bottom
-		colors.Magenta(),
-		colors.Pink(),
-		colors.ProgressEnd(), // Top
-	}
+	return colors.GraphColors()
 }
 
 var graphBlocks = []string{" ", "\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2588"}
@@ -64,7 +59,28 @@ func (g *GraphRenderer) resize(width, height int) {
 	gradient := graphColors()
 	g.rowStyles = make([]lipgloss.Style, height)
 	for y := 0; y < height; y++ {
-		colorIdx := (y * len(gradient)) / height
+		// Calculate how far up this row is as a percentage (0.0 to 1.0)
+		// y=0 is the bottom row.
+		pct := float64(y) / float64(height)
+		if height > 1 {
+			pct = float64(y) / float64(height-1)
+		}
+
+		// Apply the non-linear thresholds:
+		// 0% - 10%:  index 0
+		// 10% - 30%: index 1
+		// 30% - 60%: index 2
+		// 60% - 100%: index 3
+		var colorIdx int
+		if pct <= 0.10 {
+			colorIdx = 0
+		} else if pct <= 0.30 {
+			colorIdx = 1
+		} else if pct <= 0.60 {
+			colorIdx = 2
+		} else {
+			colorIdx = 3
+		}
 		if colorIdx >= len(gradient) {
 			colorIdx = len(gradient) - 1
 		}

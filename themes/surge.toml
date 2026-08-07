@@ -1,5 +1,11 @@
 [colors]
 name = "Surge"
+graph = [
+    '#e1bee7', # Bottom
+    '#ce93d8',
+    '#ba68c8',
+    '#ab47bc', # Top
+]
 
 [colors.primary]
 background = '#282a36'
