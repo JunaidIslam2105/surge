@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -24,7 +25,11 @@ func TestInitialRangesStayWithinWorkerRequestBudget(t *testing.T) {
 	}
 	downloader := NewConcurrentDownloader("signed-range-budget", nil, nil, runtime)
 
-	var requests atomic.Int64
+	var (
+		requests atomic.Int64
+		mu       sync.Mutex
+		ranges   [][2]int64
+	)
 	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestNumber := requests.Add(1)
 		if requestNumber > workers {
@@ -37,6 +42,10 @@ func TestInitialRangesStayWithinWorkerRequestBudget(t *testing.T) {
 			http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
+
+		mu.Lock()
+		ranges = append(ranges, [2]int64{start, end})
+		mu.Unlock()
 
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
 		w.WriteHeader(http.StatusPartialContent)
@@ -79,6 +88,26 @@ func TestInitialRangesStayWithinWorkerRequestBudget(t *testing.T) {
 
 	if got := requests.Load(); got != workers {
 		t.Fatalf("initial range requests = %d, want %d", got, workers)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ranges) != len(tasks) {
+		t.Fatalf("recorded ranges count %d != tasks count %d", len(ranges), len(tasks))
+	}
+	for i, task := range tasks {
+		wantStart := task.Offset
+		wantEnd := task.Offset + task.Length - 1
+		if ranges[i][0] != wantStart || ranges[i][1] != wantEnd {
+			t.Errorf("task %d: recorded range [%d-%d] doesn't match expected [%d-%d]",
+				i, ranges[i][0], ranges[i][1], wantStart, wantEnd)
+		}
+	}
+	if len(ranges) > 0 {
+		finalEnd := ranges[len(ranges)-1][1]
+		if finalEnd != fileSize-1 {
+			t.Errorf("final range ends at %d, want %d", finalEnd, fileSize-1)
+		}
 	}
 }
 
