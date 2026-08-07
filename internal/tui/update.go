@@ -105,6 +105,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.lastResizeTime = time.Now()
 
 		if m.state == SettingsState {
 			m.normalizeSettingsSelection()

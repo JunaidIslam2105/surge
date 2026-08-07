@@ -160,10 +160,8 @@ type RootModel struct {
 	SpeedHistory           []float64 // Stores the last ~60 ticks of speed data
 	lastSpeedHistoryUpdate time.Time // Last time SpeedHistory was updated (for 0.5s sampling)
 	cachedTotalSpeed       int64     // Cached total speed (bytes/s), updated once per progress batch
-	graphCacheDirty        bool      // True when SpeedHistory changed and graph needs re-render
-	cachedGraphBox         string    // Cached rendered graph box, only rebuilt when dirty
-	cachedGraphWidth       int       // Width used for the cached graph
-	cachedGraphHeight      int       // Height used for the cached graph
+	graphRenderer          *GraphRenderer
+	lastResizeTime         time.Time
 
 	// Notification log system
 	logViewport viewport.Model // Scrollable log viewport
@@ -520,7 +518,8 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		SettingsActiveTab:     0,
 		SettingsSelectedRow:   0,
 		SettingsFocusedPane:   1,
-		SpeedHistory:          make([]float64, GraphHistoryPoints),                          // 60 points of history (60s at 1s interval)
+		SpeedHistory:          make([]float64, GraphHistoryPoints), // 60 points of history (60s at 1s interval)
+		graphRenderer:         NewGraphRenderer(),
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,
@@ -755,6 +754,9 @@ func (m *RootModel) refreshThemeCaches() {
 	applyListTheme(&m.list)
 	applyFilepickerTheme(&m.filepicker)
 	m.logoCache = ""
+	if m.graphRenderer != nil {
+		m.graphRenderer.InvalidateCache()
+	}
 	// Rebuild progress bar colors for all existing downloads so the gradient
 	// matches the newly loaded palette rather than the one active at creation time.
 	for _, d := range m.downloads {
@@ -781,4 +783,8 @@ func applyFilepickerTheme(fp *filepicker.Model) {
 	fp.Styles.DisabledSelected = lipgloss.NewStyle().Foreground(colors.LightGray())
 	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(colors.Gray()).Width(7).Align(lipgloss.Right)
 	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(colors.Gray()).Padding(0, 2)
+}
+
+func (m RootModel) isResizing() bool {
+	return time.Since(m.lastResizeTime) < 200*time.Millisecond
 }

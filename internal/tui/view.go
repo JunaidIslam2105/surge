@@ -508,16 +508,7 @@ func (m RootModel) View() tea.View {
 			showGraph = config.Resolve[bool](m.Settings.General.ShowSpeedGraph)
 		}
 		if showGraph {
-			// Only re-render when data or dimensions changed
-			if m.graphCacheDirty || m.cachedGraphWidth != layout.RightWidth || m.cachedGraphHeight != layout.GraphHeight || m.cachedGraphBox == "" {
-				graphBox = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
-				m.cachedGraphBox = graphBox
-				m.cachedGraphWidth = layout.RightWidth
-				m.cachedGraphHeight = layout.GraphHeight
-				m.graphCacheDirty = false
-			} else {
-				graphBox = m.cachedGraphBox
-			}
+			graphBox = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
 		}
 		detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, layout.RightWidth, layout.DetailHeight, colors.Gray())
 

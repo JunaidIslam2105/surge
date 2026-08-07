@@ -139,14 +139,8 @@ func BenchmarkCPU_GraphRender_New(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// NEW: only re-render when dirty or dimensions changed
-		if m.graphCacheDirty || m.cachedGraphWidth != layout.RightWidth || m.cachedGraphHeight != layout.GraphHeight || m.cachedGraphBox == "" {
-			m.cachedGraphBox = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
-			m.cachedGraphWidth = layout.RightWidth
-			m.cachedGraphHeight = layout.GraphHeight
-			m.graphCacheDirty = false
-		}
-		_ = m.cachedGraphBox
+		// NEW: renderGraphBox uses highly optimized GraphRenderer with RLE
+		_ = m.renderGraphBox(layout.RightWidth, layout.GraphHeight, stats)
 	}
 }
 
@@ -193,10 +187,8 @@ func BenchmarkCPU_FullView_Old(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Simulate old per-event overhead before each View
-		m.cachedTotalSpeed = 0   // force stale (simulates no cache)
-		m.graphCacheDirty = true // force graph re-render every time
-		m.cachedGraphBox = ""
-		m.UpdateListItems() // OLD: called per progress event
+		m.cachedTotalSpeed = 0 // force stale (simulates no cache)
+		m.UpdateListItems()    // OLD: called per progress event
 		_ = m.View()
 	}
 }

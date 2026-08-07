@@ -78,7 +78,6 @@ func (m *RootModel) processProgressMsg(msg types.DownloadEvent) tea.Cmd {
 			m.SpeedHistory = append(m.SpeedHistory[1:], smoothed)
 		}
 		m.lastSpeedHistoryUpdate = time.Now()
-		m.graphCacheDirty = true
 	}
 
 	// ponytail: list items hold *DownloadModel pointers — speed/progress are
