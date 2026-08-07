@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/SurgeDM/Surge/internal/tui/colors"
 )
 
 func TestGraphRenderer_Aliasing(t *testing.T) {
@@ -33,7 +32,7 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 	width, height := 10, 5
 	dataWithValues := []float64{100, 100, 100, 100, 100} // Full height bars
 
-	// The lowest visual row should be height-1 (the baseline), which uses colors.ProgressStart()
+	// The lowest visual row should be height-1 (the baseline), which uses graphColors()[0]
 	out := g.Render(dataWithValues, width, height, 100.0, false)
 
 	lines := strings.Split(out, "\n")
@@ -41,10 +40,11 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 		t.Fatalf("Expected %d lines, got %d", height, len(lines))
 	}
 
-	// Top row (visual index 0) should use ProgressEnd
-	// Bottom row (visual index height-1) should use ProgressStart
-	topStyle := lipgloss.NewStyle().Foreground(colors.ProgressEnd())
-	bottomStyle := lipgloss.NewStyle().Foreground(colors.ProgressStart())
+	// Top row (visual index 0) should use graphColors()[len-1]
+	// Bottom row (visual index height-1) should use graphColors()[0]
+	gColors := graphColors()
+	topStyle := lipgloss.NewStyle().Foreground(gColors[len(gColors)-1])
+	bottomStyle := lipgloss.NewStyle().Foreground(gColors[0])
 
 	topExpected := topStyle.Render(strings.Repeat("\u2588", width))
 	// The bottom row is drawn on top of the grid base, but the whole block uses the row style
@@ -68,7 +68,8 @@ func TestGraphRenderer_Downsampling(t *testing.T) {
 	out := g.Render(data, 10, 5, 120.0, false)
 	lines := strings.Split(out, "\n")
 
-	topExpected := lipgloss.NewStyle().Foreground(colors.ProgressEnd()).Render("█")
+	gColors := graphColors()
+	topExpected := lipgloss.NewStyle().Foreground(gColors[len(gColors)-1]).Render("█")
 	if !strings.HasSuffix(lines[0], topExpected) {
 		t.Errorf("Tail data point (119) was lost during downsampling! Expected max height on rightmost column.")
 	}

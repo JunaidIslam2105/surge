@@ -29,19 +29,19 @@ func benchModel(n int) *RootModel {
 			started:    true,
 			progress: progress.New(
 				progress.WithSpringOptions(0.5, 0.1),
-				progress.WithColors(colors.ProgressStart(), colors.ProgressEnd()),
+				progress.WithColors(colors.Pink(), colors.Pink()),
 				progress.WithScaled(true),
 			),
 		}
 	}
 
 	m := &RootModel{
-		downloads:    downloads,
-		width:        120,
-		height:       35,
-		activeTab:    TabActive,
-		pinnedTab:    -1,
-		SpeedHistory: make([]float64, GraphHistoryPoints),
+		downloads:     downloads,
+		width:         120,
+		height:        35,
+		activeTab:     TabActive,
+		pinnedTab:     -1,
+		SpeedHistory:  make([]float64, GraphHistoryPoints),
 		Settings:      settings,
 		list:          NewDownloadList(80, 20),
 		graphRenderer: NewGraphRenderer(),
@@ -156,7 +156,7 @@ func fullBenchModel(n int) RootModel {
 			started:    true,
 			progress: progress.New(
 				progress.WithSpringOptions(0.5, 0.1),
-				progress.WithColors(colors.ProgressStart(), colors.ProgressEnd()),
+				progress.WithColors(colors.Pink(), colors.Pink()),
 				progress.WithScaled(true),
 			),
 		}
