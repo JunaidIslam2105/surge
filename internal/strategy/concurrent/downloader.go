@@ -29,16 +29,20 @@ type ConcurrentDownloader struct {
 	State        *progress.DownloadProgress // Shared state for TUI polling
 	activeTasks  map[int]*ActiveTask
 	activeMu     sync.Mutex
-	URL          string // For pause/resume
-	DestPath     string // For pause/resume
-	Runtime      *types.RuntimeConfig
-	Limiter      types.ByteLimiter
-	RateLimitBps int64
-	RateLimitSet bool
-	TotalSize    int64
-	bufPool      sync.Pool
-	Headers      map[string]string // Custom HTTP headers from browser (cookies, auth, etc.)
-	hostLimiter  *transport.HostRateLimiter
+	// abandonedRemaining holds ENOSPC in-flight residuals captured off the
+	// live queue (no Push during the storm window). saveStateSnapshot unions
+	// these with active+queue drains so Resume does not lose the failing range.
+	abandonedRemaining []types.Task
+	URL                string // For pause/resume
+	DestPath           string // For pause/resume
+	Runtime            *types.RuntimeConfig
+	Limiter            types.ByteLimiter
+	RateLimitBps       int64
+	RateLimitSet       bool
+	TotalSize          int64
+	bufPool            sync.Pool
+	Headers            map[string]string // Custom HTTP headers from browser (cookies, auth, etc.)
+	hostLimiter        *transport.HostRateLimiter
 }
 
 // NewConcurrentDownloader creates a new concurrent downloader with all required parameters
@@ -574,7 +578,9 @@ func (d *ConcurrentDownloader) handlePause(destPath string, fileSize int64, queu
 }
 
 func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64, queue *TaskQueue, candidateMirrors []string, emitPauseEvent bool) error {
-	// 1. Collect active tasks as remaining work FIRST
+	// 1. Collect active tasks as remaining work FIRST, then drain abandoned
+	// residuals (off-queue stashes from terminal-error workers), then drain
+	// the live queue.
 	var activeRemaining []types.Task
 	d.activeMu.Lock()
 	for _, active := range d.activeTasks {
@@ -582,11 +588,12 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 			activeRemaining = append(activeRemaining, *remaining)
 		}
 	}
+	abandoned := d.abandonedRemaining
+	d.abandonedRemaining = nil
 	d.activeMu.Unlock()
 
 	// 2. Collect remaining tasks from queue
-	allTasks := append([]types.Task(nil), activeRemaining...)
-	allTasks = append(allTasks, queue.DrainRemaining()...)
+	allTasks := append(append(append([]types.Task(nil), activeRemaining...), abandoned...), queue.DrainRemaining()...)
 
 	var remainingTasks []types.Task
 	var remainingBytes int64

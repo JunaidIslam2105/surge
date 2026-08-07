@@ -114,8 +114,23 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			// Disk full: fail immediately — no in-place retry, no mirror rotation,
 			// no residual requeue. Stricter than permanent HTTP.
+			// Stash RemainingTask off-queue so error-path saveStateSnapshot can
+			// still persist the unfinished range after peers are cancelled.
 			if types.IsInsufficientDiskSpace(lastErr) {
+				var stash *types.Task
+				if remaining := activeTask.RemainingTask(); remaining != nil {
+					originalEnd := task.Offset + task.Length
+					if remaining.Offset+remaining.Length > originalEnd {
+						remaining.Length = originalEnd - remaining.Offset
+					}
+					if remaining.Length > 0 {
+						stash = remaining
+					}
+				}
 				d.activeMu.Lock()
+				if stash != nil {
+					d.abandonedRemaining = append(d.abandonedRemaining, *stash)
+				}
 				delete(d.activeTasks, id)
 				d.activeMu.Unlock()
 				if d.State != nil {
