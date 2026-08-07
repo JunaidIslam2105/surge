@@ -165,6 +165,9 @@ func (m RootModel) handleDownloadEvent(msg types.DownloadEvent) (tea.Model, tea.
 			d.StartTime = time.Now()
 			d.paused = false
 			d.pausing = false
+			d.hasEtaSpeed = false
+			d.etaSpeed = 0
+			d.lastETA = 0
 			var progressCmd tea.Cmd
 			if d.Total > 0 {
 				progressCmd = d.progress.SetPercent(0)
@@ -269,6 +272,9 @@ func (m RootModel) handleDownloadEvent(msg types.DownloadEvent) (tea.Model, tea.
 			d.paused = false
 			d.pausing = false
 			d.resuming = true
+			d.hasEtaSpeed = false
+			d.etaSpeed = 0
+			d.lastETA = 0
 			m.addLogEntry(LogStyleStarted.Render("\u25b6 Resumed: " + d.Filename))
 		}
 		m.UpdateListItems()

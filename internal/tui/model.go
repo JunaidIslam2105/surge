@@ -97,9 +97,11 @@ type DownloadModel struct {
 	RateLimit     int64 // Speed limit in bytes/sec
 	RateLimitSet  bool  // Whether RateLimit is an explicit per-download override
 
-	StartTime time.Time
-	Elapsed   time.Duration
-	lastETA   time.Duration // EMA-smoothed ETA for UI stability
+	StartTime   time.Time
+	Elapsed     time.Duration
+	etaSpeed    float64       // Heavily smoothed speed strictly for stable ETA calculation
+	hasEtaSpeed bool          // True if etaSpeed has been seeded
+	lastETA     time.Duration // Last computed ETA for UI stability
 
 	progress progress.Model
 
@@ -279,22 +281,24 @@ func (d *DownloadModel) UpdateETA() {
 	}
 
 	remaining := d.Total - d.Downloaded
-	etaSeconds := float64(remaining) / d.Speed
+
+	if !d.hasEtaSpeed {
+		d.etaSpeed = d.Speed
+		d.hasEtaSpeed = true
+	} else {
+		const etaAlpha = 0.02
+		d.etaSpeed = etaAlpha*d.Speed + (1-etaAlpha)*d.etaSpeed
+	}
+
+	etaSeconds := float64(remaining) / d.etaSpeed
 
 	// Clamp ETA to 24 hours max to prevent bonkers values
 	const maxETASeconds = 24 * 60 * 60
 	if etaSeconds > maxETASeconds || etaSeconds < 0 {
-		return // Preserve EMA history
+		return // Keep previous displayed ETA; etaSpeed itself is already updated above
 	}
 
-	etaDuration := time.Duration(etaSeconds) * time.Second
-	// EMA smooth ETA to prevent jitter from speed fluctuations
-	if d.lastETA > 0 {
-		const etaAlpha = 0.3
-		d.lastETA = time.Duration(etaAlpha*float64(etaDuration) + (1-etaAlpha)*float64(d.lastETA))
-	} else {
-		d.lastETA = etaDuration
-	}
+	d.lastETA = time.Duration(etaSeconds * float64(time.Second))
 }
 
 func InitialRootModel(serverPort int, currentVersion string, service service.DownloadService, orchestrator *orchestrator.LifecycleManager, settings *config.Settings, noResume bool, currentCommit ...string) RootModel {

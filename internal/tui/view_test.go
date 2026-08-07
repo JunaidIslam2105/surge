@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/SurgeDM/Surge/internal/tui/colors"
+	"github.com/SurgeDM/Surge/internal/types"
 )
 
 var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -746,10 +747,17 @@ func TestView_ETAFlickerBug(t *testing.T) {
 	// Process ONE progress message (as it would happen every 150ms in reality)
 	d.UpdateETA()
 
-	// With EMA alpha = 0.3, the new ETA should be:
-	// 0.3 * 500s + 0.7 * 50s = 150s + 35s = 185s
-	expectedSmoothed := 185 * time.Second
-	if d.lastETA != expectedSmoothed {
+	// With EMA alpha = 0.02 on etaSpeed:
+	// d.etaSpeed = 0.02 * 1MB/s + 0.98 * 10MB/s = 9.82 MB/s
+	// ETA = 500MB / 9.82 MB/s = 50.916496945s
+	expectedSmoothed := time.Duration(50.916496945 * float64(time.Second))
+
+	// Use a small tolerance for floating point imprecision
+	diff := d.lastETA - expectedSmoothed
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > time.Millisecond {
 		t.Fatalf("expected ETA to be smoothed to %v, got %v", expectedSmoothed, d.lastETA)
 	}
 
@@ -762,5 +770,39 @@ func TestView_ETAFlickerBug(t *testing.T) {
 	// Since View() should be side-effect free, lastETA should not change!
 	if d.lastETA != expectedSmoothed {
 		t.Fatalf("ETA drifted during View() calls! View() is causing side effects. Got: %v", d.lastETA)
+	}
+}
+
+func TestUpdateETA_ResetOnResume(t *testing.T) {
+	m := InitialRootModel(1701, "1.0.0", nil, orchestrator.NewLifecycleManager(nil, nil, nil), nil, false)
+
+	d := &DownloadModel{
+		ID:         "resume-test",
+		Filename:   "test.iso",
+		Total:      1000 * 1024 * 1024,
+		Downloaded: 500 * 1024 * 1024,
+		Speed:      10 * 1024 * 1024,
+	}
+	m.downloads = []*DownloadModel{d}
+
+	// 1. Initial speed
+	d.UpdateETA()
+	if !d.hasEtaSpeed || d.etaSpeed != 10*1024*1024 {
+		t.Fatalf("expected ETA speed to seed correctly")
+	}
+
+	// 2. Simulate pause and resume
+	m.updateEvents(types.DownloadEvent{Type: types.EventPaused, DownloadID: d.ID})
+	m.updateEvents(types.DownloadEvent{Type: types.EventResumed, DownloadID: d.ID})
+
+	if d.hasEtaSpeed || d.etaSpeed != 0 || d.lastETA != 0 {
+		t.Fatalf("expected EventResumed to wipe ETA state, got has=%v, speed=%v, eta=%v", d.hasEtaSpeed, d.etaSpeed, d.lastETA)
+	}
+
+	// 3. New speed on resume
+	d.Speed = 5 * 1024 * 1024
+	d.UpdateETA()
+	if d.etaSpeed != 5*1024*1024 {
+		t.Fatalf("expected ETA speed to re-seed entirely at new speed, got %v", d.etaSpeed)
 	}
 }
