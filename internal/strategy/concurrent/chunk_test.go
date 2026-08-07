@@ -1,6 +1,7 @@
 package concurrent
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/SurgeDM/Surge/internal/types"
@@ -190,4 +191,51 @@ func TestCalculateChunkSize_EdgeCases(t *testing.T) {
 		got := dSmall.calculateChunkSize(1*utils.KiB, 1)
 		assert.Equal(t, int64(types.AlignSize), got, "Should be bumped to AlignSize")
 	})
+}
+
+func TestCreateInitialTasks_NeverExceedsNumConns(t *testing.T) {
+	runtime := &types.RuntimeConfig{
+		MinChunkSize: 1 * utils.MiB,
+	}
+	d := &ConcurrentDownloader{
+		Runtime: runtime,
+	}
+
+	// Matrix of file sizes and numConns to test
+	fileSizes := []int64{
+		1,                               // tiny
+		types.AlignSize - 1,             // almost aligned
+		types.AlignSize,                 // perfectly aligned
+		1 * utils.MiB,                   // small
+		1*utils.MiB + 1,                 // slight remainder
+		10*utils.MiB + 12345,            // medium remainder
+		100 * utils.MiB,                 // large aligned
+		100*utils.MiB + types.AlignSize, // large aligned + 1 alignment block
+		500*utils.MiB - 1,               // large unaligned
+	}
+
+	conns := []int{1, 2, 3, 4, 7, 8, 15, 16, 32, 64}
+
+	for _, size := range fileSizes {
+		for _, numConns := range conns {
+			name := fmt.Sprintf("Size_%d_Conns_%d", size, numConns)
+			t.Run(name, func(t *testing.T) {
+				chunkSize := d.calculateChunkSize(size, numConns)
+				tasks := createInitialTasks(size, chunkSize, numConns)
+
+				// STRICT PROPERTY 1: Task count must NEVER exceed numConns
+				if len(tasks) > numConns {
+					t.Fatalf("Strict violation: generated %d tasks, which exceeds numConns limit %d", len(tasks), numConns)
+				}
+				assert.LessOrEqual(t, len(tasks), numConns, "Task count must not exceed numConns")
+
+				// STRICT PROPERTY 2: Sum of tasks must EXACTLY equal total file size
+				var total int64
+				for _, task := range tasks {
+					total += task.Length
+				}
+				assert.Equal(t, size, total, "Total lengths of all tasks must equal file size (no data loss)")
+			})
+		}
+	}
 }
