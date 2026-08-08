@@ -933,7 +933,8 @@ func (m RootModel) viewPurgeConfirm() string {
 
 	filenameStyled := lipgloss.NewStyle().Foreground(colors.White()).Bold(true).Render(filename)
 	detailStyle := lipgloss.NewStyle().Foreground(colors.Magenta()).Bold(true)
-	detailStr := detailStyle.Render("File: ") + filenameStyled + detailStyle.Render("\nThis will also remove the downloaded file(s) from disk.")
+	warnStyle := lipgloss.NewStyle().Foreground(colors.Red()).Bold(true)
+	detailStr := detailStyle.Render("File: ") + filenameStyled + "\n" + warnStyle.Render("This will also remove the downloaded file(s) from disk.")
 
 	modal := components.ConfirmationModal{
 		Title:            "Purge Download",
@@ -972,7 +973,8 @@ func (m RootModel) viewRemoveConfirm() string {
 
 	filenameStyled := lipgloss.NewStyle().Foreground(colors.White()).Bold(true).Render(filename)
 	detailStyle := lipgloss.NewStyle().Foreground(colors.Magenta()).Bold(true)
-	detailStr := detailStyle.Render("File: ") + filenameStyled + detailStyle.Render("\nThis paused or active download may lose progress data.")
+	warnStyle := lipgloss.NewStyle().Foreground(colors.Red()).Bold(true)
+	detailStr := detailStyle.Render("File: ") + filenameStyled + "\n" + warnStyle.Render("This paused or active download may lose progress data.")
 
 	modal := components.ConfirmationModal{
 		Title:            "Remove Download",
