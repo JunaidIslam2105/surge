@@ -95,15 +95,15 @@ func (m RootModel) View() tea.View {
 	if m.state == InputState {
 		var activeInputs []textinput.Model
 		var activeLabels []string
-		
+
 		activeInputs = append(activeInputs, m.inputs[0])
 		activeLabels = append(activeLabels, "URL:")
-		
+
 		if !m.hideMirrors {
 			activeInputs = append(activeInputs, m.inputs[1])
 			activeLabels = append(activeLabels, "Mirrors:")
 		}
-		
+
 		activeInputs = append(activeInputs, m.inputs[2], m.inputs[3])
 		activeLabels = append(activeLabels, "Path:", "Filename:")
 
@@ -111,7 +111,7 @@ func (m RootModel) View() tea.View {
 		if m.hideMirrors && m.focusedInput > 0 {
 			mappedFocus = m.focusedInput - 1
 		}
-		
+
 		browseHint := 2
 		if m.hideMirrors {
 			browseHint = 1

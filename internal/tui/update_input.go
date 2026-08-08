@@ -111,7 +111,7 @@ func (m RootModel) submitInputForm() (tea.Model, tea.Cmd) {
 
 	// Check if pending headers were populated from cURL parser
 	headers := m.pendingHeaders
-	
+
 	if d := m.checkForDuplicate(url); d != nil {
 		m.pendingURL = url
 		m.pendingMirrors = mirrors

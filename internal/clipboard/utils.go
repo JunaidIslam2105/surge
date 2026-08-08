@@ -28,16 +28,18 @@ func ParseCurl(text string) (string, map[string]string) {
 		return "", headers
 	}
 
-	urlRe := regexp.MustCompile(`(?:^|\s)['"]?(https?://[^'"\s]+)['"]?`)
-	if match := urlRe.FindStringSubmatch(text); len(match) > 1 {
-		headerRe := regexp.MustCompile(`(?:-H|--header)\s+(?:'([^:]+):\s*([^']+)'|"([^:]+):\s*([^"]+)")`)
-		for _, m := range headerRe.FindAllStringSubmatch(text, -1) {
-			if m[1] != "" {
-				headers[strings.TrimSpace(m[1])] = strings.TrimSpace(m[2])
-			} else if m[3] != "" {
-				headers[strings.TrimSpace(m[3])] = strings.TrimSpace(m[4])
-			}
+	headerRe := regexp.MustCompile(`(?:-H|--header)\s+(?:'([^:]+):\s*([^']+)'|"([^:]+):\s*([^"]+)")`)
+	for _, m := range headerRe.FindAllStringSubmatch(text, -1) {
+		if m[1] != "" {
+			headers[strings.TrimSpace(m[1])] = strings.TrimSpace(m[2])
+		} else if m[3] != "" {
+			headers[strings.TrimSpace(m[3])] = strings.TrimSpace(m[4])
 		}
+	}
+
+	textWithoutHeaders := headerRe.ReplaceAllString(text, "")
+	urlRe := regexp.MustCompile(`(?:^|\s)['"]?(https?://[^'"\s]+)['"]?`)
+	if match := urlRe.FindStringSubmatch(textWithoutHeaders); len(match) > 1 {
 		return match[1], headers
 	}
 	return "", headers

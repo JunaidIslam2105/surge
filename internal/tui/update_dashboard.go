@@ -112,6 +112,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.inputs[3].Blur()
 		m.inputs[1].SetValue("") // Clear mirrors
 		m.inputs[1].Blur()
+		m.pendingHeaders = nil // clear stale headers
 
 		url := ""
 		if config.Resolve[bool](m.Settings.General.ClipboardMonitor) {
@@ -408,11 +409,12 @@ func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
 		if url == "" {
 			return m, nil
 		}
+		m.pendingHeaders = nil // clear stale headers
 		m.state = InputState
 		m.hideMirrors = false
 		m.focusedInput = 0
 		m.inputs[0].Focus()
-		
+
 		defaultDir := config.Resolve[string](m.Settings.General.DefaultDownloadDir)
 		if defaultDir == "" {
 			defaultDir = "."
@@ -430,13 +432,13 @@ func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
 		if defaultDir == "" {
 			defaultDir = "."
 		}
-		
+
 		m.pendingHeaders = headers
 		m.state = InputState
 		m.hideMirrors = true
 		m.focusedInput = 0
 		m.inputs[0].Focus()
-		
+
 		m.inputs[2].SetValue(defaultDir)
 		m.inputs[2].Blur()
 		m.inputs[3].SetValue("")
@@ -444,7 +446,7 @@ func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
 		m.inputs[1].SetValue("") // Clear mirrors
 		m.inputs[1].Blur()
 		m.inputs[0].SetValue(url)
-		
+
 		return m, nil
 	}
 }

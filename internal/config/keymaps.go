@@ -36,30 +36,30 @@ type KeyMap struct {
 
 // DashboardKeyMap defines keybindings for the main dashboard
 type DashboardKeyMap struct {
-	TabQueued      key.Binding
-	TabActive      key.Binding
-	TabDone        key.Binding
-	NextTab        key.Binding
-	PrevTab        key.Binding
-	Add            key.Binding
+	TabQueued        key.Binding
+	TabActive        key.Binding
+	TabDone          key.Binding
+	NextTab          key.Binding
+	PrevTab          key.Binding
+	Add              key.Binding
 	AddFromClipboard key.Binding
-	BatchImport    key.Binding
-	Search         key.Binding
-	Pause          key.Binding
-	Refresh        key.Binding
-	Delete         key.Binding
-	PurgeFile      key.Binding
-	Settings       key.Binding
-	SpeedLimits    key.Binding
-	Log            key.Binding
-	ToggleHelp     key.Binding
-	ReportBug      key.Binding
-	OpenFile       key.Binding
-	OpenFolder     key.Binding
-	Quit           key.Binding
-	ForceQuit      key.Binding
-	CategoryFilter key.Binding
-	PinTab         key.Binding
+	BatchImport      key.Binding
+	Search           key.Binding
+	Pause            key.Binding
+	Refresh          key.Binding
+	Delete           key.Binding
+	PurgeFile        key.Binding
+	Settings         key.Binding
+	SpeedLimits      key.Binding
+	Log              key.Binding
+	ToggleHelp       key.Binding
+	ReportBug        key.Binding
+	OpenFile         key.Binding
+	OpenFolder       key.Binding
+	Quit             key.Binding
+	ForceQuit        key.Binding
+	CategoryFilter   key.Binding
+	PinTab           key.Binding
 	// Navigation
 	Up   key.Binding
 	Down key.Binding
