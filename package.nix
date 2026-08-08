@@ -8,7 +8,7 @@ buildGoModule {
   pname = "surge";
   inherit version src;
 
-  vendorHash = "sha256-tXJUr/URQZC+tNq+HOIuinaqbeElJMPWQH/MG1rY80I=";
+  vendorHash = "sha256-uZrSOcwfXJ9LwuHi+0wIjPBIsAdULU60GbWrJNV923s=";
 
   subPackages = ["."];
 
