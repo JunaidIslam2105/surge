@@ -42,6 +42,7 @@ type DashboardKeyMap struct {
 	NextTab        key.Binding
 	PrevTab        key.Binding
 	Add            key.Binding
+	AddFromClipboard key.Binding
 	BatchImport    key.Binding
 	Search         key.Binding
 	Pause          key.Binding
@@ -416,6 +417,10 @@ func DefaultKeyMap() *KeyMap {
 				key.WithKeys("a"),
 				key.WithHelp("a", "add download"),
 			),
+			AddFromClipboard: key.NewBinding(
+				key.WithKeys("A"),
+				key.WithHelp("A", "add from clipboard"),
+			),
 			BatchImport: key.NewBinding(
 				key.WithKeys("b", "B"),
 				key.WithHelp("b", "batch import"),
@@ -763,7 +768,7 @@ func (k DashboardKeyMap) ShortHelp() []key.Binding {
 func (k DashboardKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.TabQueued, k.TabActive, k.TabDone, k.NextTab, k.PrevTab},
-		{k.Add, k.BatchImport, k.Search, k.CategoryFilter, k.Pause, k.Refresh, k.Delete, k.PurgeFile, k.Settings, k.SpeedLimits, k.PinTab},
+		{k.Add, k.AddFromClipboard, k.BatchImport, k.Search, k.CategoryFilter, k.Pause, k.Refresh, k.Delete, k.PurgeFile, k.Settings, k.SpeedLimits, k.PinTab},
 		{k.Log, k.OpenFile, k.OpenFolder, k.ReportBug, k.Quit},
 	}
 }

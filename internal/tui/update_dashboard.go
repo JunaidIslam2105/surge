@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -115,6 +117,15 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			url = clipboard.ReadURL()
 		}
 		m.inputs[0].SetValue(url)
+		return m, nil
+	}
+
+	// Add from clipboard
+	if key.Matches(msg, m.keys.Dashboard.AddFromClipboard) {
+		text, err := clipboard.Read()
+		if err == nil && text != "" {
+			return m.handleClipboardPaste(text)
+		}
 		return m, nil
 	}
 
@@ -383,4 +394,58 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
+	url, headers := clipboard.ParseCurl(text)
+	if url == "" {
+		if strings.HasPrefix(strings.TrimSpace(text), "http") {
+			url = strings.TrimSpace(text)
+		} else {
+			url = clipboard.ReadURL()
+		}
+		if url == "" {
+			return m, nil
+		}
+		m.state = InputState
+		m.focusedInput = 0
+		m.inputs[0].Focus()
+		
+		defaultDir := config.Resolve[string](m.Settings.General.DefaultDownloadDir)
+		if defaultDir == "" {
+			defaultDir = "."
+		}
+		m.inputs[2].SetValue(defaultDir)
+		m.inputs[2].Blur()
+		m.inputs[3].SetValue("")
+		m.inputs[3].Blur()
+		m.inputs[1].SetValue("") // Clear mirrors
+		m.inputs[1].Blur()
+		m.inputs[0].SetValue(url)
+		return m, nil
+	} else {
+		defaultDir := config.Resolve[string](m.Settings.General.DefaultDownloadDir)
+		isDefaultPath := false
+		if defaultDir == "" {
+			defaultDir = "."
+			isDefaultPath = true
+		} else {
+			isDefaultPath = m.isDefaultDownloadPath(defaultDir)
+		}
+		
+		if d := m.checkForDuplicate(url); d != nil {
+			m.pendingURL = url
+			m.pendingMirrors = nil
+			m.pendingHeaders = headers
+			m.pendingPath = defaultDir
+			m.pendingIsDefaultPath = isDefaultPath
+			m.pendingFilename = ""
+			m.pendingWorkers = 0
+			m.pendingMinChunkSize = 0
+			m.duplicateInfo = d.Filename
+			m.state = DuplicateWarningState
+			return m, nil
+		}
+		return m.startDownload(url, nil, headers, defaultDir, isDefaultPath, "", "", 0, 0)
+	}
 }

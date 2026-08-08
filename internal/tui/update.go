@@ -13,12 +13,15 @@ import (
 )
 
 func (m RootModel) updatePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
-	if m.state == DashboardState && m.searchActive {
-		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		m.searchQuery = m.searchInput.Value()
-		m.UpdateListItems()
-		return m, cmd
+	if m.state == DashboardState {
+		if m.searchActive {
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.searchQuery = m.searchInput.Value()
+			m.UpdateListItems()
+			return m, cmd
+		}
+		return m.handleClipboardPaste(msg.String())
 	}
 
 	switch m.state {
