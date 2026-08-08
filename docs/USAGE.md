@@ -1,6 +1,18 @@
-# CLI Usage
+# Usage Guide
 
-Surge provides a robust Command Line Interface for automation and scripting. For configuration options, see [SETTINGS.md](SETTINGS.md).
+Surge has both a robust CLI and a fast Interactive TUI. For configuration options, see [SETTINGS.md](SETTINGS.md).
+
+## TUI Usage
+
+In the interactive TUI (launched simply via `surge`), you can manage your downloads through keyboard shortcuts. You can view all shortcuts in-app by pressing `?` (Help) or `Shift+?`.
+
+### Adding Downloads from Clipboard
+
+While in the TUI Dashboard, you can rapidly add downloads using your clipboard:
+- Press `a` to manually type or paste a URL.
+- Press `Shift+A` (or use your terminal's paste shortcut `Ctrl+V`/`Cmd+V`) to automatically parse a copied browser **cURL** command (from "Copy as cURL"). Surge will extract the URL and all headers (like cookies and user-agents) and bypass the Mirrors field.
+
+## CLI Commands
 
 ## Command Table
 
