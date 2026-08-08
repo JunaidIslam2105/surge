@@ -10,7 +10,7 @@ In the interactive TUI (launched simply via `surge`), you can manage your downlo
 
 While in the TUI Dashboard, you can rapidly add downloads using your clipboard:
 - Press `a` to manually type or paste a URL.
-- Press `Shift+A` (or use your terminal's paste shortcut `Ctrl+V`/`Cmd+V`) to automatically parse a copied browser **cURL** command (from "Copy as cURL"). Surge will extract the URL and all headers (like cookies and user-agents) and bypass the Mirrors field.
+- Press `Shift+A` to directly attempt to parse a copied browser **cURL** command (from "Copy as cURL"). Surge will extract the URL and all headers (like cookies and user-agents).
 
 ## CLI Commands
 
