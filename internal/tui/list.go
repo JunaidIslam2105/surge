@@ -298,6 +298,16 @@ func (m *RootModel) UpdateListItems() {
 		}
 	}
 
+	// If the previously selected item was removed, ensure the cursor doesn't fall out of bounds
+	if !found && len(items) > 0 {
+		if m.list.Index() >= len(items) {
+			m.list.Select(len(items) - 1)
+		}
+		if m.list.Index() < 0 {
+			m.list.Select(0)
+		}
+	}
+
 	// Reset forced selection
 	m.SelectedDownloadID = ""
 }
