@@ -127,6 +127,7 @@ type RootModel struct {
 	pinnedTab      int // -1=None, 0=Queued, 1=Active, 2=Done
 	inputs         []textinput.Model
 	focusedInput   int
+	hideMirrors    bool
 	purgeTargetID  string
 	removeTargetID string
 	// Service Interface

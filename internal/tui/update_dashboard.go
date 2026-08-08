@@ -98,6 +98,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Add download
 	if key.Matches(msg, m.keys.Dashboard.Add) {
 		m.state = InputState
+		m.hideMirrors = false
 		m.focusedInput = 0
 		m.inputs[0].Focus()
 		// Use default download dir from settings
@@ -408,6 +409,7 @@ func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = InputState
+		m.hideMirrors = false
 		m.focusedInput = 0
 		m.inputs[0].Focus()
 		
@@ -425,27 +427,24 @@ func (m RootModel) handleClipboardPaste(text string) (tea.Model, tea.Cmd) {
 		return m, nil
 	} else {
 		defaultDir := config.Resolve[string](m.Settings.General.DefaultDownloadDir)
-		isDefaultPath := false
 		if defaultDir == "" {
 			defaultDir = "."
-			isDefaultPath = true
-		} else {
-			isDefaultPath = m.isDefaultDownloadPath(defaultDir)
 		}
 		
-		if d := m.checkForDuplicate(url); d != nil {
-			m.pendingURL = url
-			m.pendingMirrors = nil
-			m.pendingHeaders = headers
-			m.pendingPath = defaultDir
-			m.pendingIsDefaultPath = isDefaultPath
-			m.pendingFilename = ""
-			m.pendingWorkers = 0
-			m.pendingMinChunkSize = 0
-			m.duplicateInfo = d.Filename
-			m.state = DuplicateWarningState
-			return m, nil
-		}
-		return m.startDownload(url, nil, headers, defaultDir, isDefaultPath, "", "", 0, 0)
+		m.pendingHeaders = headers
+		m.state = InputState
+		m.hideMirrors = true
+		m.focusedInput = 0
+		m.inputs[0].Focus()
+		
+		m.inputs[2].SetValue(defaultDir)
+		m.inputs[2].Blur()
+		m.inputs[3].SetValue("")
+		m.inputs[3].Blur()
+		m.inputs[1].SetValue("") // Clear mirrors
+		m.inputs[1].Blur()
+		m.inputs[0].SetValue(url)
+		
+		return m, nil
 	}
 }

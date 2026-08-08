@@ -40,18 +40,30 @@ func (m RootModel) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(msg, m.keys.Input.Up) && m.focusedInput > 0 {
-		m.focusInput(m.focusedInput - 1)
+		next := m.focusedInput - 1
+		if m.hideMirrors && next == 1 {
+			next = 0
+		}
+		m.focusInput(next)
 		return m, nil
 	}
 
 	if key.Matches(msg, m.keys.Input.Down) && m.focusedInput < 3 {
-		m.focusInput(m.focusedInput + 1)
+		next := m.focusedInput + 1
+		if m.hideMirrors && next == 1 {
+			next = 2
+		}
+		m.focusInput(next)
 		return m, nil
 	}
 
 	if key.Matches(msg, m.keys.Input.Enter) {
 		if m.focusedInput < 3 {
-			m.focusInput(m.focusedInput + 1)
+			next := m.focusedInput + 1
+			if m.hideMirrors && next == 1 {
+				next = 2
+			}
+			m.focusInput(next)
 			return m, nil
 		}
 		return m.submitInputForm()
@@ -97,10 +109,13 @@ func (m RootModel) submitInputForm() (tea.Model, tea.Cmd) {
 	}
 	filename := m.inputs[3].Value()
 
+	// Check if pending headers were populated from cURL parser
+	headers := m.pendingHeaders
+	
 	if d := m.checkForDuplicate(url); d != nil {
 		m.pendingURL = url
 		m.pendingMirrors = mirrors
-		m.pendingHeaders = nil
+		m.pendingHeaders = headers
 		m.pendingPath = path
 		m.pendingIsDefaultPath = isDefaultPath
 		m.pendingFilename = filename
@@ -116,8 +131,9 @@ func (m RootModel) submitInputForm() (tea.Model, tea.Cmd) {
 	m.inputs[1].SetValue("")
 	m.inputs[2].SetValue(path) // Keep path for next download
 	m.inputs[3].SetValue("")
+	m.pendingHeaders = nil // Reset
 
-	return m.startDownload(url, mirrors, nil, path, isDefaultPath, filename, "", 0, 0)
+	return m.startDownload(url, mirrors, headers, path, isDefaultPath, filename, "", 0, 0)
 }
 
 // parseURLInput splits a comma-separated URL string into a primary URL and mirrors.

@@ -93,12 +93,36 @@ func (m RootModel) View() tea.View {
 	// These overlays sit on top of the dashboard or replace it
 
 	if m.state == InputState {
+		var activeInputs []textinput.Model
+		var activeLabels []string
+		
+		activeInputs = append(activeInputs, m.inputs[0])
+		activeLabels = append(activeLabels, "URL:")
+		
+		if !m.hideMirrors {
+			activeInputs = append(activeInputs, m.inputs[1])
+			activeLabels = append(activeLabels, "Mirrors:")
+		}
+		
+		activeInputs = append(activeInputs, m.inputs[2], m.inputs[3])
+		activeLabels = append(activeLabels, "Path:", "Filename:")
+
+		mappedFocus := m.focusedInput
+		if m.hideMirrors && m.focusedInput > 0 {
+			mappedFocus = m.focusedInput - 1
+		}
+		
+		browseHint := 2
+		if m.hideMirrors {
+			browseHint = 1
+		}
+
 		modal := components.AddDownloadModal{
 			Title:           "Add Download",
-			Inputs:          []textinput.Model{m.inputs[0], m.inputs[1], m.inputs[2], m.inputs[3]},
-			Labels:          []string{"URL:", "Mirrors:", "Path:", "Filename:"},
-			FocusedInput:    m.focusedInput,
-			BrowseHintIndex: 2,
+			Inputs:          activeInputs,
+			Labels:          activeLabels,
+			FocusedInput:    mappedFocus,
+			BrowseHintIndex: browseHint,
 			Help:            m.help,
 			HelpKeys:        m.keys.Input,
 			BorderColor:     colors.Pink(),
