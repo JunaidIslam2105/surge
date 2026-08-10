@@ -109,6 +109,58 @@ func TestLifecycleManager_EventErrorPersistsMessage(t *testing.T) {
 	}
 }
 
+func TestLifecycleManager_EventErrorClearsRateLimitOverride(t *testing.T) {
+	testutil.SetupStateDB(t)
+
+	const downloadID = "clear-rate-limit-error-id"
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:           downloadID,
+		URL:          "https://example.com/stale.bin",
+		DestPath:     "/tmp/stale.bin",
+		Status:       "downloading",
+		Filename:     "stale.bin",
+		RateLimit:    128,
+		RateLimitSet: true,
+	}); err != nil {
+		t.Fatalf("failed to seed download: %v", err)
+	}
+
+	mgr := NewLifecycleManager(nil, nil, nil)
+	events := make(chan types.DownloadEvent, 1)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(events)
+		close(done)
+	}()
+
+	events <- types.DownloadEvent{
+		Type:                types.EventError,
+		DownloadID:          downloadID,
+		RateLimit:           0,
+		RateLimitSet:        false,
+		RateLimitSetPresent: true,
+		Err:                 errors.New("connection reset by peer"),
+	}
+	close(events)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("event worker did not stop")
+	}
+
+	entry, err := store.GetDownload(downloadID)
+	if err != nil {
+		t.Fatalf("failed to load persisted download: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("persisted download missing")
+	}
+	if entry.RateLimit != 0 || entry.RateLimitSet {
+		t.Errorf("rate limit = %d (set=%v), want 0 (set=false)", entry.RateLimit, entry.RateLimitSet)
+	}
+}
+
 func TestLifecycleManager_EventErrorCreatesMissingRecord(t *testing.T) {
 	testutil.SetupStateDB(t)
 

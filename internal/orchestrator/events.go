@@ -336,9 +336,9 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 				if m.Downloaded > 0 || existing.Downloaded == 0 {
 					existing.Downloaded = m.Downloaded
 				}
-				if m.RateLimitSet {
+				if m.RateLimitSetPresent || m.RateLimitSet {
 					existing.RateLimit = m.RateLimit
-					existing.RateLimitSet = true
+					existing.RateLimitSet = m.RateLimitSet
 				}
 				if m.Err != nil {
 					existing.Error = m.Err.Error()

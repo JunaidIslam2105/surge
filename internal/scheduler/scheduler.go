@@ -788,16 +788,17 @@ func (p *Scheduler) worker() {
 					finalFilename = localCfg.Filename
 				}
 				errEvent = &types.DownloadEvent{
-					Type:         types.EventError,
-					DownloadID:   localCfg.ID,
-					URL:          localCfg.URL,
-					Filename:     finalFilename,
-					DestPath:     finalDestPath,
-					Total:        totalSize,
-					Downloaded:   downloaded,
-					RateLimit:    rateLimit,
-					RateLimitSet: rateLimitSet,
-					Err:          err,
+					Type:                types.EventError,
+					DownloadID:          localCfg.ID,
+					URL:                 localCfg.URL,
+					Filename:            finalFilename,
+					DestPath:            finalDestPath,
+					Total:               totalSize,
+					Downloaded:          downloaded,
+					RateLimit:           rateLimit,
+					RateLimitSet:        rateLimitSet,
+					RateLimitSetPresent: true,
+					Err:                 err,
 				}
 			}
 

@@ -53,11 +53,13 @@ type DownloadEvent struct {
 	State *DownloadRecord `json:"-"`
 
 	// Config echo
-	RateLimit    int64    `json:"rate_limit,omitempty"`
-	RateLimitSet bool     `json:"rate_limit_set,omitempty"`
-	Workers      int      `json:"workers,omitempty"`
-	MinChunkSize int64    `json:"min_chunk_size,omitempty"`
-	Mirrors      []string `json:"mirrors,omitempty"`
+	RateLimit    int64 `json:"rate_limit,omitempty"`
+	RateLimitSet bool  `json:"rate_limit_set,omitempty"`
+	// RateLimitSetPresent distinguishes omitted metadata from explicit RateLimitSet=false.
+	RateLimitSetPresent bool     `json:"rate_limit_set_present,omitempty"`
+	Workers             int      `json:"workers,omitempty"`
+	MinChunkSize        int64    `json:"min_chunk_size,omitempty"`
+	Mirrors             []string `json:"mirrors,omitempty"`
 
 	// Request
 	Headers map[string]string `json:"headers,omitempty"`
