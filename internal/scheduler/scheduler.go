@@ -766,10 +766,20 @@ func (p *Scheduler) worker() {
 			if localCfg.ProgressCh != nil {
 				var finalDestPath string
 				var finalFilename string
+				totalSize := localCfg.TotalSize
+				downloaded := localCfg.Downloaded
+				rateLimit := localCfg.RateLimit
+				rateLimitSet := localCfg.RateLimitSet
 				if localCfg.ProgressState != nil {
 					p := progress.CfgProgress(&localCfg)
 					finalDestPath = p.GetDestPath()
 					finalFilename = p.GetFilename()
+					stateDownloaded, stateTotal, _, _, _, _ := p.GetProgress()
+					downloaded = stateDownloaded
+					if stateTotal > 0 {
+						totalSize = stateTotal
+					}
+					rateLimit, rateLimitSet = p.GetRateLimit()
 				}
 				if finalDestPath == "" {
 					finalDestPath = resolveDestPath(&localCfg)
@@ -778,11 +788,16 @@ func (p *Scheduler) worker() {
 					finalFilename = localCfg.Filename
 				}
 				errEvent = &types.DownloadEvent{
-					Type:       types.EventError,
-					DownloadID: localCfg.ID,
-					Filename:   finalFilename,
-					DestPath:   finalDestPath,
-					Err:        err,
+					Type:         types.EventError,
+					DownloadID:   localCfg.ID,
+					URL:          localCfg.URL,
+					Filename:     finalFilename,
+					DestPath:     finalDestPath,
+					Total:        totalSize,
+					Downloaded:   downloaded,
+					RateLimit:    rateLimit,
+					RateLimitSet: rateLimitSet,
+					Err:          err,
 				}
 			}
 

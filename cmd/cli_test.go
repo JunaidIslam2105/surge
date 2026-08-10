@@ -808,7 +808,8 @@ func TestShowDownloadDetails_UsesDatabaseFallback(t *testing.T) {
 		ID:         "87654321-1234-1234-1234-1234567890ab",
 		URL:        "https://example.com/detail.bin",
 		Filename:   "detail.bin",
-		Status:     "completed",
+		Status:     "error",
+		Error:      "connection reset by peer",
 		Downloaded: 250,
 		TotalSize:  500,
 	}
@@ -831,6 +832,9 @@ func TestShowDownloadDetails_UsesDatabaseFallback(t *testing.T) {
 	}
 	if decoded.Progress != 50 {
 		t.Fatalf("decoded progress = %v, want 50", decoded.Progress)
+	}
+	if decoded.Error != entry.Error {
+		t.Fatalf("decoded error = %q, want %q", decoded.Error, entry.Error)
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -135,12 +136,65 @@ func TestTUI_Startup_LoadsErroredDownloadsIntoDoneTab(t *testing.T) {
 	testID := "tui-error-id"
 	testURL := "http://example.com/error.bin"
 	testDest := filepath.Join(tmpDir, "error.bin")
+	events := make(chan types.DownloadEvent, 1)
+	mgr := orchestrator.NewLifecycleManager(nil, nil, nil)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(events)
+		close(done)
+	}()
+	events <- types.DownloadEvent{
+		Type:       types.EventError,
+		DownloadID: testID,
+		URL:        testURL,
+		DestPath:   testDest,
+		Filename:   filepath.Base(testDest),
+		Err:        errors.New("connection reset by peer"),
+	}
+	close(events)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("event worker did not stop")
+	}
+
+	m := InitialRootModel(1700, "test-version", service.NewLocalDownloadService(mgr), mgr, nil, false)
+
+	var found *DownloadModel
+	for _, d := range m.downloads {
+		if d.ID == testID {
+			found = d
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("TUI Model failed to load errored download")
+		return
+	}
+	if !found.done {
+		t.Fatal("expected errored download to appear in done tab")
+	}
+	if found.err == nil {
+		t.Fatal("expected errored download to retain its error")
+	}
+	if found.err.Error() != "connection reset by peer" {
+		t.Errorf("error = %q, want %q", found.err.Error(), "connection reset by peer")
+	}
+}
+
+func TestTUI_Startup_UsesFallbackForErroredDownloadWithoutMessage(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "surge-tui-error-fallback-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	setupTestEnv(t, tmpDir)
+
+	const testID = "tui-error-fallback-id"
 	if err := store.AddToMasterList(types.DownloadRecord{
 		ID:       testID,
-		URL:      testURL,
-		URLHash:  "dummy-hash",
-		DestPath: testDest,
-		Filename: filepath.Base(testDest),
+		Filename: "error.bin",
 		Status:   "error",
 	}); err != nil {
 		t.Fatal(err)
@@ -159,10 +213,12 @@ func TestTUI_Startup_LoadsErroredDownloadsIntoDoneTab(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatal("TUI Model failed to load errored download")
-		return
 	}
-	if !found.done {
-		t.Fatal("expected errored download to appear in done tab")
+	if found.err == nil {
+		t.Fatal("expected fallback error")
+	}
+	if found.err.Error() != "download failed" {
+		t.Errorf("error = %q, want %q", found.err.Error(), "download failed")
 	}
 }
 

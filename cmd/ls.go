@@ -233,6 +233,7 @@ func showDownloadDetails(partialID string, jsonOutput bool, baseURL string, toke
 		URL:        found.URL,
 		Filename:   found.Filename,
 		Status:     found.Status,
+		Error:      found.Error,
 		TotalSize:  found.TotalSize,
 		Downloaded: found.Downloaded,
 		Progress:   progress,

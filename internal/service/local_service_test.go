@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/orchestrator"
+	"github.com/SurgeDM/Surge/internal/progress"
 	"github.com/SurgeDM/Surge/internal/scheduler"
 	"github.com/SurgeDM/Surge/internal/store"
 	"github.com/SurgeDM/Surge/internal/testutil"
@@ -300,6 +302,12 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 		Status:   "completed",
 		Filename: "db.txt",
 	})
+	testutil.SeedMasterList(t, types.DownloadRecord{
+		ID:       "db-error-id",
+		Status:   "error",
+		Error:    "connection reset by peer",
+		Filename: "failed.txt",
+	})
 
 	list, err := svc.List()
 	if err != nil {
@@ -308,6 +316,27 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 
 	if len(list) < 2 {
 		t.Errorf("expected at least 2 items in list, got %d", len(list))
+	}
+	var failedStatus *types.DownloadStatus
+	for i := range list {
+		if list[i].ID == "db-error-id" {
+			failedStatus = &list[i]
+			break
+		}
+	}
+	if failedStatus == nil {
+		t.Fatal("failed download missing from list")
+	}
+	if failedStatus.Error != "connection reset by peer" {
+		t.Errorf("List error = %q, want %q", failedStatus.Error, "connection reset by peer")
+	}
+
+	status, err := svc.GetStatus("db-error-id")
+	if err != nil {
+		t.Fatalf("GetStatus failed: %v", err)
+	}
+	if status.Error != "connection reset by peer" {
+		t.Errorf("GetStatus error = %q, want %q", status.Error, "connection reset by peer")
 	}
 
 	history, err := svc.History()
@@ -322,6 +351,69 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 	count, _ := svc.ClearCompleted()
 	if count != 1 {
 		t.Errorf("expected 1 completed item to be cleared, got %d", count)
+	}
+}
+func TestLocalDownloadService_ListRetainsActiveError(t *testing.T) {
+	svc, ts, tmpDir := setupTestService(t)
+	defer ts.Close()
+	t.Cleanup(func() { _ = svc.Shutdown() })
+
+	blockCh := make(chan struct{})
+	downloadTs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1024")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		if r.Header.Get("Range") != "bytes=0-0" {
+			select {
+			case <-blockCh:
+			case <-r.Context().Done():
+			}
+		}
+	}))
+	defer downloadTs.Close()
+	defer close(blockCh)
+
+	const downloadID = "active-error-id"
+	if _, err := svc.AddWithID(downloadTs.URL, tmpDir, "active-error.txt", nil, nil, downloadID, false, 1, 0); err != nil {
+		t.Fatalf("AddWithID failed: %v", err)
+	}
+
+	var state *progress.DownloadProgress
+	deadline := time.Now().Add(time.Second)
+	for state == nil && time.Now().Before(deadline) {
+		for _, cfg := range svc.lifecycle.GetScheduler().GetAll() {
+			if cfg.ID == downloadID && cfg.ProgressState != nil {
+				state = progress.CfgProgress(&cfg)
+				break
+			}
+		}
+		if state == nil {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if state == nil {
+		t.Fatal("active download state not found")
+	}
+
+	state.SetError(errors.New("connection reset by peer"))
+	statuses, err := svc.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	var found *types.DownloadStatus
+	for i := range statuses {
+		if statuses[i].ID == downloadID {
+			found = &statuses[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("active download missing from list")
+	}
+	if found.Status != "error" || found.Error != "connection reset by peer" {
+		t.Errorf("active status = %q/%q, want error/connection reset by peer", found.Status, found.Error)
 	}
 }
 

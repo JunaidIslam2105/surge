@@ -198,6 +198,7 @@ func (s *LocalDownloadService) GetStatus(id string) (*types.DownloadStatus, erro
 			Progress:     progress,
 			Speed:        completedSpeedBps(*entry),
 			Status:       entry.Status,
+			Error:        entry.Error,
 			TimeTaken:    entry.TimeTaken,
 			AvgSpeed:     entry.AvgSpeed,
 			RateLimit:    entry.RateLimit,
@@ -346,17 +347,20 @@ func (s *LocalDownloadService) SetDefaultRateLimit(rate int64) error {
 func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 	var statuses []types.DownloadStatus
 	if s.lifecycle != nil && s.lifecycle.GetScheduler() != nil {
-		activeConfigs := s.lifecycle.GetScheduler().GetAll()
+		scheduler := s.lifecycle.GetScheduler()
+		activeConfigs := scheduler.GetAll()
 		for _, cfg := range activeConfigs {
-			statusStr := "downloading"
-			if st := s.lifecycle.GetScheduler().GetStatus(cfg.ID); st != nil {
-				statusStr = st.Status
+			schedulerStatus := scheduler.GetStatus(cfg.ID)
+			if schedulerStatus == nil {
+				continue
 			}
 			status := types.DownloadStatus{
 				ID:           cfg.ID,
 				URL:          cfg.URL,
 				Filename:     cfg.Filename,
-				Status:       statusStr,
+				DestPath:     schedulerStatus.DestPath,
+				Status:       schedulerStatus.Status,
+				Error:        schedulerStatus.Error,
 				RateLimit:    cfg.RateLimit,
 				RateLimitSet: cfg.RateLimitSet,
 			}
@@ -373,12 +377,11 @@ func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 						status.Progress = float64(status.Downloaded) * 100 / float64(status.TotalSize)
 					}
 					status.Connections = int(connections)
-					if cp.IsPausing() {
-						status.Status = "pausing"
-					} else if cp.IsPaused() {
-						status.Status = "paused"
-					} else if cp.Done.Load() {
-						status.Status = "completed"
+					// GetStatus and metric reads are separate snapshots; recheck errors
+					// so a worker failure between those reads is not reported as downloading.
+					if err := cp.GetError(); err != nil {
+						status.Status = "error"
+						status.Error = err.Error()
 					}
 					if status.Status == "downloading" {
 						sessionDownloaded := downloaded - sessionStart
@@ -396,38 +399,40 @@ func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 		}
 	}
 	dbDownloads, err := store.ListAllDownloads()
-	if err == nil {
-		existingIDs := make(map[string]bool)
-		for _, s := range statuses {
-			existingIDs[s.ID] = true
+	if err != nil {
+		return nil, err
+	}
+	existingIDs := make(map[string]bool)
+	for _, s := range statuses {
+		existingIDs[s.ID] = true
+	}
+	for _, d := range dbDownloads {
+		if existingIDs[d.ID] {
+			continue
 		}
-		for _, d := range dbDownloads {
-			if existingIDs[d.ID] {
-				continue
-			}
-			var progress float64
-			if d.TotalSize > 0 {
-				progress = float64(d.Downloaded) * 100 / float64(d.TotalSize)
-			} else if d.Status == "completed" {
-				progress = 100.0
-			}
-			statuses = append(statuses, types.DownloadStatus{
-				ID:           d.ID,
-				URL:          d.URL,
-				Filename:     d.Filename,
-				DestPath:     d.DestPath,
-				Status:       d.Status,
-				TotalSize:    d.TotalSize,
-				Downloaded:   d.Downloaded,
-				Progress:     progress,
-				Speed:        completedSpeedBps(d),
-				Connections:  0,
-				TimeTaken:    d.TimeTaken,
-				AvgSpeed:     d.AvgSpeed,
-				RateLimit:    d.RateLimit,
-				RateLimitSet: d.RateLimitSet,
-			})
+		var progress float64
+		if d.TotalSize > 0 {
+			progress = float64(d.Downloaded) * 100 / float64(d.TotalSize)
+		} else if d.Status == "completed" {
+			progress = 100.0
 		}
+		statuses = append(statuses, types.DownloadStatus{
+			ID:           d.ID,
+			URL:          d.URL,
+			Filename:     d.Filename,
+			DestPath:     d.DestPath,
+			Status:       d.Status,
+			Error:        d.Error,
+			TotalSize:    d.TotalSize,
+			Downloaded:   d.Downloaded,
+			Progress:     progress,
+			Speed:        completedSpeedBps(d),
+			Connections:  0,
+			TimeTaken:    d.TimeTaken,
+			AvgSpeed:     d.AvgSpeed,
+			RateLimit:    d.RateLimit,
+			RateLimitSet: d.RateLimitSet,
+		})
 	}
 	return statuses, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/scheduler"
 	"github.com/SurgeDM/Surge/internal/store"
+	"github.com/SurgeDM/Surge/internal/testutil"
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
@@ -32,6 +33,194 @@ func TestLifecycleManager_Settings(t *testing.T) {
 	s2 := mgr.GetSettings()
 	if s2.Network.MaxConcurrentProbes.Value != 10 {
 		t.Errorf("expected MaxConcurrentProbes to be 10, got %v", s2.Network.MaxConcurrentProbes.Value)
+	}
+}
+
+func TestLifecycleManager_EventErrorPersistsMessage(t *testing.T) {
+	testutil.SetupStateDB(t)
+
+	const downloadID = "error-persistence-id"
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:           downloadID,
+		URL:          "https://example.com/stale.bin",
+		DestPath:     "/tmp/stale.bin",
+		Status:       "downloading",
+		Filename:     "stale.bin",
+		TotalSize:    100,
+		Downloaded:   10,
+		RateLimit:    10,
+		RateLimitSet: true,
+	}); err != nil {
+		t.Fatalf("failed to seed download: %v", err)
+	}
+
+	mgr := NewLifecycleManager(nil, nil, nil)
+	events := make(chan types.DownloadEvent, 1)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(events)
+		close(done)
+	}()
+
+	events <- types.DownloadEvent{
+		Type:         types.EventError,
+		DownloadID:   downloadID,
+		URL:          "https://example.com/failed.bin",
+		DestPath:     "/tmp/failed.bin",
+		Filename:     "failed.bin",
+		Total:        4096,
+		Downloaded:   2048,
+		RateLimit:    128,
+		RateLimitSet: true,
+		Err:          errors.New("connection reset by peer"),
+	}
+	close(events)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("event worker did not stop")
+	}
+
+	entry, err := store.GetDownload(downloadID)
+	if err != nil {
+		t.Fatalf("failed to load persisted download: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("persisted download missing")
+	}
+	if entry.Status != "error" {
+		t.Errorf("status = %q, want %q", entry.Status, "error")
+	}
+	if entry.Error != "connection reset by peer" {
+		t.Errorf("error = %q, want %q", entry.Error, "connection reset by peer")
+	}
+	if entry.URL != "https://example.com/failed.bin" {
+		t.Errorf("url = %q, want %q", entry.URL, "https://example.com/failed.bin")
+	}
+	if entry.DestPath != "/tmp/failed.bin" || entry.Filename != "failed.bin" {
+		t.Errorf("destination = %q/%q, want /tmp/failed.bin/failed.bin", entry.DestPath, entry.Filename)
+	}
+	if entry.TotalSize != 4096 || entry.Downloaded != 2048 {
+		t.Errorf("progress = %d/%d, want 2048/4096", entry.Downloaded, entry.TotalSize)
+	}
+	if entry.RateLimit != 128 || !entry.RateLimitSet {
+		t.Errorf("rate limit = %d (set=%v), want 128 (set=true)", entry.RateLimit, entry.RateLimitSet)
+	}
+}
+
+func TestLifecycleManager_EventErrorCreatesMissingRecord(t *testing.T) {
+	testutil.SetupStateDB(t)
+
+	const downloadID = "missing-error-record-id"
+	mgr := NewLifecycleManager(nil, nil, nil)
+	events := make(chan types.DownloadEvent, 1)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(events)
+		close(done)
+	}()
+
+	events <- types.DownloadEvent{
+		Type:         types.EventError,
+		DownloadID:   downloadID,
+		URL:          "https://example.com/failed.bin",
+		Filename:     "failed.bin",
+		DestPath:     "/tmp/failed.bin",
+		Total:        4096,
+		Downloaded:   2048,
+		RateLimit:    128,
+		RateLimitSet: true,
+		Err:          errors.New("connection refused"),
+	}
+	close(events)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("event worker did not stop")
+	}
+
+	entry, err := store.GetDownload(downloadID)
+	if err != nil {
+		t.Fatalf("failed to load persisted download: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("persisted download missing")
+	}
+	if entry.Status != "error" {
+		t.Errorf("status = %q, want %q", entry.Status, "error")
+	}
+	if entry.Error != "connection refused" {
+		t.Errorf("error = %q, want %q", entry.Error, "connection refused")
+	}
+	if entry.URL != "https://example.com/failed.bin" {
+		t.Errorf("url = %q, want %q", entry.URL, "https://example.com/failed.bin")
+	}
+	if entry.TotalSize != 4096 || entry.Downloaded != 2048 {
+		t.Errorf("progress = %d/%d, want 2048/4096", entry.Downloaded, entry.TotalSize)
+	}
+	if entry.RateLimit != 128 || !entry.RateLimitSet {
+		t.Errorf("rate limit = %d (set=%v), want 128 (set=true)", entry.RateLimit, entry.RateLimitSet)
+	}
+}
+
+func TestLifecycleManager_EventCompletePersistsFinalizationError(t *testing.T) {
+	testutil.SetupStateDB(t)
+
+	const downloadID = "finalization-error-id"
+	destPath := filepath.Join(t.TempDir(), "completed.bin")
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:       downloadID,
+		URL:      "https://example.com/completed.bin",
+		DestPath: destPath,
+		Filename: "completed.bin",
+		Status:   "downloading",
+	}); err != nil {
+		t.Fatalf("failed to seed download: %v", err)
+	}
+
+	originalRename := renameCompletedFile
+	renameCompletedFile = func(_, _ string) error {
+		return errors.New("forced finalization failure")
+	}
+	t.Cleanup(func() {
+		renameCompletedFile = originalRename
+	})
+
+	mgr := NewLifecycleManager(nil, nil, nil)
+	events := make(chan types.DownloadEvent, 1)
+	done := make(chan struct{})
+	go func() {
+		mgr.StartEventWorker(events)
+		close(done)
+	}()
+
+	events <- types.DownloadEvent{
+		Type:       types.EventComplete,
+		DownloadID: downloadID,
+		Filename:   "completed.bin",
+	}
+	close(events)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("event worker did not stop")
+	}
+
+	entry, err := store.GetDownload(downloadID)
+	if err != nil {
+		t.Fatalf("failed to load persisted download: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("persisted download missing")
+	}
+	if entry.Status != "error" {
+		t.Errorf("status = %q, want %q", entry.Status, "error")
+	}
+	if entry.Error != "forced finalization failure" {
+		t.Errorf("error = %q, want %q", entry.Error, "forced finalization failure")
 	}
 }
 

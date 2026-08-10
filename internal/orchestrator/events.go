@@ -241,6 +241,7 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 					URLHash:      urlHash,
 					DestPath:     destPath,
 					Filename:     filename,
+					Error:        err.Error(),
 					Status:       "error",
 					TotalSize:    m.Total,
 					Downloaded:   m.Total,
@@ -312,8 +313,36 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 			}
 
 		case types.EventError:
-			existing, _ := store.GetDownload(m.DownloadID)
-			if existing != nil {
+			existing, lookupErr := store.GetDownload(m.DownloadID)
+			if lookupErr != nil {
+				utils.Debug("Lifecycle: Failed to load error state: %v", lookupErr)
+			} else {
+				if existing == nil {
+					existing = &types.DownloadRecord{ID: m.DownloadID}
+				}
+				if m.URL != "" {
+					existing.URL = m.URL
+					existing.URLHash = store.URLHash(m.URL)
+				}
+				if m.DestPath != "" {
+					existing.DestPath = m.DestPath
+				}
+				if m.Filename != "" {
+					existing.Filename = m.Filename
+				}
+				if m.Total > 0 || existing.TotalSize == 0 {
+					existing.TotalSize = m.Total
+				}
+				if m.Downloaded > 0 || existing.Downloaded == 0 {
+					existing.Downloaded = m.Downloaded
+				}
+				if m.RateLimitSet {
+					existing.RateLimit = m.RateLimit
+					existing.RateLimitSet = true
+				}
+				if m.Err != nil {
+					existing.Error = m.Err.Error()
+				}
 				existing.Status = "error"
 				if err := store.AddToMasterList(*existing); err != nil {
 					utils.Debug("Lifecycle: Failed to persist error state: %v", err)
