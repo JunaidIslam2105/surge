@@ -40,7 +40,7 @@
     in {
       options.programs.surge = {
         enable = lib.mkEnableOption "surge download manager";
-        systemd.enable = lib.mkEnableOption "enable systemd service";
+        systemd.enable = lib.mkEnableOption "systemd service";
       };
 
       config = lib.mkIf cfg.enable {
