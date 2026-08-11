@@ -12,17 +12,7 @@ import (
 )
 
 func TestEventError_SaveState(t *testing.T) {
-	origNotify := notify
-	notify = func(title, message string) {}
-	t.Cleanup(func() { notify = origNotify })
-
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "surge.db")
-	store.Configure(dbPath)
-	t.Cleanup(func() { store.CloseDB() })
-
-	mgr := NewLifecycleManager(nil, nil, config.DefaultSettings())
-	defer mgr.Shutdown()
+	tmpDir := setupEventStateDB(t)
 
 	// Seed a master-list entry so the EventError handler has an existing record.
 	seedErr := types.DownloadRecord{
@@ -51,42 +41,15 @@ func TestEventError_SaveState(t *testing.T) {
 		RateLimitSet: false,
 	}
 
-	ch := make(chan types.DownloadEvent, 1)
-	done := make(chan struct{})
-	go func() {
-		mgr.StartEventWorker(ch)
-		close(done)
-	}()
-
-	ch <- types.DownloadEvent{
+	dispatchLifecycleEvent(t, types.DownloadEvent{
 		Type:       types.EventError,
 		DownloadID: "err-test",
 		Filename:   "file.bin",
 		Err:        types.ErrInsufficientDiskSpace,
 		State:      snapshot,
-	}
+	})
 
-	// Wait for the event worker to process by closing and waiting.
-	close(ch)
-	<-done
-	// Give the worker a moment to flush. The StartEventWorker loop exits on close.
-	// Use a short poll to verify persistence.
-	record, err := store.GetDownload("err-test")
-	if err != nil {
-		t.Fatalf("GetDownload failed: %v", err)
-	}
-	if record == nil {
-		t.Fatal("expected non-nil record after EventError")
-	}
-
-	// Retry loop: the worker may not have flushed yet.
-	for i := 0; i < 50 && record.Status != "error"; i++ {
-		time.Sleep(10 * time.Millisecond)
-		record, _ = store.GetDownload("err-test")
-	}
-	if record == nil || record.Status != "error" {
-		t.Fatalf("expected status=error, got %+v", record)
-	}
+	record := waitForStatusError(t, "err-test")
 
 	// Verify the error string was persisted.
 	if record.Error != types.ErrInsufficientDiskSpace.Error() {
@@ -107,16 +70,7 @@ func TestEventError_SaveState(t *testing.T) {
 }
 
 func TestEventError_ElapsedMonotonicBump(t *testing.T) {
-	origNotify := notify
-	notify = func(title, message string) {}
-	t.Cleanup(func() { notify = origNotify })
-
-	tmpDir := t.TempDir()
-	store.Configure(filepath.Join(tmpDir, "surge.db"))
-	t.Cleanup(func() { store.CloseDB() })
-
-	mgr := NewLifecycleManager(nil, nil, config.DefaultSettings())
-	defer mgr.Shutdown()
+	tmpDir := setupEventStateDB(t)
 
 	url := "http://example.com/elapsed.bin"
 	destPath := filepath.Join(tmpDir, "elapsed.bin")
@@ -149,36 +103,16 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 		Filename:   "elapsed.bin",
 	}
 
-	ch := make(chan types.DownloadEvent, 1)
-	done := make(chan struct{})
-	go func() {
-		mgr.StartEventWorker(ch)
-		close(done)
-	}()
-	ch <- types.DownloadEvent{
+	dispatchLifecycleEvent(t, types.DownloadEvent{
 		Type:       types.EventError,
 		DownloadID: "err-elapsed",
 		Filename:   "elapsed.bin",
 		DestPath:   destPath,
 		Err:        errors.New("boom"),
 		State:      snapshot,
-	}
-	close(ch)
-	<-done
+	})
 
-	deadline := time.Now().Add(3 * time.Second)
-	var entry *types.DownloadRecord
-	for {
-		got, err := store.GetDownload("err-elapsed")
-		if err == nil && got != nil && got.Status == "error" {
-			entry = got
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for Status=error")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	entry := waitForStatusError(t, "err-elapsed")
 
 	// Downloaded advanced and Elapsed was ≤ candidate → +1ms bump.
 	if entry.TimeTaken < 5001 {
@@ -195,16 +129,7 @@ func TestEventError_ElapsedMonotonicBump(t *testing.T) {
 }
 
 func TestEventError_FieldFallbacks(t *testing.T) {
-	origNotify := notify
-	notify = func(title, message string) {}
-	t.Cleanup(func() { notify = origNotify })
-
-	tmpDir := t.TempDir()
-	store.Configure(filepath.Join(tmpDir, "surge.db"))
-	t.Cleanup(func() { store.CloseDB() })
-
-	mgr := NewLifecycleManager(nil, nil, config.DefaultSettings())
-	defer mgr.Shutdown()
+	tmpDir := setupEventStateDB(t)
 
 	url := "http://example.com/fallback.bin"
 	destPath := filepath.Join(tmpDir, "fallback.bin")
@@ -243,34 +168,14 @@ func TestEventError_FieldFallbacks(t *testing.T) {
 		Elapsed:  int64(2 * time.Second),
 	}
 
-	ch := make(chan types.DownloadEvent, 1)
-	done := make(chan struct{})
-	go func() {
-		mgr.StartEventWorker(ch)
-		close(done)
-	}()
-	ch <- types.DownloadEvent{
+	dispatchLifecycleEvent(t, types.DownloadEvent{
 		Type:       types.EventError,
 		DownloadID: "err-fallback",
 		Err:        errors.New("boom"),
 		State:      snapshot,
-	}
-	close(ch)
-	<-done
+	})
 
-	deadline := time.Now().Add(3 * time.Second)
-	var entry *types.DownloadRecord
-	for {
-		got, err := store.GetDownload("err-fallback")
-		if err == nil && got != nil && got.Status == "error" {
-			entry = got
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for Status=error")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	entry := waitForStatusError(t, "err-fallback")
 
 	if entry.Filename != "fallback.bin" {
 		t.Errorf("Filename=%q, want %q", entry.Filename, "fallback.bin")
@@ -581,6 +486,24 @@ func setupEventStateDB(t *testing.T) string {
 	store.Configure(filepath.Join(tmpDir, "surge.db"))
 	t.Cleanup(func() { store.CloseDB() })
 	return tmpDir
+}
+
+// waitForStatusError polls the store until the download record with the given
+// id reaches Status="error", or fails the test after a 3s timeout.
+func waitForStatusError(t *testing.T, id string) *types.DownloadRecord {
+	t.Helper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		got, err := store.GetDownload(id)
+		if err == nil && got != nil && got.Status == "error" {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for Status=error on %q", id)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func dispatchLifecycleEvent(t *testing.T, event types.DownloadEvent) {

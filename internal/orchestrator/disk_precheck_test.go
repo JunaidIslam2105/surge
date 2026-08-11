@@ -13,23 +13,34 @@ import (
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
-func TestEnqueuePrecheck_Rejects(t *testing.T) {
-	// fileSize > free - buffer → reject with ErrInsufficientDiskSpace.
-	// The probe returns Content-Length, so we need a server that reports a size.
+// setupPrecheckTest creates a lifecycle manager backed by a mock HTTP server
+// and a temp destination directory. The caller overrides freeDiskBytes and
+// defers the restore themselves. The returned server reports the given
+// contentLength (0 means no Content-Length header).
+func setupPrecheckTest(t *testing.T, contentLength int64) (*LifecycleManager, *httptest.Server, string) {
+	t.Helper()
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Length", "10485760") // 10 MiB
+		if contentLength > 0 {
+			w.Header().Set("Content-Length", "10485760")
+		}
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 
 	progressCh := make(chan types.DownloadEvent, 10)
 	pool := scheduler.New(progressCh, 1)
 	eb := NewEventBus()
 	mgr := NewLifecycleManager(pool, eb, nil)
-	defer mgr.Shutdown()
+	t.Cleanup(mgr.Shutdown)
 
 	destDir := t.TempDir()
+	return mgr, ts, destDir
+}
+
+func TestEnqueuePrecheck_Rejects(t *testing.T) {
+	mgr, ts, destDir := setupPrecheckTest(t, 10*1024*1024)
 
 	orig := freeDiskBytes
 	defer func() { freeDiskBytes = orig }()
@@ -57,20 +68,7 @@ func TestEnqueuePrecheck_Rejects(t *testing.T) {
 }
 
 func TestEnqueuePrecheck_FailOpen(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Length", "10485760")
-		w.Header().Set("Accept-Ranges", "bytes")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer ts.Close()
-
-	progressCh := make(chan types.DownloadEvent, 10)
-	pool := scheduler.New(progressCh, 1)
-	eb := NewEventBus()
-	mgr := NewLifecycleManager(pool, eb, nil)
-	defer mgr.Shutdown()
-
-	destDir := t.TempDir()
+	mgr, ts, destDir := setupPrecheckTest(t, 10*1024*1024)
 
 	orig := freeDiskBytes
 	defer func() { freeDiskBytes = orig }()
@@ -95,20 +93,7 @@ func TestEnqueuePrecheck_FailOpen(t *testing.T) {
 }
 
 func TestEnqueuePrecheck_UnknownSize(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// No Content-Length → unknown size.
-		w.Header().Set("Accept-Ranges", "bytes")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer ts.Close()
-
-	progressCh := make(chan types.DownloadEvent, 10)
-	pool := scheduler.New(progressCh, 1)
-	eb := NewEventBus()
-	mgr := NewLifecycleManager(pool, eb, nil)
-	defer mgr.Shutdown()
-
-	destDir := t.TempDir()
+	mgr, ts, destDir := setupPrecheckTest(t, 0)
 
 	orig := freeDiskBytes
 	defer func() { freeDiskBytes = orig }()

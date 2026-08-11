@@ -8,7 +8,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
-func TestScheduler_EventErrorState(t *testing.T) {
+func TestPendingResumeState_Lifecycle(t *testing.T) {
 	state := progress.New("state-test", 10*1024*1024)
 
 	// Stash a pause-grade snapshot via SetPendingResumeState.
