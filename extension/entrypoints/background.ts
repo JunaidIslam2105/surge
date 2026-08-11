@@ -392,19 +392,42 @@ async function fetchHistoryList(): Promise<{ data: HistoryEntry[]; authError: bo
   }
 }
 
-/**
- * Send a download request to the Surge backend.
- * Returns { success: true } or { success: false, error: string }.
- */
+type HandoffResult =
+  | { success: true; outcome: 'surge'; filename?: string }
+  | { success: true; outcome: 'browser'; surgeError: string }
+  | { success: false; outcome: 'failed'; error: string; surgeError: string; fallbackError?: string };
+
+async function fallbackToBrowser(url: string, surgeError: string): Promise<HandoffResult> {
+  const enabled = await storageGetBoolean(STORAGE_KEYS.FALLBACK_TO_BROWSER);
+  if (enabled === false) {
+    return { success: false, outcome: 'failed', error: surgeError, surgeError };
+  }
+
+  try {
+    await browser.downloads.download({ url });
+    return { success: true, outcome: 'browser', surgeError };
+  } catch (error) {
+    const fallbackError = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      outcome: 'failed',
+      error: `${surgeError}; browser fallback failed: ${fallbackError}`,
+      surgeError,
+      fallbackError,
+    };
+  }
+}
+
+/** Send a download to Surge, retrying it through the browser when configured. */
 async function sendToSurge(
   url: string,
   filename: string,
   directory: string,
   headers: Record<string, string>,
   options?: { skipApproval?: boolean },
-): Promise<{ success: boolean; filename?: string; error?: string }> {
+): Promise<HandoffResult> {
   const base = await getBaseUrl();
-  if (!base) return { success: false, error: 'Server not running' };
+  if (!base) return fallbackToBrowser(url, 'Server not running');
 
   try {
     const resp = await fetch(`${base}/download`, {
@@ -422,11 +445,13 @@ async function sendToSurge(
 
     if (resp.ok) {
       const data = await resp.json().catch(() => ({}));
-      return { success: true, filename: data.filename };
+      return { success: true, outcome: 'surge', filename: data.filename };
     }
-    return { success: false, error: await resp.text().catch(() => '') };
+    const error = await resp.text().catch(() => '') || `Server returned ${resp.status}`;
+    return fallbackToBrowser(url, error);
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    const surgeError = error instanceof Error ? error.message : String(error);
+    return fallbackToBrowser(url, surgeError);
   }
 }
 
@@ -475,6 +500,35 @@ async function isNotificationsEnabled(): Promise<boolean> {
   return enabled !== false; // Default to true if undefined
 }
 
+async function notifyHandoffResult(result: HandoffResult, filename: string): Promise<void> {
+  if (!await isNotificationsEnabled()) return;
+
+  if (result.outcome === 'surge') {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge',
+      message: `Download started: ${result.filename || filename}`,
+    });
+  } else if (result.outcome === 'browser') {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge',
+      message: `Surge handoff failed; browser retry started: ${filename}`,
+    });
+  } else {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge Error',
+      message: result.fallbackError
+        ? `Surge and browser handling failed: ${result.error}`
+        : `Failed to start download: ${result.surgeError}`,
+    });
+  }
+}
+
 async function getMinFileSizeMB(): Promise<number> {
   const result = await browser.storage.local.get(STORAGE_KEYS.MIN_FILE_SIZE);
   return readStoredNumber(result, STORAGE_KEYS.MIN_FILE_SIZE, 10);
@@ -510,8 +564,9 @@ async function isDuplicateDownload(url: string): Promise<boolean> {
 }
 
 async function handleDownloadCreated(downloadItem: {
-  id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number;
+  id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number; byExtensionId?: string;
 }): Promise<void> {
+  if (downloadItem.byExtensionId === browser.runtime.id) return;
   if (!await isInterceptEnabled()) return;
   if (shouldSkipUrl(downloadItem.url)) return;
   if (!isFreshDownload(downloadItem)) return;
@@ -558,26 +613,10 @@ async function handleDownloadCreated(downloadItem: {
   // Force empty filename hint for backend - rely on backend prober.
   const result = await sendToSurge(downloadItem.url, '', directory, headers);
 
-  if (result.success) {
+  if (result.outcome === 'surge') {
     await tryOpenPopup();
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge',
-        message: `Download started: ${result.filename || 'Unknown file'}`,
-      });
-    }
-  } else if (result.error) {
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge Error',
-        message: `Failed to start download: ${result.error}`,
-      });
-    }
   }
+  await notifyHandoffResult(result, duplicateDisplayName);
 }
 
 // ---------------------------------------------------------------------------
@@ -856,18 +895,11 @@ async function handleConfirmDuplicate(id: string): Promise<{ success: boolean; e
     {},
     { skipApproval: true },
   );
-  if (result.success) {
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge',
-        message: `Download started: ${pending.filename}`,
-      });
-    }
-  }
+  await notifyHandoffResult(result, pending.filename);
   await notifyNextPendingDuplicate();
-  return { success: result.success };
+  return result.outcome === 'failed'
+    ? { success: false, error: result.error }
+    : { success: true };
 }
 
 async function handleSkipDuplicate(id: string): Promise<{ success: boolean }> {
@@ -885,7 +917,7 @@ async function handleSkipDuplicate(id: string): Promise<{ success: boolean }> {
 export default defineBackground(() => {
   // Download interception
   browser.downloads.onCreated.addListener((downloadItem: {
-    id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number;
+    id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number; byExtensionId?: string;
   }) => {
     if (processedIds.has(downloadItem.id)) return;
     processedIds.add(downloadItem.id);
