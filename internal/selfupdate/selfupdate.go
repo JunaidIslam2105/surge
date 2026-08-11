@@ -87,7 +87,9 @@ func Update(ctx context.Context, opts Options) (*version.UpdateInfo, error) {
 	if err != nil {
 		return info, err
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	archivePath := filepath.Join(tmpDir, asset.Name)
 	if err := download(ctx, client, asset.BrowserDownloadURL, archivePath); err != nil {
@@ -166,7 +168,9 @@ func download(ctx context.Context, client *http.Client, url, dest string) error 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
@@ -175,9 +179,11 @@ func download(ctx context.Context, client *http.Client, url, dest string) error 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	_, err = io.Copy(file, resp.Body)
-	return err
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func verifyChecksum(archivePath, checksumPath, assetName string) error {
@@ -189,7 +195,9 @@ func verifyChecksum(archivePath, checksumPath, assetName string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	sum := sha256.New()
 	if _, err := io.Copy(sum, file); err != nil {
 		return err
@@ -231,12 +239,16 @@ func extractBinaryFromTarGz(archivePath, name, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	gz, err := gzip.NewReader(file)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() {
+		_ = gz.Close()
+	}()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -260,7 +272,9 @@ func extractBinaryFromZip(archivePath, name, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer zr.Close()
+	defer func() {
+		_ = zr.Close()
+	}()
 
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || filepath.Base(f.Name) != name {
@@ -270,8 +284,11 @@ func extractBinaryFromZip(archivePath, name, dest string) error {
 		if err != nil {
 			return err
 		}
-		defer rc.Close()
-		return writeExtractedBinary(dest, rc, f.FileInfo().Mode())
+		err = writeExtractedBinary(dest, rc, f.FileInfo().Mode())
+		if closeErr := rc.Close(); err == nil {
+			err = closeErr
+		}
+		return err
 	}
 	return fmt.Errorf("%s not found in archive", name)
 }

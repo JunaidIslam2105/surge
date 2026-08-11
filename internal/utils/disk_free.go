@@ -3,7 +3,6 @@ package utils
 import (
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 )
@@ -51,16 +50,4 @@ func FreeDiskBytes(path string) (int64, error) {
 		}
 		abs = parent
 	}
-}
-
-// clampFreeBytesProduct multiplies blocks by block size without wrapping
-// to a negative int64 (clamps to MaxInt64 on overflow).
-func clampFreeBytesProduct(blocks, blockSize uint64) int64 {
-	if blocks == 0 || blockSize == 0 {
-		return 0
-	}
-	if blocks > math.MaxInt64/blockSize {
-		return math.MaxInt64
-	}
-	return int64(blocks * blockSize)
 }

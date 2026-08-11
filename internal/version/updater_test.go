@@ -33,7 +33,9 @@ func releaseHandler(t *testing.T, body string, status int) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		fmt.Fprint(w, body)
+		if _, err := fmt.Fprint(w, body); err != nil {
+			t.Errorf("failed to write response body: %v", err)
+		}
 	}
 }
 
