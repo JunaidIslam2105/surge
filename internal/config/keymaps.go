@@ -140,6 +140,7 @@ type BatchConfirmKeyMap struct {
 
 // UpdateKeyMap defines keybindings for update notification
 type UpdateKeyMap struct {
+	Install     key.Binding
 	OpenGitHub  key.Binding
 	IgnoreNow   key.Binding
 	NeverRemind key.Binding
@@ -689,6 +690,10 @@ func DefaultKeyMap() *KeyMap {
 			),
 		},
 		Update: UpdateKeyMap{
+			Install: key.NewBinding(
+				key.WithKeys("u", "U"),
+				key.WithHelp("u", "install update"),
+			),
 			OpenGitHub: key.NewBinding(
 				key.WithKeys("o", "O", "enter"),
 				key.WithHelp("o", "open on github"),
@@ -833,11 +838,11 @@ func (k BatchConfirmKeyMap) FullHelp() [][]key.Binding {
 }
 
 func (k UpdateKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}
+	return []key.Binding{k.Install, k.OpenGitHub, k.IgnoreNow, k.NeverRemind}
 }
 
 func (k UpdateKeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{k.OpenGitHub, k.IgnoreNow, k.NeverRemind}}
+	return [][]key.Binding{{k.Install, k.OpenGitHub, k.IgnoreNow, k.NeverRemind}}
 }
 
 func (k BugReportKeyMap) ShortHelp() []key.Binding {

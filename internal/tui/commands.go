@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"os/exec"
 	"runtime"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/SurgeDM/Surge/internal/selfupdate"
 	"github.com/SurgeDM/Surge/internal/version"
 )
 
@@ -13,6 +15,15 @@ func checkForUpdateCmd(currentVersion string) tea.Cmd {
 	return func() tea.Msg {
 		info, _ := version.CheckForUpdate(currentVersion)
 		return UpdateCheckResultMsg{Info: info}
+	}
+}
+
+func selfUpdateCmd(currentVersion string) tea.Cmd {
+	return func() tea.Msg {
+		info, err := selfupdate.Update(context.Background(), selfupdate.Options{
+			CurrentVersion: currentVersion,
+		})
+		return selfUpdateResultMsg{Info: info, err: err}
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -156,6 +157,20 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = UpdateAvailableState
 		}
 		return m, nil
+
+	case selfUpdateResultMsg:
+		if msg.err != nil {
+			m.addLogEntry(LogStyleError.Render(fmt.Sprintf("\u2716 Update failed: %s", msg.err.Error())))
+			return m, nil
+		}
+		versionLabel := "latest version"
+		if msg.Info != nil && msg.Info.LatestVersion != "" {
+			versionLabel = msg.Info.LatestVersion
+		}
+		m.addLogEntry(LogStyleComplete.Render(fmt.Sprintf("\u2714 Installed Surge %s. Restarting...", versionLabel)))
+		m.RestartRequested = true
+		m.shuttingDown = true
+		return m, shutdownCmd(m.Service)
 
 	case shutdownCompleteMsg:
 		if msg.err != nil {

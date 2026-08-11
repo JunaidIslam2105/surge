@@ -9,6 +9,11 @@ type UpdateCheckResultMsg struct {
 	Info *version.UpdateInfo
 }
 
+type selfUpdateResultMsg struct {
+	Info *version.UpdateInfo
+	err  error
+}
+
 type shutdownCompleteMsg struct {
 	err error
 }

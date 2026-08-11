@@ -332,6 +332,12 @@ func (m RootModel) updateURLUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m RootModel) updateUpdateAvailable(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Update.Install) {
+		m.addLogEntry(LogStyleStarted.Render("\u2b06 Installing Surge update..."))
+		m.state = DashboardState
+		m.UpdateInfo = nil
+		return m, selfUpdateCmd(m.CurrentVersion)
+	}
 	if key.Matches(msg, m.keys.Update.OpenGitHub) {
 		// Open the release page in browser
 		if m.UpdateInfo != nil && m.UpdateInfo.ReleaseURL != "" {
