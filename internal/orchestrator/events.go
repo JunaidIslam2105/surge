@@ -327,6 +327,10 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 			if m.DestPath != "" {
 				existing.DestPath = m.DestPath
 			}
+			if m.URL != "" {
+				existing.URL = m.URL
+				existing.URLHash = store.URLHash(m.URL)
+			}
 			if err := store.AddToMasterList(*existing); err != nil {
 				utils.Debug("Lifecycle: Failed to persist error state: %v", err)
 			}
