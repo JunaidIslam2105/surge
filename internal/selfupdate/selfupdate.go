@@ -80,7 +80,7 @@ func Update(ctx context.Context, opts Options) (*version.UpdateInfo, error) {
 
 	client := opts.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: version.RequestTimeout}
 	}
 
 	tmpDir, err := os.MkdirTemp("", "surge-update-*")
@@ -91,7 +91,7 @@ func Update(ctx context.Context, opts Options) (*version.UpdateInfo, error) {
 		_ = os.RemoveAll(tmpDir)
 	}()
 
-	archivePath := filepath.Join(tmpDir, asset.Name)
+	archivePath := filepath.Join(tmpDir, safeAssetFileName(asset.Name))
 	if err := download(ctx, client, asset.BrowserDownloadURL, archivePath); err != nil {
 		return info, err
 	}
@@ -125,6 +125,14 @@ func Update(ctx context.Context, opts Options) (*version.UpdateInfo, error) {
 
 func isUpdateAvailable(latest, current string) bool {
 	return version.IsNewerVersion(latest, current)
+}
+
+func safeAssetFileName(name string) string {
+	base := filepath.Base(name)
+	if base == "." || base == string(filepath.Separator) {
+		return "release-asset"
+	}
+	return base
 }
 
 func selectReleaseAsset(assets []version.GitHubAsset, goos, goarch string) (version.GitHubAsset, bool) {
@@ -316,8 +324,43 @@ func installBinary(src, target string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Chmod(src, info.Mode()|0o755); err != nil {
+
+	staged, err := os.CreateTemp(filepath.Dir(target), ".surge-update-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(src, target)
+	stagedPath := staged.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(stagedPath)
+		}
+	}()
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		_ = staged.Close()
+		return err
+	}
+	if _, err := io.Copy(staged, srcFile); err != nil {
+		_ = srcFile.Close()
+		_ = staged.Close()
+		return err
+	}
+	if err := srcFile.Close(); err != nil {
+		_ = staged.Close()
+		return err
+	}
+	if err := staged.Chmod(info.Mode().Perm()); err != nil {
+		_ = staged.Close()
+		return err
+	}
+	if err := staged.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(stagedPath, target); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/SurgeDM/Surge/internal/selfupdate"
@@ -20,7 +21,10 @@ func checkForUpdateCmd(currentVersion string) tea.Cmd {
 
 func selfUpdateCmd(currentVersion string) tea.Cmd {
 	return func() tea.Msg {
-		info, err := selfupdate.Update(context.Background(), selfupdate.Options{
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		info, err := selfupdate.Update(ctx, selfupdate.Options{
 			CurrentVersion: currentVersion,
 		})
 		return selfUpdateResultMsg{Info: info, err: err}

@@ -48,6 +48,13 @@ func TestChecksumForAsset(t *testing.T) {
 	}
 }
 
+func TestSafeAssetFileName(t *testing.T) {
+	got := safeAssetFileName(filepath.Join("..", "Surge_1.2.0_linux_amd64.tar.gz"))
+	if got != "Surge_1.2.0_linux_amd64.tar.gz" {
+		t.Fatalf("safeAssetFileName() = %q, want base filename", got)
+	}
+}
+
 func TestUpdateUnsupportedWindows(t *testing.T) {
 	_, err := Update(context.Background(), Options{
 		CurrentVersion: "1.0.0",
@@ -56,6 +63,45 @@ func TestUpdateUnsupportedWindows(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Update() returned nil error, want unsupported platform")
+	}
+}
+
+func TestInstallBinaryStagesInTargetDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installBinary is not used for Windows self-update yet")
+	}
+
+	src := filepath.Join(t.TempDir(), "surge")
+	if err := os.WriteFile(src, []byte("new surge binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(t.TempDir(), "surge")
+	if err := os.WriteFile(target, []byte("old surge binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := installBinary(src, target); err != nil {
+		t.Fatalf("installBinary() returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new surge binary" {
+		t.Fatalf("installed binary = %q, want new surge binary", got)
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMode := info.Mode().Perm(); gotMode != 0o700 {
+		t.Fatalf("installed mode = %v, want 0700", gotMode)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("source should remain after staged install: %v", err)
 	}
 }
 
