@@ -301,6 +301,14 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 		Filename: "db.txt",
 	})
 
+	// Seed an errored download to verify Error survives a DB round-trip via List/GetStatus.
+	testutil.SeedMasterList(t, types.DownloadRecord{
+		ID:       "db-error-id",
+		Status:   "error",
+		Error:    "connection reset by peer",
+		Filename: "failed.txt",
+	})
+
 	list, err := svc.List()
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
@@ -308,6 +316,33 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 
 	if len(list) < 2 {
 		t.Errorf("expected at least 2 items in list, got %d", len(list))
+	}
+
+	// Assert the errored record appears in List with its Error field propagated.
+	var errorFound *types.DownloadStatus
+	for i := range list {
+		if list[i].ID == "db-error-id" {
+			errorFound = &list[i]
+			break
+		}
+	}
+	if errorFound == nil {
+		t.Fatal("errored download missing from list")
+	}
+	if errorFound.Status != "error" {
+		t.Errorf("error record status = %q, want %q", errorFound.Status, "error")
+	}
+	if errorFound.Error != "connection reset by peer" {
+		t.Errorf("error record Error = %q, want %q", errorFound.Error, "connection reset by peer")
+	}
+
+	// Assert GetStatus also propagates Error for DB-backed records.
+	gotStatus, err := svc.GetStatus("db-error-id")
+	if err != nil {
+		t.Fatalf("GetStatus failed for error record: %v", err)
+	}
+	if gotStatus.Error != "connection reset by peer" {
+		t.Errorf("GetStatus Error = %q, want %q", gotStatus.Error, "connection reset by peer")
 	}
 
 	history, err := svc.History()
