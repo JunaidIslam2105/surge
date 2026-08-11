@@ -169,25 +169,48 @@ func TestUpdaterCheckNetworkError(t *testing.T) {
 }
 
 func TestUpdaterCheckTimeout(t *testing.T) {
-	client := &http.Client{
-		Timeout: 50 * time.Millisecond,
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			<-req.Context().Done()
-			return nil, req.Context().Err()
-		}),
+	tests := []struct {
+		name           string
+		clientTimeout  time.Duration
+		updaterTimeout time.Duration
+	}{
+		{
+			name:          "client timeout",
+			clientTimeout: 50 * time.Millisecond,
+		},
+		{
+			name:           "updater timeout with injected client",
+			updaterTimeout: 50 * time.Millisecond,
+		},
 	}
-	u := &Updater{Client: client, APIURL: "https://example.test/latest"}
 
-	start := time.Now()
-	_, err := u.Check("1.4.0")
-	if err == nil {
-		t.Fatal("Check() returned nil error, want ErrNetwork on timeout")
-	}
-	if !errors.Is(err, ErrNetwork) {
-		t.Errorf("err = %v, want errors.Is(err, ErrNetwork)", err)
-	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("Check() took %v, want quick timeout", elapsed)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &http.Client{
+				Timeout: tt.clientTimeout,
+				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					<-req.Context().Done()
+					return nil, req.Context().Err()
+				}),
+			}
+			u := &Updater{
+				Client:  client,
+				APIURL:  "https://example.test/latest",
+				Timeout: tt.updaterTimeout,
+			}
+
+			start := time.Now()
+			_, err := u.Check("1.4.0")
+			if err == nil {
+				t.Fatal("Check() returned nil error, want ErrNetwork on timeout")
+			}
+			if !errors.Is(err, ErrNetwork) {
+				t.Errorf("err = %v, want errors.Is(err, ErrNetwork)", err)
+			}
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
+				t.Errorf("Check() took %v, want quick timeout", elapsed)
+			}
+		})
 	}
 }
 

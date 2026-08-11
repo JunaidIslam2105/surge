@@ -2,6 +2,7 @@
 package version
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,7 +123,10 @@ func (u *Updater) LatestRelease() (*GitHubRelease, error) {
 		client = &http.Client{Timeout: timeout}
 	}
 
-	req, err := http.NewRequest("GET", apiURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
 	}

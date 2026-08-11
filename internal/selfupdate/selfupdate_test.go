@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,16 +21,36 @@ import (
 func TestSelectReleaseAsset(t *testing.T) {
 	assets := []version.GitHubAsset{
 		{Name: "Surge_1.2.0_linux_arm64.tar.gz"},
+		{Name: "Surge_1.2.0_linux_arm.tar.gz"},
 		{Name: "Surge_1.2.0_windows_amd64.zip"},
 		{Name: "checksums.txt"},
 	}
 
-	asset, ok := selectReleaseAsset(assets, "windows", "amd64")
+	asset, ok := selectReleaseAsset(assets, "linux", "arm")
+	if !ok {
+		t.Fatal("selectReleaseAsset() did not find linux arm asset")
+	}
+	if asset.Name != "Surge_1.2.0_linux_arm.tar.gz" {
+		t.Fatalf("asset = %q, want linux arm tarball", asset.Name)
+	}
+
+	asset, ok = selectReleaseAsset(assets, "windows", "amd64")
 	if !ok {
 		t.Fatal("selectReleaseAsset() did not find windows asset")
 	}
 	if asset.Name != "Surge_1.2.0_windows_amd64.zip" {
 		t.Fatalf("asset = %q, want windows amd64 zip", asset.Name)
+	}
+}
+
+func TestSelectReleaseAssetDoesNotMatchPartialArchToken(t *testing.T) {
+	assets := []version.GitHubAsset{
+		{Name: "Surge_1.2.0_linux_arm64.tar.gz"},
+		{Name: "checksums.txt"},
+	}
+
+	if asset, ok := selectReleaseAsset(assets, "linux", "arm"); ok {
+		t.Fatalf("selectReleaseAsset() = %+v, want no partial arm match", asset)
 	}
 }
 
@@ -63,6 +84,9 @@ func TestUpdateUnsupportedWindows(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Update() returned nil error, want unsupported platform")
+	}
+	if !errors.Is(err, ErrUnsupportedPlatform) {
+		t.Fatalf("Update() error = %v, want ErrUnsupportedPlatform", err)
 	}
 }
 

@@ -143,12 +143,23 @@ func selectReleaseAsset(assets []version.GitHubAsset, goos, goarch string) (vers
 	for _, asset := range assets {
 		name := strings.ToLower(asset.Name)
 		if strings.Contains(name, strings.ToLower(goos)) &&
-			strings.Contains(name, strings.ToLower(goarch)) &&
+			assetNameHasArchToken(name, goarch) &&
 			strings.HasSuffix(name, wantExt) {
 			return asset, true
 		}
 	}
 	return version.GitHubAsset{}, false
+}
+
+func assetNameHasArchToken(name, goarch string) bool {
+	name = strings.TrimSuffix(name, ".tar.gz")
+	name = strings.TrimSuffix(name, ".zip")
+	for _, token := range strings.Split(name, "_") {
+		if token == strings.ToLower(goarch) {
+			return true
+		}
+	}
+	return false
 }
 
 func findAsset(assets []version.GitHubAsset, name string) (version.GitHubAsset, bool) {
