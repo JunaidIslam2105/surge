@@ -241,6 +241,7 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 					URLHash:      urlHash,
 					DestPath:     destPath,
 					Filename:     filename,
+					Error:        err.Error(),
 					Status:       "error",
 					TotalSize:    m.Total,
 					Downloaded:   m.Total,
@@ -313,11 +314,25 @@ func (mgr *LifecycleManager) StartEventWorker(ch <-chan types.DownloadEvent) {
 
 		case types.EventError:
 			existing, _ := store.GetDownload(m.DownloadID)
-			if existing != nil {
-				existing.Status = "error"
-				if err := store.AddToMasterList(*existing); err != nil {
-					utils.Debug("Lifecycle: Failed to persist error state: %v", err)
-				}
+			if existing == nil {
+				existing = &types.DownloadRecord{ID: m.DownloadID}
+			}
+			existing.Status = "error"
+			if m.Err != nil {
+				existing.Error = m.Err.Error()
+			}
+			if m.Filename != "" {
+				existing.Filename = m.Filename
+			}
+			if m.DestPath != "" {
+				existing.DestPath = m.DestPath
+			}
+			if m.URL != "" {
+				existing.URL = m.URL
+				existing.URLHash = store.URLHash(m.URL)
+			}
+			if err := store.AddToMasterList(*existing); err != nil {
+				utils.Debug("Lifecycle: Failed to persist error state: %v", err)
 			}
 			if settings := mgr.GetSettings(); settings != nil && config.Resolve[bool](settings.General.DownloadCompleteNotification) {
 				filename := m.Filename

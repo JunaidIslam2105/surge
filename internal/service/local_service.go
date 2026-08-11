@@ -198,6 +198,7 @@ func (s *LocalDownloadService) GetStatus(id string) (*types.DownloadStatus, erro
 			Progress:     progress,
 			Speed:        completedSpeedBps(*entry),
 			Status:       entry.Status,
+			Error:        entry.Error,
 			TimeTaken:    entry.TimeTaken,
 			AvgSpeed:     entry.AvgSpeed,
 			RateLimit:    entry.RateLimit,
@@ -349,14 +350,17 @@ func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 		activeConfigs := s.lifecycle.GetScheduler().GetAll()
 		for _, cfg := range activeConfigs {
 			statusStr := "downloading"
+			var errStr string
 			if st := s.lifecycle.GetScheduler().GetStatus(cfg.ID); st != nil {
 				statusStr = st.Status
+				errStr = st.Error
 			}
 			status := types.DownloadStatus{
 				ID:           cfg.ID,
 				URL:          cfg.URL,
 				Filename:     cfg.Filename,
 				Status:       statusStr,
+				Error:        errStr,
 				RateLimit:    cfg.RateLimit,
 				RateLimitSet: cfg.RateLimitSet,
 			}
@@ -379,6 +383,12 @@ func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 						status.Status = "paused"
 					} else if cp.Done.Load() {
 						status.Status = "completed"
+					}
+					// GetStatus and metric reads are separate snapshots; recheck errors
+					// so a worker failure between those reads is not reported as downloading.
+					if err := cp.GetError(); err != nil {
+						status.Status = "error"
+						status.Error = err.Error()
 					}
 					if status.Status == "downloading" {
 						sessionDownloaded := downloaded - sessionStart
@@ -417,6 +427,7 @@ func (s *LocalDownloadService) List() ([]types.DownloadStatus, error) {
 				Filename:     d.Filename,
 				DestPath:     d.DestPath,
 				Status:       d.Status,
+				Error:        d.Error,
 				TotalSize:    d.TotalSize,
 				Downloaded:   d.Downloaded,
 				Progress:     progress,

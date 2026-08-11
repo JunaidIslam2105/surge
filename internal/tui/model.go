@@ -5,6 +5,7 @@ import (
 	engineprogress "github.com/SurgeDM/Surge/internal/progress"
 
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -412,6 +413,11 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 				case "error":
 					dm.done = true
 					dm.started = true
+					if s.Error != "" {
+						dm.err = errors.New(s.Error)
+					} else {
+						dm.err = errors.New("download failed")
+					}
 				case "pausing":
 					dm.pausing = true
 					dm.started = true
