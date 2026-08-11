@@ -459,7 +459,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			ToggleHelp: key.NewBinding(
 				key.WithKeys("h"),
-				key.WithHelp("h", "keybindings"),
+				key.WithHelp("h", "toggle help"),
 			),
 			ReportBug: key.NewBinding(
 				key.WithKeys("?"),
@@ -769,7 +769,7 @@ func (k DashboardKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.TabQueued, k.TabActive, k.TabDone, k.NextTab, k.PrevTab},
 		{k.Add, k.AddFromClipboard, k.BatchImport, k.Search, k.CategoryFilter, k.Pause, k.Refresh, k.Delete, k.PurgeFile, k.Settings, k.SpeedLimits, k.PinTab},
-		{k.Log, k.OpenFile, k.OpenFolder, k.ReportBug, k.Quit},
+		{k.Log, k.OpenFile, k.OpenFolder, k.ToggleHelp, k.ReportBug, k.Quit},
 	}
 }
 

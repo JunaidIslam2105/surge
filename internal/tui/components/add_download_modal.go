@@ -20,6 +20,7 @@ type AddDownloadModal struct {
 	ShowURL         bool
 	URL             string
 	BrowseHintIndex int
+	BrowseHintKey   string
 	Help            help.Model
 	HelpKeys        help.KeyMap
 	BorderColor     color.Color
@@ -51,7 +52,7 @@ func (m AddDownloadModal) View() string {
 		inputW := m.Width - BorderFrameWidth - horizontalPadding - labelWidth
 
 		if m.BrowseHintIndex == i {
-			inputW -= 13 // Margin (1) + "[Tab] Browse" (12)
+			inputW -= lipgloss.Width(m.browseHint()) + 1
 		}
 		if inputW < 10 {
 			inputW = 10
@@ -65,13 +66,21 @@ func (m AddDownloadModal) View() string {
 			if m.FocusedInput == i {
 				hintStyle = hintStyle.Foreground(colors.Pink())
 			}
-			row = lipgloss.JoinHorizontal(lipgloss.Left, row, hintStyle.Render("[Tab] Browse"))
+			row = lipgloss.JoinHorizontal(lipgloss.Left, row, hintStyle.Render(m.browseHint()))
 		}
 		content = append(content, row, "")
 	}
 
 	content = append(content, m.Help.View(m.HelpKeys))
 	return lipgloss.NewStyle().Padding(0, 2).Render(lipgloss.JoinVertical(lipgloss.Left, content...))
+}
+
+func (m AddDownloadModal) browseHint() string {
+	key := m.BrowseHintKey
+	if key == "" {
+		key = "tab"
+	}
+	return "[" + key + "] Browse"
 }
 
 // RenderWithBtopBox renders the modal with btop-style border.

@@ -37,7 +37,7 @@ const (
 	DefaultPaddingY        = 0
 	PopupPaddingX          = 2
 	PopupPaddingY          = 1
-	PopupWidth             = 70 // Consistent width for small popup dialogs
+	PopupWidth             = 96 // Fits the complete three-column shortcut list on standard terminals
 	HeaderWidthOffset      = 2
 	ProgressBarWidthOffset = 4
 

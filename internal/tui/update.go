@@ -10,6 +10,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/selfupdate"
 	"github.com/SurgeDM/Surge/internal/utils"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
@@ -270,7 +271,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateURLUpdate(msg)
 
 		case HelpModalState:
-			if msg.String() == "esc" {
+			if msg.String() == "esc" || key.Matches(msg, m.keys.Dashboard.ToggleHelp) {
 				m.state = DashboardState
 				return m, nil
 			}

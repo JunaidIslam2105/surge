@@ -57,7 +57,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Tab switching
 	pinnedGuard := func() bool {
 		if m.pinnedTab != -1 {
-			m.addLogEntry(LogStyleError.Render("\u25c6 Tab is pinned \u2014 press t to unpin"))
+			m.addLogEntry(LogStyleError.Render("\u25c6 Tab is pinned \u2014 press " + m.keys.Dashboard.PinTab.Help().Key + " to unpin"))
 			return true
 		}
 		return false

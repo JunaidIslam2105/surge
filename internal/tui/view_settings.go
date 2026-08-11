@@ -217,13 +217,9 @@ func (m RootModel) renderSettingsHelp(width int) string {
 		width = 1
 	}
 
-	helpText := m.help.View(m.keys.Settings)
-	if width < 60 {
-		helpText = "esc: save/close  tab: next tab  enter: edit"
-	}
-	if width < 40 {
-		helpText = "esc close | enter edit"
-	}
+	help := m.help
+	help.SetWidth(width)
+	helpText := help.View(m.keys.Settings)
 
 	return lipgloss.NewStyle().
 		Foreground(colors.Gray()).
@@ -379,14 +375,14 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 					if len(token) > 16 {
 						displayToken = token[:8] + "..." + token[len(token)-8:]
 					}
-					valueStr = displayToken + lipgloss.NewStyle().Foreground(colors.Gray()).Render(" [Enter to Copy]")
+					valueStr = displayToken + lipgloss.NewStyle().Foreground(colors.Gray()).Render(" ["+m.keys.Settings.Edit.Help().Key+"] Copy")
 				}
 			}
 		case config.TypeLink:
-			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("Open [Enter]")
+			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("[" + m.keys.Settings.Edit.Help().Key + "] Open")
 			valueLabel = "Action: "
 		case config.TypeCustomCategoryAdd:
-			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("Create Category [Enter]")
+			valueStr = lipgloss.NewStyle().Foreground(colors.Cyan()).Render("[" + m.keys.Settings.Edit.Help().Key + "] Create Category")
 			valueLabel = "Action: "
 		case config.TypeCustomCategory:
 			cat, ok := value.(config.Category)
@@ -413,7 +409,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	}
 
 	if (meta.Key == "default_download_dir" || meta.Key == "theme_path") && !m.SettingsIsEditing {
-		valueLabel = "[Tab] Browse: "
+		valueLabel = "[" + m.keys.Settings.Browse.Help().Key + "] Browse: "
 	}
 
 	valueLabelStyle := lipgloss.NewStyle().Foreground(colors.LightGray()).Bold(true)
