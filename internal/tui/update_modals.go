@@ -353,14 +353,6 @@ func (m RootModel) updateUpdateAvailable(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		m.UpdateInfo = nil
 		return m, nil
 	}
-	if key.Matches(msg, m.keys.Update.NeverRemind) {
-		// Persist the setting and dismiss
-		m.Settings.General.SkipUpdateCheck.Value = true
-		_ = m.persistSettings()
-		m.state = DashboardState
-		m.UpdateInfo = nil
-		return m, nil
-	}
 
 	return m, nil
 }
