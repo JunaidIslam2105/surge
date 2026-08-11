@@ -54,7 +54,7 @@
           wants = ["network-online.target"];
 
           serviceConfig = {
-            ExecStart = "${pkgs.surge}/bin/surge service __run";
+            ExecStart = "${pkgs.surge}/bin/surge server start --is-system-service";
 
             Restart = "on-failure";
             RestartSec = "5s";
