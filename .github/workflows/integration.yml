@@ -4,21 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "extension/**"
-      - "cmd/**"
-      - "internal/**"
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
   pull_request:
-    paths:
-      - "extension/**"
-      - "cmd/**"
-      - "internal/**"
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
   workflow_dispatch:
 
 permissions:
@@ -29,8 +15,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_or_ext: ${{ steps.filter.outputs.backend_or_ext }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend_or_ext:
+              - 'extension/**'
+              - 'cmd/**'
+              - 'internal/**'
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+
   integration:
     name: Extension ↔ Surge Backend
+    needs: changes
+    if: needs.changes.outputs.backend_or_ext == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

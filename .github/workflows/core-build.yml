@@ -10,8 +10,6 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "extension/**"
 
 permissions:
   contents: write
@@ -22,8 +20,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - '!extension/**'
+              - '**'
+
   test:
     name: Test and Check (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
