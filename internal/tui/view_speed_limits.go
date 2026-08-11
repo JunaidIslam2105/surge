@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/help"
+
 	"github.com/SurgeDM/Surge/internal/config"
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/tui/components"
@@ -53,6 +55,11 @@ func (m RootModel) viewSpeedLimits() string {
 		})
 	}
 
+	var helpKeys help.KeyMap = m.keys.SpeedLimits
+	if m.speedLimitsIsEditing {
+		helpKeys = m.keys.SettingsEditor
+	}
+
 	modal := components.ListInputModal{
 		Title:       "Speed Limits",
 		Subtitle:    "Note: Enter 0 for infinity/unlimited.",
@@ -60,7 +67,7 @@ func (m RootModel) viewSpeedLimits() string {
 		Cursor:      m.speedLimitsCursor,
 		Input:       m.SettingsInput,
 		Help:        m.help,
-		HelpKeys:    m.keys.SpeedLimits,
+		HelpKeys:    helpKeys,
 		BorderColor: colors.Magenta(),
 		Width:       w,
 		Height:      h,

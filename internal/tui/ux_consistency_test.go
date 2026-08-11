@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +11,13 @@ import (
 
 	"github.com/SurgeDM/Surge/internal/config"
 )
+
+func TestStandardWidthKeepsDashboardDetailsVisible(t *testing.T) {
+	layout := CalculateDashboardLayout(120, 30)
+	if layout.HideRightColumn {
+		t.Fatal("120-column terminal unexpectedly hides the details column")
+	}
+}
 
 func TestViewsUseConfiguredKeysInContextualHints(t *testing.T) {
 	m := InitialRootModel(1701, "test", nil, nil, nil, false)
@@ -30,6 +39,12 @@ func TestViewsUseConfiguredKeysInContextualHints(t *testing.T) {
 	m.keys.Settings.PrevTab = key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "previous tab"))
 	if got := ansiEscapeRE.ReplaceAllString(m.renderSettingsHelp(55), ""); !strings.Contains(got, "z previous tab") {
 		t.Fatalf("compact settings help does not use configured key: %q", got)
+	}
+
+	m.SettingsIsEditing = true
+	m.keys.SettingsEditor.Confirm = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "save"))
+	if got := ansiEscapeRE.ReplaceAllString(m.renderSettingsHelp(55), ""); !strings.Contains(got, "ctrl+s save") {
+		t.Fatalf("settings editor does not show its configured keys: %q", got)
 	}
 }
 
@@ -65,5 +80,26 @@ func TestSettingsActionsUseConfiguredKeys(t *testing.T) {
 	values := map[string]interface{}{"default_download_dir": "/tmp"}
 	if got := ansiEscapeRE.ReplaceAllString(m.renderSettingsDetailBlock(directory, 0, values, 40, 6), ""); !strings.Contains(got, "[b] Browse") {
 		t.Fatalf("settings browse action does not use configured key: %q", got)
+	}
+}
+
+func TestSettingsStayOpenWhenSaveFails(t *testing.T) {
+	m := InitialRootModel(1701, "test", nil, nil, config.DefaultSettings(), false)
+	m.state = SettingsState
+	m.snapshotSettings()
+
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", blocker)
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	got := updated.(RootModel)
+	if got.state != SettingsState {
+		t.Fatalf("settings closed after save failure: state %d", got.state)
+	}
+	if !strings.Contains(got.settingsError, "Failed to save settings") {
+		t.Fatalf("save failure is not shown to the user: %q", got.settingsError)
 	}
 }

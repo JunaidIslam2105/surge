@@ -18,7 +18,7 @@ const (
 	MaxSettingsWidth      = 130
 	DefaultSettingsHeight = 26
 
-	MinRightColumnWidth = 50 // Hide right column if narrow
+	MinRightColumnWidth = 48 // Keep details visible at the common 120-column width
 	MinGraphStatsWidth  = 50 // Show inline graph stats whenever right column is visible
 	MinLogoWidth        = 40 // Hide ASCII logo if narrow
 

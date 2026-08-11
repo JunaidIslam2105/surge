@@ -220,6 +220,9 @@ func (m RootModel) renderSettingsHelp(width int) string {
 	help := m.help
 	help.SetWidth(width)
 	helpText := help.View(m.keys.Settings)
+	if m.SettingsIsEditing {
+		helpText = help.View(m.keys.SettingsEditor)
+	}
 
 	return lipgloss.NewStyle().
 		Foreground(colors.Gray()).

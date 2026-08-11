@@ -477,7 +477,7 @@ func (m RootModel) View() tea.View {
 	var bitmapWidth int
 	var totalSize, chunkSize int64
 	var chunkProgress []int64
-	if selected != nil && selected.state != nil {
+	if layout.ShowChunkMap && !layout.HideRightColumn && selected != nil && !selected.done && selected.state != nil {
 		bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress = selected.state.GetBitmap()
 	}
 
