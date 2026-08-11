@@ -11,10 +11,10 @@ import (
 
 var (
 	diskFullErr      = makeDiskFullPathError()
-	wrappedDiskErr   = fmt.Errorf("write error: %w", diskFullErr)
+	errWrappedDisk   = fmt.Errorf("write error: %w", diskFullErr)
 	cancelErr        = context.Canceled
 	deadlineErr      = context.DeadlineExceeded
-	permanentHTTPErr = fmt.Errorf("status 404: %w", types.ErrPermanentHTTP)
+	errPermanentHTTP = fmt.Errorf("status 404: %w", types.ErrPermanentHTTP)
 )
 
 func TestEnospcPolicy(t *testing.T) {
@@ -26,9 +26,9 @@ func TestEnospcPolicy(t *testing.T) {
 			shutting  bool
 			wantRetry bool
 		}{
-			{"ENOSPC excluded", wrappedDiskErr, 0, false, false},
+			{"ENOSPC excluded", errWrappedDisk, 0, false, false},
 			{"raw ENOSPC errno excluded", diskFullErr, 0, false, false},
-			{"permanent HTTP excluded", permanentHTTPErr, 0, false, false},
+			{"permanent HTTP excluded", errPermanentHTTP, 0, false, false},
 			{"cancel excluded", cancelErr, 0, false, false},
 			{"deadline excluded", deadlineErr, 0, false, false},
 			{"shutdown excluded", errors.New("some error"), 0, true, false},
@@ -53,8 +53,8 @@ func TestEnospcPolicy(t *testing.T) {
 			downloaded   int64
 			wantFallback bool
 		}{
-			{"ENOSPC with zero downloaded", wrappedDiskErr, 0, false},
-			{"ENOSPC with progress", wrappedDiskErr, 100, false},
+			{"ENOSPC with zero downloaded", errWrappedDisk, 0, false},
+			{"ENOSPC with progress", errWrappedDisk, 100, false},
 			{"paused excluded", types.ErrPaused, 0, false},
 			{"cancel excluded", cancelErr, 0, false},
 			{"deadline excluded", deadlineErr, 0, false},
