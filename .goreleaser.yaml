@@ -40,7 +40,8 @@ changelog:
       - "^test:"
 
 archives:
-  - formats: [ tar.gz ]
+  - id: surge
+    formats: [ tar.gz ]
     format_overrides:
       - goos: windows
         formats: [ zip ]
@@ -48,6 +49,32 @@ archives:
     files:
       - LICENSE
       - README.md
+
+chocolateys:
+  - name: surge
+    ids:
+      - surge
+    package_source_url: https://github.com/SurgeDM/Surge
+    owners: SurgeDM
+    title: Surge
+    project_url: https://github.com/SurgeDM/Surge
+    url_template: "https://github.com/SurgeDM/Surge/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    icon_url: https://raw.githubusercontent.com/SurgeDM/Surge/main/assets/logo.png
+    copyright: 2025 Junaid Islam
+    license_url: https://github.com/SurgeDM/Surge/blob/main/LICENSE
+    require_license_acceptance: false
+    project_source_url: https://github.com/SurgeDM/Surge
+    docs_url: https://github.com/SurgeDM/Surge/blob/main/README.md
+    bug_tracker_url: https://github.com/SurgeDM/Surge/issues
+    tags: "surge download-manager downloader tui cli golang foss"
+    summary: Blazing fast TUI download manager built in Go for power users.
+    description: |
+      Surge is a keyboard-driven terminal download manager with a fast Go backend,
+      multi-connection downloads, mirror support, resumable transfers, a background
+      server mode, and CLI automation commands.
+    release_notes: "https://github.com/SurgeDM/Surge/releases/tag/{{ .Tag }}"
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+    source_repo: "https://push.chocolatey.org/"
 
 homebrew_casks:
   - name: surge
