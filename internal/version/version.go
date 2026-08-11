@@ -3,20 +3,42 @@ package version
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
 const (
-	// GitHubAPIURL is the endpoint for fetching the latest release
-	GitHubAPIURL = "https://api.github.com/repos/SurgeDM/Surge/releases/latest"
-	// RequestTimeout is the timeout for the GitHub API request
+	GitHubAPIURL   = "https://api.github.com/repos/SurgeDM/Surge/releases/latest"
 	RequestTimeout = 10 * time.Second
 )
+
+var (
+	ErrNetwork = errors.New("update check: network error")
+	ErrAPI     = errors.New("update check: GitHub API error")
+	ErrParse   = errors.New("update check: invalid response")
+)
+
+// Updater checks GitHub releases using injectable HTTP configuration.
+type Updater struct {
+	Client  *http.Client
+	APIURL  string
+	Timeout time.Duration
+}
+
+// New returns an Updater configured for Surge's GitHub releases endpoint.
+func New() *Updater {
+	return &Updater{
+		Client:  &http.Client{Timeout: RequestTimeout},
+		APIURL:  GitHubAPIURL,
+		Timeout: RequestTimeout,
+	}
+}
 
 // UpdateInfo contains information about an available update
 type UpdateInfo struct {
@@ -26,10 +48,17 @@ type UpdateInfo struct {
 	UpdateAvailable bool   // Whether an update is available
 }
 
+// GitHubAsset represents a downloadable release asset from GitHub.
+type GitHubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
 // GitHubRelease represents the relevant fields from the GitHub API response
 type GitHubRelease struct {
-	TagName string `json:"tag_name"`
-	HTMLURL string `json:"html_url"`
+	TagName string        `json:"tag_name"`
+	HTMLURL string        `json:"html_url"`
+	Assets  []GitHubAsset `json:"assets"`
 }
 
 // CheckForUpdate checks if a newer version of Surge is available on GitHub.
@@ -37,18 +66,65 @@ type GitHubRelease struct {
 // Returns UpdateInfo with UpdateAvailable=false if current version is up to date.
 // Returns UpdateInfo with UpdateAvailable=true if a newer version exists.
 func CheckForUpdate(currentVersion string) (*UpdateInfo, error) {
+	return checkForUpdate(currentVersion, New())
+}
+
+func checkForUpdate(currentVersion string, updater *Updater) (*UpdateInfo, error) {
+	info, err := updater.Check(currentVersion)
+	if err != nil && (errors.Is(err, ErrNetwork) || errors.Is(err, ErrAPI) || errors.Is(err, ErrParse)) {
+		utils.Debug("Update check failed: %v", err)
+		return nil, nil
+	}
+	return info, err
+}
+
+// Check checks if a newer version of Surge is available on GitHub.
+// Returns nil, nil for development builds (skipped).
+func (u *Updater) Check(currentVersion string) (*UpdateInfo, error) {
 	// Skip check for development builds
 	if currentVersion == "dev" || currentVersion == "" {
 		return nil, nil
 	}
 
-	client := &http.Client{
-		Timeout: RequestTimeout,
+	release, err := u.LatestRelease()
+	if err != nil {
+		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", GitHubAPIURL, nil)
+	updateInfo := &UpdateInfo{
+		CurrentVersion:  currentVersion,
+		LatestVersion:   release.TagName,
+		ReleaseURL:      release.HTMLURL,
+		UpdateAvailable: isNewerVersion(release.TagName, currentVersion),
+	}
+
+	return updateInfo, nil
+}
+
+// LatestRelease fetches Surge's latest GitHub release.
+func (u *Updater) LatestRelease() (*GitHubRelease, error) {
+	if u == nil {
+		u = New()
+	}
+
+	apiURL := u.APIURL
+	if apiURL == "" {
+		apiURL = GitHubAPIURL
+	}
+
+	timeout := u.Timeout
+	if timeout == 0 {
+		timeout = RequestTimeout
+	}
+
+	client := u.Client
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	}
+
+	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, nil // Fail silently
+		return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
 	}
 
 	// Set User-Agent as required by GitHub API
@@ -57,7 +133,7 @@ func CheckForUpdate(currentVersion string) (*UpdateInfo, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, nil // Network error - fail silently
+		return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -66,25 +142,15 @@ func CheckForUpdate(currentVersion string) (*UpdateInfo, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil // API error - fail silently
+		return nil, fmt.Errorf("%w: status %d", ErrAPI, resp.StatusCode)
 	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, nil // Parse error - fail silently
+		return nil, fmt.Errorf("%w: %v", ErrParse, err)
 	}
 
-	latestVersion := normalizeVersion(release.TagName)
-	currentNormalized := normalizeVersion(currentVersion)
-
-	updateInfo := &UpdateInfo{
-		CurrentVersion:  currentVersion,
-		LatestVersion:   release.TagName,
-		ReleaseURL:      release.HTMLURL,
-		UpdateAvailable: isNewerVersion(latestVersion, currentNormalized),
-	}
-
-	return updateInfo, nil
+	return &release, nil
 }
 
 // normalizeVersion removes the 'v' prefix and trims whitespace
@@ -94,37 +160,23 @@ func normalizeVersion(version string) string {
 	return version
 }
 
-// isNewerVersion compares two semver strings and returns true if latest > current
-// Assumes format: MAJOR.MINOR.PATCH (e.g., "1.2.3")
-func isNewerVersion(latest, current string) bool {
-	latestParts := parseVersion(latest)
-	currentParts := parseVersion(current)
+// IsNewerVersion compares two semver strings and returns true if latest > current.
+// Invalid versions are treated as not updateable so malformed release tags fail closed.
+func IsNewerVersion(latest, current string) bool {
+	latest = normalizeVersion(latest)
+	current = normalizeVersion(current)
 
-	for i := 0; i < 3; i++ {
-		if latestParts[i] > currentParts[i] {
-			return true
-		}
-		if latestParts[i] < currentParts[i] {
-			return false
-		}
+	latestVersion, err := semver.NewVersion(latest)
+	if err != nil {
+		return false
 	}
-	return false // Versions are equal
+	currentVersion, err := semver.NewVersion(current)
+	if err != nil {
+		return false
+	}
+	return latestVersion.Compare(currentVersion) > 0
 }
 
-// parseVersion parses a semver string into [major, minor, patch]
-func parseVersion(version string) [3]int {
-	var parts [3]int
-
-	// Split by '.' and parse each part
-	segments := strings.Split(version, ".")
-	for i := 0; i < len(segments) && i < 3; i++ {
-		// Parse the numeric part (ignore any suffix like "-beta")
-		numStr := segments[i]
-		if idx := strings.IndexAny(numStr, "-+"); idx != -1 {
-			numStr = numStr[:idx]
-		}
-		_, _ = fmt.Sscanf(numStr, "%d", &parts[i])
-	}
-
-	return parts
+func isNewerVersion(latest, current string) bool {
+	return IsNewerVersion(latest, current)
 }
