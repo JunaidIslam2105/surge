@@ -397,14 +397,55 @@ type HandoffResult =
   | { success: true; outcome: 'browser'; surgeError: string }
   | { success: false; outcome: 'failed'; error: string; surgeError: string; fallbackError?: string };
 
-async function fallbackToBrowser(url: string, surgeError: string): Promise<HandoffResult> {
+const BROWSER_REJECTED_HEADERS = new Set([
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+]);
+
+function buildBrowserDownloadHeaders(headers: Record<string, string>): { name: string; value: string }[] | undefined {
+  const browserHeaders = Object.entries(headers)
+    .filter(([name]) => {
+      const normalizedName = name.toLowerCase();
+      return !BROWSER_REJECTED_HEADERS.has(normalizedName)
+        && !normalizedName.startsWith('proxy-')
+        && !normalizedName.startsWith('sec-');
+    })
+    .map(([name, value]) => ({ name, value }));
+  return browserHeaders.length > 0 ? browserHeaders : undefined;
+}
+
+async function fallbackToBrowser(
+  url: string,
+  surgeError: string,
+  capturedHeaders: Record<string, string>,
+): Promise<HandoffResult> {
   const enabled = await storageGetBoolean(STORAGE_KEYS.FALLBACK_TO_BROWSER);
   if (enabled === false) {
     return { success: false, outcome: 'failed', error: surgeError, surgeError };
   }
 
   try {
-    await browser.downloads.download({ url });
+    const headers = buildBrowserDownloadHeaders(capturedHeaders);
+    await browser.downloads.download(headers ? { url, headers } : { url });
     return { success: true, outcome: 'browser', surgeError };
   } catch (error) {
     const fallbackError = error instanceof Error ? error.message : String(error);
@@ -427,7 +468,7 @@ async function sendToSurge(
   options?: { skipApproval?: boolean },
 ): Promise<HandoffResult> {
   const base = await getBaseUrl();
-  if (!base) return fallbackToBrowser(url, 'Server not running');
+  if (!base) return fallbackToBrowser(url, 'Server not running', headers);
 
   try {
     const resp = await fetch(`${base}/download`, {
@@ -448,10 +489,10 @@ async function sendToSurge(
       return { success: true, outcome: 'surge', filename: data.filename };
     }
     const error = await resp.text().catch(() => '') || `Server returned ${resp.status}`;
-    return fallbackToBrowser(url, error);
+    return fallbackToBrowser(url, error, headers);
   } catch (error) {
     const surgeError = error instanceof Error ? error.message : String(error);
-    return fallbackToBrowser(url, surgeError);
+    return fallbackToBrowser(url, surgeError, headers);
   }
 }
 
@@ -1034,6 +1075,7 @@ export const __test__ = {
     processedIds.clear();
   },
   handleDownloadCreated,
+  captureHeaders,
   reresolveActiveServerUrl,
   handleMessage,
 };

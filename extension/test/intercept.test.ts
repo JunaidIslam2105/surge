@@ -166,6 +166,23 @@ describe('download interception naming', () => {
       }));
     });
 
+    it('forwards allowed captured headers while excluding Cookie from the browser retry', async () => {
+      __test__.captureHeaders({
+        url: failedItem.url,
+        requestHeaders: [
+          { name: 'X-Download-Token', value: 'token-123' },
+          { name: 'Cookie', value: 'session=secret' },
+        ],
+      });
+
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.downloads.download).toHaveBeenCalledWith({
+        url: failedItem.url,
+        headers: [{ name: 'X-Download-Token', value: 'token-123' }],
+      });
+    });
+
     it('preserves the Surge failure without retrying when fallback is disabled', async () => {
       (browser.storage.local.get as import('vitest').Mock).mockImplementation((key: string) => {
         if (key === 'interceptEnabled') return Promise.resolve({ interceptEnabled: true });
