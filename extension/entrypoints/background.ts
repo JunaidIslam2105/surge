@@ -418,16 +418,25 @@ const BROWSER_REJECTED_HEADERS = new Set([
   'trailer',
   'transfer-encoding',
   'upgrade',
+  'user-agent',
   'via',
 ]);
+const BROWSER_METHOD_OVERRIDE_HEADERS = new Set([
+  'x-http-method',
+  'x-http-method-override',
+  'x-method-override',
+]);
+const BROWSER_REJECTED_METHODS = new Set(['connect', 'trace', 'track']);
 
 function buildBrowserDownloadHeaders(headers: Record<string, string>): { name: string; value: string }[] | undefined {
   const browserHeaders = Object.entries(headers)
-    .filter(([name]) => {
+    .filter(([name, value]) => {
       const normalizedName = name.toLowerCase();
       return !BROWSER_REJECTED_HEADERS.has(normalizedName)
         && !normalizedName.startsWith('proxy-')
-        && !normalizedName.startsWith('sec-');
+        && !normalizedName.startsWith('sec-')
+        && !(BROWSER_METHOD_OVERRIDE_HEADERS.has(normalizedName)
+          && value.split(',').some(method => BROWSER_REJECTED_METHODS.has(method.trim().toLowerCase())));
     })
     .map(([name, value]) => ({ name, value }));
   return browserHeaders.length > 0 ? browserHeaders : undefined;

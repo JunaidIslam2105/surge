@@ -166,12 +166,14 @@ describe('download interception naming', () => {
       }));
     });
 
-    it('forwards allowed captured headers while excluding Cookie from the browser retry', async () => {
+    it('forwards allowed captured headers while excluding rejected headers from the browser retry', async () => {
       __test__.captureHeaders({
         url: failedItem.url,
         requestHeaders: [
           { name: 'X-Download-Token', value: 'token-123' },
           { name: 'Cookie', value: 'session=secret' },
+          { name: 'User-Agent', value: 'Surge test agent' },
+          { name: 'X-HTTP-Method-Override', value: 'PATCH, TRACE' },
         ],
       });
 
