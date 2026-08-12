@@ -93,6 +93,7 @@ func TestSettingsStayOpenWhenSaveFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("XDG_CONFIG_HOME", blocker)
+	t.Setenv("APPDATA", blocker)
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	got := updated.(RootModel)
