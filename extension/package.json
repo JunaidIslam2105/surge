@@ -27,7 +27,7 @@
     "eslint": "^10.8.1",
     "eslint-plugin-solid": "^0.14.5",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.66.0",
+    "typescript-eslint": "^8.67.0",
     "vite-plugin-solid": "^2.11.14",
     "vitest": "^4.1.10",
     "wxt": "^0.20.26"
