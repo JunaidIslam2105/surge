@@ -30,7 +30,7 @@
     "typescript-eslint": "^8.67.0",
     "vite-plugin-solid": "^2.11.14",
     "vitest": "^4.1.10",
-    "wxt": "^0.20.26"
+    "wxt": "^0.21.4"
   },
   "overrides": {
     "eslint-plugin-solid": {
