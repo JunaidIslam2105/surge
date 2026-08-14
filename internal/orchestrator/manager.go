@@ -8,6 +8,7 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -215,7 +216,7 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 		return mgr.enqueueNew(ctx, req, requestID)
 	}
 
-	key := req.URL + "\x00" + req.Path
+	key := enqueueCoalescingKey(req)
 	mgr.inflightMu.Lock()
 	if existing := mgr.inflight[key]; existing != nil {
 		mgr.inflightMu.Unlock()
@@ -236,6 +237,38 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 	close(entry.done)
 	mgr.inflightMu.Unlock()
 	return entry.id, entry.filename, entry.err
+}
+
+// enqueueCoalescingKey includes every request field that can affect the queued
+// download. Requests that merely share a URL and destination may still have a
+// different filename, authentication headers, or scheduling options and must
+// therefore be enqueued independently.
+func enqueueCoalescingKey(req *DownloadRequest) string {
+	var key strings.Builder
+	writeString := func(value string) {
+		fmt.Fprintf(&key, "%d:%s", len(value), value)
+	}
+	writeString(req.URL)
+	writeString(req.Filename)
+	writeString(req.Path)
+	fmt.Fprintf(&key, "%d:", len(req.Mirrors))
+	for _, mirror := range req.Mirrors {
+		writeString(mirror)
+	}
+
+	headerNames := make([]string, 0, len(req.Headers))
+	for name := range req.Headers {
+		headerNames = append(headerNames, name)
+	}
+	sort.Strings(headerNames)
+	fmt.Fprintf(&key, "%d:", len(headerNames))
+	for _, name := range headerNames {
+		writeString(name)
+		writeString(req.Headers[name])
+	}
+
+	fmt.Fprintf(&key, "%t:%t:%d:%d", req.IsExplicitCategory, req.SkipApproval, req.Workers, req.MinChunkSize)
+	return key.String()
 }
 
 func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadRequest, requestID string) (string, string, error) {

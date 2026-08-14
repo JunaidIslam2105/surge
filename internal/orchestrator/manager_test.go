@@ -173,6 +173,48 @@ func TestLifecycleManager_EnqueueCoalescesConcurrentRequests(t *testing.T) {
 	}
 }
 
+func TestLifecycleManager_EnqueueDoesNotCoalesceDifferentRequests(t *testing.T) {
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started <- struct{}{}
+		<-release
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
+	mgr := NewLifecycleManager(pool, nil, nil)
+	defer mgr.Shutdown()
+
+	dest := t.TempDir()
+	type result struct {
+		filename string
+		err      error
+	}
+	results := make(chan result, 2)
+	for _, filename := range []string{"first.bin", "second.bin"} {
+		go func(filename string) {
+			_, finalFilename, err := mgr.Enqueue(context.Background(), &DownloadRequest{
+				URL: ts.URL + "/same-resource", Filename: filename, Path: dest,
+			})
+			results <- result{finalFilename, err}
+		}(filename)
+	}
+	<-started
+	<-started
+	close(release)
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("Enqueue errors = %v, %v", first.err, second.err)
+	}
+	if (first.filename != "first.bin" || second.filename != "second.bin") &&
+		(first.filename != "second.bin" || second.filename != "first.bin") {
+		t.Fatalf("resolved filenames = %q, %q; want both distinct requested names", first.filename, second.filename)
+	}
+}
+
 func TestLifecycleManager_IsNameActive(t *testing.T) {
 	activeFunc := func(dir, name string) bool {
 		return name == "active.txt"

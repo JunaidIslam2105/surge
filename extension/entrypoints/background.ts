@@ -638,7 +638,16 @@ async function handleDownloadCreated(downloadItem: {
     return;
   }
   if (interceptingUrls.has(downloadItem.url)) {
-    logDownload('ignored: handoff already in progress', { id: downloadItem.id, url: downloadItem.url });
+    // A second browser download ID is a real download, not a duplicate event
+    // for the first ID. Cancel it so it cannot continue alongside the handoff
+    // already in progress for this URL.
+    try {
+      await browser.downloads.cancel(downloadItem.id);
+      await browser.downloads.erase({ id: downloadItem.id } as any).catch(() => {});
+      logDownload('cancelled: handoff already in progress', { id: downloadItem.id, url: downloadItem.url });
+    } catch {
+      logDownload('could not cancel duplicate while handoff is in progress', { id: downloadItem.id, url: downloadItem.url });
+    }
     return;
   }
   interceptingUrls.add(downloadItem.url);

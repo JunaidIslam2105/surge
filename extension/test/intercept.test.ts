@@ -151,9 +151,11 @@ describe('download interception naming', () => {
 
   it('coalesces concurrent interception attempts for the same URL', async () => {
     let releaseCancel: () => void = () => {};
-    (browser.downloads.cancel as import('vitest').Mock).mockImplementation(() => new Promise<void>((resolve) => {
-      releaseCancel = resolve;
-    }));
+    (browser.downloads.cancel as import('vitest').Mock)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        releaseCancel = resolve;
+      }))
+      .mockResolvedValue(undefined);
     mockFetch.mockImplementation((url: string) => {
       if (url.includes('/health')) return Promise.resolve({ ok: true });
       if (url.includes('/list')) return Promise.resolve({ ok: true, json: async () => [] });
@@ -177,7 +179,8 @@ describe('download interception naming', () => {
     releaseCancel();
     await first;
 
-    expect(browser.downloads.cancel).toHaveBeenCalledOnce();
+    expect(browser.downloads.cancel).toHaveBeenCalledTimes(2);
+    expect(browser.downloads.cancel).toHaveBeenCalledWith(792);
     expect(mockFetch.mock.calls.filter(call => call[0].includes('/download'))).toHaveLength(1);
   });
 
