@@ -135,6 +135,52 @@ describe('download interception naming', () => {
     expect(downloadCall).toBeUndefined();
   });
 
+  it('does not hand off a download that the browser could not cancel', async () => {
+    (browser.downloads.cancel as import('vitest').Mock).mockRejectedValue(new Error('Already complete'));
+    mockFetch.mockResolvedValue({ ok: true });
+
+    await __test__.handleDownloadCreated({
+      id: 790,
+      url: 'https://example.com/already-complete.zip',
+      startTime: new Date().toISOString(),
+    });
+
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(mockFetch.mock.calls.some(call => call[0].includes('/download'))).toBe(false);
+  });
+
+  it('coalesces concurrent interception attempts for the same URL', async () => {
+    let releaseCancel: () => void = () => {};
+    (browser.downloads.cancel as import('vitest').Mock).mockImplementation(() => new Promise<void>((resolve) => {
+      releaseCancel = resolve;
+    }));
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/health')) return Promise.resolve({ ok: true });
+      if (url.includes('/list')) return Promise.resolve({ ok: true, json: async () => [] });
+      if (url.includes('/download')) return Promise.resolve({ ok: true, json: async () => ({ filename: 'once.zip' }) });
+      return Promise.resolve({ ok: false });
+    });
+
+    const first = __test__.handleDownloadCreated({
+      id: 791,
+      url: 'https://example.com/once.zip',
+      startTime: new Date().toISOString(),
+    });
+    await vi.waitFor(() => expect(browser.downloads.cancel).toHaveBeenCalledOnce());
+    const second = __test__.handleDownloadCreated({
+      id: 792,
+      url: 'https://example.com/once.zip',
+      startTime: new Date().toISOString(),
+    });
+
+    await second;
+    releaseCancel();
+    await first;
+
+    expect(browser.downloads.cancel).toHaveBeenCalledOnce();
+    expect(mockFetch.mock.calls.filter(call => call[0].includes('/download'))).toHaveLength(1);
+  });
+
   describe('browser fallback', () => {
     const failedItem = {
       id: 8001,

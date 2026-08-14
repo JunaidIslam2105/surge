@@ -40,6 +40,15 @@ type LifecycleManager struct {
 	// large batch of downloads does not flood the network with HEAD requests.
 	probeSem     chan struct{}
 	shutdownOnce sync.Once
+	inflightMu   sync.Mutex
+	inflight     map[string]*inflightEnqueue
+}
+
+type inflightEnqueue struct {
+	done     chan struct{}
+	id       string
+	filename string
+	err      error
 }
 
 const (
@@ -112,6 +121,7 @@ func NewLifecycleManager(pool *scheduler.Scheduler, eventBus *EventBus, settings
 		aggregator:          aggregator,
 		isNameActive:        activeCheck,
 		probeSem:            sem,
+		inflight:            make(map[string]*inflightEnqueue),
 	}
 }
 
@@ -201,7 +211,34 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 	if req.Path == "" {
 		return "", "", types.ErrDestRequired
 	}
+	if requestID != "" {
+		return mgr.enqueueNew(ctx, req, requestID)
+	}
 
+	key := req.URL + "\x00" + req.Path
+	mgr.inflightMu.Lock()
+	if existing := mgr.inflight[key]; existing != nil {
+		mgr.inflightMu.Unlock()
+		select {
+		case <-existing.done:
+			return existing.id, existing.filename, existing.err
+		case <-ctx.Done():
+			return "", "", fmt.Errorf("enqueue aborted while waiting for matching request: %w", ctx.Err())
+		}
+	}
+	entry := &inflightEnqueue{done: make(chan struct{})}
+	mgr.inflight[key] = entry
+	mgr.inflightMu.Unlock()
+
+	entry.id, entry.filename, entry.err = mgr.enqueueNew(ctx, req, requestID)
+	mgr.inflightMu.Lock()
+	delete(mgr.inflight, key)
+	close(entry.done)
+	mgr.inflightMu.Unlock()
+	return entry.id, entry.filename, entry.err
+}
+
+func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadRequest, requestID string) (string, string, error) {
 	settings := mgr.GetSettings()
 
 	// Throttle concurrent probes — acquire a semaphore slot before probing.

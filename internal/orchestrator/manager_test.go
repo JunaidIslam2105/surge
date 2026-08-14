@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -123,6 +124,52 @@ func TestLifecycleManager_EnqueueWithID(t *testing.T) {
 
 	if id != customID {
 		t.Errorf("expected custom ID %s, got %s", customID, id)
+	}
+}
+
+func TestLifecycleManager_EnqueueCoalescesConcurrentRequests(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var requests atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		started <- struct{}{}
+		<-release
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
+	mgr := NewLifecycleManager(pool, nil, nil)
+	defer mgr.Shutdown()
+
+	req := &DownloadRequest{URL: ts.URL + "/duplicate.bin", Filename: "duplicate.bin", Path: t.TempDir()}
+	type result struct {
+		id  string
+		err error
+	}
+	results := make(chan result, 2)
+	go func() {
+		id, _, err := mgr.Enqueue(context.Background(), req)
+		results <- result{id, err}
+	}()
+	<-started
+	go func() {
+		id, _, err := mgr.Enqueue(context.Background(), req)
+		results <- result{id, err}
+	}()
+	close(release)
+
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("Enqueue errors = %v, %v", first.err, second.err)
+	}
+	if first.id == "" || first.id != second.id {
+		t.Fatalf("enqueue ids = %q, %q; want one shared id", first.id, second.id)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("probe requests = %d, want 1", got)
 	}
 }
 
