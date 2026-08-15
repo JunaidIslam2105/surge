@@ -202,9 +202,12 @@ func TestLifecycleManager_EnqueueDoesNotCoalesceDifferentRequests(t *testing.T) 
 			results <- result{finalFilename, err}
 		}(filename)
 	}
-	<-started
+	// Probes to the same host are deliberately serialized. Release the first
+	// request before waiting for the second handler entry, otherwise the
+	// second probe remains blocked on the per-host probe lock.
 	<-started
 	close(release)
+	<-started
 	first, second := <-results, <-results
 	if first.err != nil || second.err != nil {
 		t.Fatalf("Enqueue errors = %v, %v", first.err, second.err)
