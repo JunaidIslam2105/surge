@@ -430,8 +430,37 @@ const BROWSER_METHOD_OVERRIDE_HEADERS = new Set([
 ]);
 const BROWSER_REJECTED_METHODS = new Set(['connect', 'trace', 'track']);
 
+const SAFE_DOWNLOAD_LOG_FIELDS = new Set([
+  'id',
+  'status',
+  'outcome',
+  'state',
+  'totalBytes',
+  'forwardedHeaderCount',
+]);
+const SAFE_DOWNLOAD_LOG_URL_FIELDS = new Set(['url', 'base']);
+
+function redactUrlQuery(value: string): string {
+  try {
+    const url = new URL(value);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return value.split(/[?#]/, 1)[0] ?? '';
+  }
+}
+
 function logDownload(message: string, details: Record<string, unknown>): void {
-  console.debug(`[Surge] download ${message}`, details);
+  const safeDetails: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(details)) {
+    if (SAFE_DOWNLOAD_LOG_URL_FIELDS.has(name) && typeof value === 'string') {
+      safeDetails[name] = redactUrlQuery(value);
+    } else if (SAFE_DOWNLOAD_LOG_FIELDS.has(name)) {
+      safeDetails[name] = value;
+    }
+  }
+  console.debug(`[Surge] download ${message}`, safeDetails);
 }
 
 function buildBrowserDownloadHeaders(headers: Record<string, string>): { name: string; value: string }[] | undefined {
@@ -637,21 +666,6 @@ async function handleDownloadCreated(downloadItem: {
     logDownload('ignored extension-created download', { id: downloadItem.id, url: downloadItem.url });
     return;
   }
-  if (interceptingUrls.has(downloadItem.url)) {
-    // A second browser download ID is a real download, not a duplicate event
-    // for the first ID. Cancel it so it cannot continue alongside the handoff
-    // already in progress for this URL.
-    try {
-      await browser.downloads.cancel(downloadItem.id);
-      await browser.downloads.erase({ id: downloadItem.id } as any).catch(() => {});
-      logDownload('cancelled: handoff already in progress', { id: downloadItem.id, url: downloadItem.url });
-    } catch {
-      logDownload('could not cancel duplicate while handoff is in progress', { id: downloadItem.id, url: downloadItem.url });
-    }
-    return;
-  }
-  interceptingUrls.add(downloadItem.url);
-  try {
   if (!await isInterceptEnabled()) {
     logDownload('ignored: interception disabled', { id: downloadItem.id, url: downloadItem.url });
     return;
@@ -679,6 +693,21 @@ async function handleDownloadCreated(downloadItem: {
     return;
   }
 
+  if (interceptingUrls.has(downloadItem.url)) {
+    // A second browser download ID is a real download, not a duplicate event
+    // for the first ID. Cancel it so it cannot continue alongside the handoff
+    // already in progress for this URL.
+    try {
+      await browser.downloads.cancel(downloadItem.id);
+      await browser.downloads.erase({ id: downloadItem.id } as any).catch(() => {});
+      logDownload('cancelled: handoff already in progress', { id: downloadItem.id, url: downloadItem.url });
+    } catch {
+      logDownload('could not cancel duplicate while handoff is in progress', { id: downloadItem.id, url: downloadItem.url });
+    }
+    return;
+  }
+  interceptingUrls.add(downloadItem.url);
+  try {
   // Once health has passed, cancel the browser download immediately before any
   // additional async work so the browser does not race ahead of the handoff.
   try {

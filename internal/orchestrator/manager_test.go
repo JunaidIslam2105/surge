@@ -143,6 +143,8 @@ func TestLifecycleManager_EnqueueCoalescesConcurrentRequests(t *testing.T) {
 	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
 	mgr := NewLifecycleManager(pool, nil, nil)
 	defer mgr.Shutdown()
+	joined := make(chan struct{}, 1)
+	mgr.inflightJoinHook = func() { joined <- struct{}{} }
 
 	req := &DownloadRequest{URL: ts.URL + "/duplicate.bin", Filename: "duplicate.bin", Path: t.TempDir()}
 	type result struct {
@@ -159,6 +161,7 @@ func TestLifecycleManager_EnqueueCoalescesConcurrentRequests(t *testing.T) {
 		id, _, err := mgr.Enqueue(context.Background(), req)
 		results <- result{id, err}
 	}()
+	<-joined
 	close(release)
 
 	first, second := <-results, <-results
@@ -187,6 +190,8 @@ func TestLifecycleManager_EnqueueDoesNotCoalesceDifferentRequests(t *testing.T) 
 	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
 	mgr := NewLifecycleManager(pool, nil, nil)
 	defer mgr.Shutdown()
+	entered := make(chan struct{}, 2)
+	mgr.inflightStartHook = func() { entered <- struct{}{} }
 
 	dest := t.TempDir()
 	type result struct {
@@ -202,10 +207,10 @@ func TestLifecycleManager_EnqueueDoesNotCoalesceDifferentRequests(t *testing.T) 
 			results <- result{finalFilename, err}
 		}(filename)
 	}
-	// Probes to the same host are deliberately serialized. Release the first
-	// request before waiting for the second handler entry, otherwise the
-	// second probe remains blocked on the per-host probe lock.
-	<-started
+	// Wait until both requests have passed the in-flight map before releasing
+	// the first same-host probe; the probe layer serializes hosts deliberately.
+	<-entered
+	<-entered
 	close(release)
 	<-started
 	first, second := <-results, <-results

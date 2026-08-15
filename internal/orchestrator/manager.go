@@ -43,6 +43,10 @@ type LifecycleManager struct {
 	shutdownOnce sync.Once
 	inflightMu   sync.Mutex
 	inflight     map[string]*inflightEnqueue
+	// Test hooks make concurrent enqueue tests deterministic without affecting
+	// production behavior.
+	inflightJoinHook  func()
+	inflightStartHook func()
 }
 
 type inflightEnqueue struct {
@@ -220,6 +224,9 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 	mgr.inflightMu.Lock()
 	if existing := mgr.inflight[key]; existing != nil {
 		mgr.inflightMu.Unlock()
+		if mgr.inflightJoinHook != nil {
+			mgr.inflightJoinHook()
+		}
 		select {
 		case <-existing.done:
 			return existing.id, existing.filename, existing.err
@@ -230,6 +237,9 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 	entry := &inflightEnqueue{done: make(chan struct{})}
 	mgr.inflight[key] = entry
 	mgr.inflightMu.Unlock()
+	if mgr.inflightStartHook != nil {
+		mgr.inflightStartHook()
+	}
 
 	entry.id, entry.filename, entry.err = mgr.enqueueNew(ctx, req, requestID)
 	mgr.inflightMu.Lock()
