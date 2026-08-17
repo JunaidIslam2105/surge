@@ -293,11 +293,11 @@ Distributed under the MIT License. See [LICENSE](https://github.com/SurgeDM/Surg
 ---
 
 <div align="center">
-<a href="https://star-history.com/#SurgeDM/Surge&Date">
+<a href="https://star-history.dera.page/#SurgeDM/Surge&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date" />
  </picture>
 </a>
 
