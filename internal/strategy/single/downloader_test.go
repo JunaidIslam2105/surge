@@ -475,7 +475,11 @@ func TestSingleDownloader_Download_Cancellation(t *testing.T) {
 		done <- downloader.Download(ctx, server.URL(), destPath, fileSize, "cancel.bin")
 	}()
 
-	<-requestStarted
+	select {
+	case <-requestStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Request did not start in time")
+	}
 	cancel()
 
 	select {
