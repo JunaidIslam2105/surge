@@ -147,3 +147,31 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Package AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=$(find dist -type f -name surge -path '*linux*amd64*' -perm -111 -print -quit)
+          test -n "$binary"
+          curl -L --fail --retry 3 --output appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          ./scripts/package-appimage.sh "$binary" AppDir
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run \
+            -u 'gh-releases-zsync|SurgeDM|Surge|latest|Surge_*_linux_x86_64.AppImage.zsync' \
+            AppDir "Surge_${GITHUB_REF_NAME#v}_linux_x86_64.AppImage"
+
+      - name: Verify and upload AppImage
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          appimage="Surge_${GITHUB_REF_NAME#v}_linux_x86_64.AppImage"
+          test -s "$appimage" && test -s "$appimage.zsync"
+          "./$appimage" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -f squashfs-root/surge.desktop
+          test -f squashfs-root/surge.png
+          gh release upload "$GITHUB_REF_NAME" "$appimage" "$appimage.zsync"

@@ -62,6 +62,7 @@ Surge is available on multiple platforms. Choose the method that works best for 
 | Platform / Method                  | Command / Instructions                                                           | Notes                                        |
 | :--------------------------------- | :------------------------------------------------------------------------------- | :------------------------------------------- |
 | **Prebuilt Binary**          | [Download from Releases](https://github.com/SurgeDM/Surge/releases/latest) | Easiest method. Just download and run.       |
+| **Linux AppImage**           | [Download from Releases](https://github.com/SurgeDM/Surge/releases/latest) | Portable x86_64 package with delta updates.  |
 | **Arch Linux (AUR)**         | `yay -S surge`                                                                 | Managed via AUR.                             |
 | **macOS / Linux (Homebrew)** | `brew install SurgeDM/tap/surge`                                      | Recommended for Mac/Linux users.             |
 | **Nix / NixOS**              | `nix run github:SurgeDM/Surge`                                        | Via Nix flake. NixOS config: `inputs.surge.packages.${pkgs.system}.default` |
