@@ -21,16 +21,17 @@ type MockServer struct {
 	Server *httptest.Server
 
 	// Configuration
-	FileSize          int64         // Size of the served file
-	SupportsRanges    bool          // Whether to support HTTP Range requests
-	ContentType       string        // Content-Type header value
-	Filename          string        // Filename in Content-Disposition header
-	RandomData        bool          // If true, serve random data; otherwise serve zeros
-	Latency           time.Duration // Artificial latency per request
-	ByteLatency       time.Duration // Latency per byte (simulates slow connection)
-	FailAfterBytes    int64         // Fail connection after this many bytes (0 = no fail)
-	FailOnNthRequest  int           // Fail on Nth request (0 = don't fail)
-	MaxConcurrentReqs int           // Max concurrent requests (0 = unlimited)
+	FileSize          int64           // Size of the served file
+	SupportsRanges    bool            // Whether to support HTTP Range requests
+	ContentType       string          // Content-Type header value
+	Filename          string          // Filename in Content-Disposition header
+	RandomData        bool            // If true, serve random data; otherwise serve zeros
+	Latency           time.Duration   // Artificial latency per request
+	ByteLatency       time.Duration   // Latency per byte (simulates slow connection)
+	FailAfterBytes    int64           // Fail connection after this many bytes (0 = no fail)
+	FailOnNthRequest  int             // Fail on Nth request (0 = don't fail)
+	MaxConcurrentReqs int             // Max concurrent requests (0 = unlimited)
+	RequestStarted    chan<- struct{} // Optional notification when request handling begins
 
 	// Tracking
 	RequestCount   atomic.Int64
@@ -127,6 +128,14 @@ func WithFailOnNthRequest(n int) MockServerOption {
 func WithMaxConcurrentRequests(n int) MockServerOption {
 	return func(m *MockServer) {
 		m.MaxConcurrentReqs = n
+	}
+}
+
+// WithRequestStarted notifies ch when the server begins handling a request.
+// The notification is non-blocking, so callers should provide a buffered channel.
+func WithRequestStarted(ch chan<- struct{}) MockServerOption {
+	return func(m *MockServer) {
+		m.RequestStarted = ch
 	}
 }
 
@@ -250,6 +259,12 @@ func (m *MockServer) connectionCount() int64 {
 }
 
 func (m *MockServer) handleRequest(w http.ResponseWriter, r *http.Request) {
+	if m.RequestStarted != nil {
+		select {
+		case m.RequestStarted <- struct{}{}:
+		default:
+		}
+	}
 	if m.CustomHandler != nil {
 		m.CustomHandler(w, r)
 		return
@@ -486,6 +501,12 @@ func (s *StreamingMockServer) handleStreamingRequest(w http.ResponseWriter, r *h
 	s.RequestCount.Add(1)
 	s.trackRequest(r)
 	defer s.ActiveRequests.Add(-1)
+	if s.RequestStarted != nil {
+		select {
+		case s.RequestStarted <- struct{}{}:
+		default:
+		}
+	}
 
 	// Track request number for fail-on-nth logic
 	s.requestCountMu.Lock()

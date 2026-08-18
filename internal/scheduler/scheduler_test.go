@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -528,61 +529,56 @@ func TestScheduler_GracefulShutdown_PausesAll(t *testing.T) {
 }
 
 func TestScheduler_GracefulShutdown_WaitsPastSoftTimeout(t *testing.T) {
-	ch := make(chan types.DownloadEvent, 10)
-	pool := New(ch, 1)
+	synctest.Test(t, func(t *testing.T) {
+		ch := make(chan types.DownloadEvent, 10)
+		pool := New(ch, 1)
 
-	ps := progress.New("wait-test-id", 1000)
-	pool.mu.Lock()
-	ad := &activeDownload{
-		config: types.DownloadRecord{
-			ID:            "wait-test-id",
-			ProgressState: ps,
-		},
-	}
-	ad.running.Store(true)
-	pool.downloads["wait-test-id"] = ad
-	pool.mu.Unlock()
+		ps := progress.New("wait-test-id", 1000)
+		pool.mu.Lock()
+		ad := &activeDownload{config: types.DownloadRecord{ID: "wait-test-id", ProgressState: ps}}
+		ad.running.Store(true)
+		pool.downloads["wait-test-id"] = ad
+		pool.mu.Unlock()
 
-	origSoftTimeout := gracefulShutdownPauseSoftTimeout
-	origPollInterval := gracefulShutdownPausePollInterval
-	origHardTimeout := gracefulShutdownPauseHardTimeout
-	gracefulShutdownPauseSoftTimeout = 30 * time.Millisecond
-	gracefulShutdownPausePollInterval = 5 * time.Millisecond
-	gracefulShutdownPauseHardTimeout = 5 * time.Second
-	defer func() {
-		gracefulShutdownPauseSoftTimeout = origSoftTimeout
-		gracefulShutdownPausePollInterval = origPollInterval
-		gracefulShutdownPauseHardTimeout = origHardTimeout
-	}()
+		origSoftTimeout := gracefulShutdownPauseSoftTimeout
+		origPollInterval := gracefulShutdownPausePollInterval
+		origHardTimeout := gracefulShutdownPauseHardTimeout
+		gracefulShutdownPauseSoftTimeout = 30 * time.Millisecond
+		gracefulShutdownPausePollInterval = 5 * time.Millisecond
+		gracefulShutdownPauseHardTimeout = 5 * time.Second
+		defer func() {
+			gracefulShutdownPauseSoftTimeout = origSoftTimeout
+			gracefulShutdownPausePollInterval = origPollInterval
+			gracefulShutdownPauseHardTimeout = origHardTimeout
+		}()
 
-	done := make(chan struct{})
-	go func() {
-		pool.GracefulShutdown()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			pool.GracefulShutdown()
+			close(done)
+		}()
+		synctest.Wait()
+		if !ps.IsPausing() {
+			t.Fatal("expected graceful shutdown to set pausing=true")
+		}
 
-	deadline := time.Now().Add(250 * time.Millisecond)
-	for !ps.IsPausing() && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-	}
-	if !ps.IsPausing() {
-		t.Fatal("expected graceful shutdown to set pausing=true")
-	}
+		time.Sleep(gracefulShutdownPauseSoftTimeout + 20*time.Millisecond)
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("GracefulShutdown returned before pausing was cleared")
+		default:
+		}
 
-	// Wait beyond the soft timeout. Shutdown should still be blocked.
-	time.Sleep(gracefulShutdownPauseSoftTimeout + 20*time.Millisecond)
-	select {
-	case <-done:
-		t.Fatal("GracefulShutdown returned before pausing was cleared")
-	default:
-	}
-
-	ps.SetPausing(false)
-	select {
-	case <-done:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("GracefulShutdown did not return after pausing was cleared")
-	}
+		ps.SetPausing(false)
+		time.Sleep(gracefulShutdownPausePollInterval)
+		synctest.Wait()
+		select {
+		case <-done:
+		default:
+			t.Fatal("GracefulShutdown did not return after pausing was cleared")
+		}
+	})
 }
 
 func TestScheduler_GracefulShutdown_ClearsStalePausingWithoutWorker(t *testing.T) {
