@@ -409,7 +409,7 @@ func (m RootModel) View() tea.View {
 	} else {
 		speedVal = lipgloss.NewStyle().Foreground(colors.LightGray()).Render(utils.FormatSpeed(float64(speedBps)))
 	}
-	speedChunk := lipgloss.JoinHorizontal(lipgloss.Center, speedGlyph, " ", speedVal)
+	speedChunk := speedGlyph + " " + speedVal
 
 	// Global rate limit indicator
 	limitGlyph := lipgloss.NewStyle().Foreground(colors.Pink()).Render("\u26A1")
@@ -421,9 +421,9 @@ func (m RootModel) View() tea.View {
 	}
 	var limitChunk string
 	if limitVal != "" {
-		limitChunk = lipgloss.JoinHorizontal(lipgloss.Center, limitGlyph, " ", limitVal)
+		limitChunk = limitGlyph + " " + limitVal
 	} else {
-		limitChunk = lipgloss.JoinHorizontal(lipgloss.Center, limitGlyph, " ", lipgloss.NewStyle().Foreground(colors.Gray()).Render("\u221E"))
+		limitChunk = limitGlyph + " " + lipgloss.NewStyle().Foreground(colors.Gray()).Render("\u221E")
 	}
 
 	// Auto-shutdown indicator
@@ -441,7 +441,7 @@ func (m RootModel) View() tea.View {
 	versionBlue := colors.ThemeColor("#005cc5", "#58a6ff")
 	versionChunk := lipgloss.NewStyle().Foreground(versionBlue).Render(fmt.Sprintf("v%s", m.CurrentVersion))
 
-	rightFooter := lipgloss.NewStyle().PaddingRight(2).Render(lipgloss.JoinHorizontal(lipgloss.Center,
+	rightFooter := lipgloss.NewStyle().PaddingRight(2).Render(strings.Join([]string{
 		speedChunk,
 		dimSep,
 		limitChunk,
@@ -449,7 +449,7 @@ func (m RootModel) View() tea.View {
 		powerChunk,
 		dimSep,
 		versionChunk,
-	))
+	}, ""))
 
 	// Hide help text at very narrow widths - right footer is more important
 	var footerContent string
@@ -461,11 +461,7 @@ func (m RootModel) View() tea.View {
 		if leftFooterWidth < 0 {
 			leftFooterWidth = 0
 		}
-		footerContent = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			lipgloss.NewStyle().Width(leftFooterWidth).Render(helpText),
-			rightFooter,
-		)
+		footerContent = lipgloss.NewStyle().Width(leftFooterWidth).Render(helpText) + rightFooter
 	}
 	footer := footerContent
 
@@ -501,7 +497,7 @@ func (m RootModel) View() tea.View {
 	// Render Components
 	logoColumn := m.renderHeaderBox(layout.LogoWidth, layout.HeaderHeight)
 	logBox := m.renderLogBox(layout.LogWidth, layout.HeaderHeight)
-	headerBox := lipgloss.JoinHorizontal(lipgloss.Top, logoColumn, logBox)
+	headerBox := joinHorizontalFixed(logoColumn, logBox)
 
 	listBox := m.renderDownloadsBox(layout.LeftWidth, layout.ListHeight, stats)
 
@@ -555,7 +551,7 @@ func (m RootModel) View() tea.View {
 			chunkBox := m.renderChunkMapBox(layout.RightWidth, layout.ChunkMapHeight, selected, bitmapVersion, bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress)
 			rightParts = append(rightParts, chunkBox)
 		}
-		rightColumn = lipgloss.JoinVertical(lipgloss.Left, rightParts...)
+		rightColumn = joinVerticalFixed(rightParts...)
 	}
 
 	// Assembly
@@ -563,13 +559,13 @@ func (m RootModel) View() tea.View {
 	if layout.HideRightColumn {
 		if layout.VerticalLayout {
 			detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, layout.LeftWidth, layout.DetailHeight, colors.Gray())
-			body = lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox, detailBox)
+			body = joinVerticalFixed(headerBox, listBox, detailBox)
 		} else {
-			body = lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox)
+			body = joinVerticalFixed(headerBox, listBox)
 		}
 	} else {
-		leftColumn := lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox)
-		body = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
+		leftColumn := joinVerticalFixed(headerBox, listBox)
+		body = joinHorizontalFixed(leftColumn, rightColumn)
 	}
 
 	// The body is already laid out at exactly AvailableWidth × AvailableHeight:
@@ -586,7 +582,7 @@ func (m RootModel) View() tea.View {
 		body = strings.Join(strings.Split(body, "\n")[:layout.AvailableHeight], "\n")
 	}
 
-	fullView := lipgloss.JoinVertical(lipgloss.Left, body, footer)
+	fullView := joinVerticalFixed(body, footer)
 	// Place content into available space, then wrap with WindowStyle margins
 	return m.wrapView(lipgloss.Place(layout.AvailableWidth, m.height, lipgloss.Center, lipgloss.Top, fullView))
 }
