@@ -2,6 +2,7 @@ package components
 
 import (
 	"image/color"
+	"strings"
 
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/utils"
@@ -60,19 +61,19 @@ func (m AddDownloadModal) View() string {
 		ti := m.Inputs[i]
 		ti.SetWidth(inputW)
 
-		row := lipgloss.JoinHorizontal(lipgloss.Left, labelStyle.Render(m.Labels[i]), ti.View())
+		row := labelStyle.Render(m.Labels[i]) + ti.View()
 		if m.BrowseHintIndex == i {
 			hintStyle := hintBase
 			if m.FocusedInput == i {
 				hintStyle = hintStyle.Foreground(colors.Pink())
 			}
-			row = lipgloss.JoinHorizontal(lipgloss.Left, row, hintStyle.Render(m.browseHint()))
+			row += hintStyle.Render(m.browseHint())
 		}
 		content = append(content, row, "")
 	}
 
 	content = append(content, m.Help.View(m.HelpKeys))
-	return lipgloss.NewStyle().Padding(0, 2).Render(lipgloss.JoinVertical(lipgloss.Left, content...))
+	return lipgloss.NewStyle().Padding(0, 2).Render(strings.Join(content, "\n"))
 }
 
 func (m AddDownloadModal) browseHint() string {

@@ -2,6 +2,7 @@ package components
 
 import (
 	"image/color"
+	"strings"
 
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 
@@ -52,7 +53,7 @@ func (m ListInputModal) viewContent() string {
 			valueStyle = lipgloss.NewStyle().Foreground(colors.Gray())
 		}
 
-		labelRow := lipgloss.JoinHorizontal(lipgloss.Left, prefix, labelStyle.Render(item.Label))
+		labelRow := prefix + labelStyle.Render(item.Label)
 
 		var valueStr string
 		if item.IsEditing {
@@ -69,7 +70,7 @@ func (m ListInputModal) viewContent() string {
 		rows = append(rows, labelRow, valueStr, "")
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	return strings.Join(rows, "\n")
 }
 
 // RenderWithBtopBox renders the modal using the btop-style box with title in border
@@ -148,7 +149,7 @@ func (m ListInputModal) RenderWithBtopBox(
 		lines = append(lines, helpText)
 	}
 
-	fullContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	fullContent := strings.Join(lines, "\n")
 
 	return renderBox(titleStyle.Render(" "+m.Title+" "), "", fullContent, m.Width, m.Height, m.BorderColor)
 }

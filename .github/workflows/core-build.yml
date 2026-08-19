@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       core: ${{ steps.filter.outputs.core }}
+      tui: ${{ steps.filter.outputs.tui }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -33,6 +34,10 @@ jobs:
             core:
               - '!extension/**'
               - '**'
+            tui:
+              - 'internal/tui/**'
+              - 'go.mod'
+              - 'go.sum'
 
   test:
     name: Test and Check (${{ matrix.os }})
@@ -121,6 +126,25 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && success() && hashFiles('coverage.out') != ''
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  tui-perf:
+    name: TUI Performance Budget
+    needs: changes
+    if: needs.changes.outputs.tui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+          check-latest: false
+      - name: Enforce cached-frame budget
+        env:
+          GOMAXPROCS: "2"
+          SURGE_PERF_BUDGET: "1"
+        run: go test ./internal/tui -run '^TestTUIRenderPerfBudget$' -count=3
 
   release:
     name: Release

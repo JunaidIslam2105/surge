@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"image/color"
+	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/lipgloss/v2"
@@ -54,7 +55,7 @@ func (m HelpModal) RenderWithBtopBox(
 		lines = append(lines, "")
 	}
 
-	fullContent := "\n" + lipgloss.JoinVertical(lipgloss.Left, lines...) + "\n"
+	fullContent := "\n" + strings.Join(lines, "\n") + "\n"
 
 	return renderBox("", fmt.Sprintf("  %s  ", titleStyle.Render(m.Title)), fullContent, m.Width, m.Height, m.BorderColor)
 }

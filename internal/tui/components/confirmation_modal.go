@@ -53,11 +53,7 @@ func (m ConfirmationModal) renderBody(width int) string {
 		if !strings.Contains(det, "\x1b") {
 			det = getDetailStyle().Render(det)
 		}
-		content = lipgloss.JoinVertical(lipgloss.Center,
-			content,
-			"",
-			det,
-		)
+		content = strings.Join([]string{content, "", det}, "\n")
 	}
 
 	if m.ShowYesNoButtons {
@@ -70,11 +66,7 @@ func (m ConfirmationModal) renderBody(width int) string {
 			noLabel = "Nope"
 		}
 
-		content = lipgloss.JoinVertical(lipgloss.Center,
-			content,
-			"",
-			renderYesNoButtons(yesLabel, noLabel, m.YesNoFocused, m.ButtonColor),
-		)
+		content = strings.Join([]string{content, "", renderYesNoButtons(yesLabel, noLabel, m.YesNoFocused, m.ButtonColor)}, "\n")
 	}
 
 	return content
@@ -112,7 +104,7 @@ func renderYesNoButtons(yesLabel, noLabel string, focused int, btnColor color.Co
 	yesBtn := renderBtn(yesPadStyle, yesFirstStyle, yesRestStyle, yesFirst, yesRest)
 	noBtn := renderBtn(noPadStyle, noFirstStyle, noRestStyle, noFirst, noRest)
 
-	return lipgloss.JoinHorizontal(lipgloss.Center, yesBtn, "     ", noBtn)
+	return yesBtn + "     " + noBtn
 }
 
 func splitFirst(label string) (string, string) {
@@ -181,7 +173,7 @@ func (m ConfirmationModal) RenderWithBtopBox(
 	}
 	lines = append(lines, helpText)
 
-	fullContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	fullContent := strings.Join(lines, "\n")
 
 	// Title goes in the box border
 	return renderBox(titleStyle.Render(" "+m.Title+" "), "", fullContent, m.Width, m.Height, m.BorderColor)

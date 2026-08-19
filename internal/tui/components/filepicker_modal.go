@@ -2,6 +2,7 @@ package components
 
 import (
 	"image/color"
+	"strings"
 
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 
@@ -38,14 +39,14 @@ func NewFilePickerModal(title string, picker *filepicker.Model, helpModel help.M
 func (m FilePickerModal) View() string {
 	pathStyle := lipgloss.NewStyle().Foreground(colors.LightGray())
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
+	content := strings.Join([]string{
 		"",
 		pathStyle.Render(m.Picker.CurrentDirectory),
 		"",
 		m.Picker.View(),
 		"",
 		m.Help.View(m.HelpKeys),
-	)
+	}, "\n")
 
 	return lipgloss.NewStyle().Padding(0, 2).Render(content)
 }
