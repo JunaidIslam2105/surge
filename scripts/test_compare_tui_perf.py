@@ -13,6 +13,13 @@ REPORT: Final[str] = """\
     perf_budget_test.go:77: invalidated frame: 0.750ms/op (budget 3ms)
 """
 
+ZERO_REPORT: Final[str] = """\
+    perf_budget_test.go:30: cached frame: 0 allocs/op (budget 850)
+    perf_budget_test.go:41: cached frame: 0.000ms/op (budget 2ms)
+    perf_budget_test.go:64: invalidated frame: 0 allocs/op (budget 2200)
+    perf_budget_test.go:77: invalidated frame: 0.000ms/op (budget 3ms)
+"""
+
 
 class CompareTUIPerfTests(unittest.TestCase):
     def test_parse_report_converts_units(self):
@@ -36,6 +43,18 @@ class CompareTUIPerfTests(unittest.TestCase):
     def test_allocation_regression_fails(self):
         more_allocations = REPORT.replace("550 allocs", "700 allocs")
         report, failures = compare_reports(more_allocations, REPORT)
+        self.assertIn("cached allocations exceed", report)
+        self.assertTrue(failures)
+
+    def test_zero_baseline_equal_values_have_no_delta(self):
+        report, failures = compare_reports(ZERO_REPORT, ZERO_REPORT)
+        self.assertIn("cached: 0.000 ms/op (n/a), 0 allocs/op (n/a)", report)
+        self.assertEqual(failures, [])
+
+    def test_nonzero_value_against_zero_baseline_is_regression(self):
+        nonzero = ZERO_REPORT.replace("0 allocs/op", "1 allocs/op").replace("0.000ms", "0.001ms")
+        report, failures = compare_reports(nonzero, ZERO_REPORT)
+        self.assertIn("cached latency exceeds", report)
         self.assertIn("cached allocations exceed", report)
         self.assertTrue(failures)
 

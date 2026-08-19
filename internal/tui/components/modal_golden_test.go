@@ -1,7 +1,6 @@
 package components
 
 import (
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -46,10 +45,11 @@ func TestFilePickerModalGolden(t *testing.T) {
 	}
 	got := plainModal(modal.RenderWithBtopBox(RenderBtopBox, lipgloss.NewStyle()))
 	lines := strings.Split(got, "\n")
-	for i, line := range lines {
-		if strings.Contains(line, filepath.Base(tmpDir)) || strings.Contains(line, "TestFilePickerModalGolden") {
-			lines[i] = "│  <tmp>" + strings.Repeat(" ", 35) + "│"
-		}
+	// The picker always renders the current directory on the third row;
+	// normalize that row without depending on platform path separators or
+	// truncation of the temporary directory name.
+	if len(lines) > 2 {
+		lines[2] = "│  <tmp>" + strings.Repeat(" ", 35) + "│"
 	}
 	got = strings.Join(lines, "\n")
 	want := `╭─ Select Directory ───────────────────────╮

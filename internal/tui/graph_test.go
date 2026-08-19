@@ -68,6 +68,24 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 	}
 }
 
+func TestGraphRenderer_NormalizesNonPositiveMaxForCache(t *testing.T) {
+	g := NewGraphRenderer()
+	data := []float64{1, 2, 3}
+
+	first := g.Render(data, 10, 5, 0, false)
+	if g.lastMax != 1 {
+		t.Fatalf("effective max = %v, want 1", g.lastMax)
+	}
+
+	second := g.Render(data, 10, 5, 1, false)
+	if first != second {
+		t.Fatal("equivalent renders with fallback and effective max differ")
+	}
+	if g.lastMax != 1 {
+		t.Fatalf("cached max = %v, want 1", g.lastMax)
+	}
+}
+
 func TestGraphRenderer_Downsampling(t *testing.T) {
 	g := NewGraphRenderer()
 

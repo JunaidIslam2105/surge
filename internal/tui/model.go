@@ -791,6 +791,12 @@ func (m *RootModel) refreshThemeCaches() {
 	if m.listBoxCache != nil {
 		m.listBoxCache.render = ""
 	}
+	if m.graphBoxCache != nil {
+		m.graphBoxCache.graphBoxRender = ""
+	}
+	if m.chunkMapCache != nil {
+		m.chunkMapCache.render = ""
+	}
 	if m.detailsPaneCache != nil {
 		m.detailsPaneCache.content = ""
 	}

@@ -217,6 +217,18 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 
 		switch status {
 		case types.ChunkCompleted:
+			markCompleted := func() bool {
+				for {
+					currentStatus := b.chunkStatus[i].Load()
+					if currentStatus == int32(types.ChunkCompleted) {
+						return false
+					}
+					if b.chunkStatus[i].CompareAndSwap(currentStatus, int32(types.ChunkCompleted)) {
+						return true
+					}
+				}
+			}
+
 			// Lock-free CAS loop to avoid overcounting under concurrent updates
 			for {
 				currentProg := b.chunkProgress[i].Load()
@@ -229,8 +241,7 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 
 				if inc <= 0 {
 					// We might have already reached the end or overlap is zero.
-					if currentProg >= (chunkEnd - chunkStart) {
-						b.chunkStatus[i].Store(int32(types.ChunkCompleted))
+					if currentProg >= (chunkEnd-chunkStart) && markCompleted() {
 						changed = true
 					}
 					break
@@ -240,7 +251,9 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 					totalIncrement += inc
 					changed = true
 					if currentProg+inc >= (chunkEnd - chunkStart) {
-						b.chunkStatus[i].Store(int32(types.ChunkCompleted))
+						if markCompleted() {
+							changed = true
+						}
 					} else {
 						b.chunkStatus[i].CompareAndSwap(int32(types.ChunkPending), int32(types.ChunkDownloading))
 					}

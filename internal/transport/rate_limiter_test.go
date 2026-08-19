@@ -32,6 +32,18 @@ func TestRateLimiter_SetRateDisableWakesWaiter(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_NegativeRateIsDisabled(t *testing.T) {
+	limiter := NewRateLimiter(-1, 100)
+	if err := limiter.WaitN(context.Background(), 100); err != nil {
+		t.Fatalf("negative rate should be disabled: %v", err)
+	}
+
+	limiter.SetRate(-2, 100)
+	if err := limiter.WaitN(context.Background(), 100); err != nil {
+		t.Fatalf("negative SetRate should disable limiter: %v", err)
+	}
+}
+
 func TestRateLimiter_ReenableSeedsFreshBurst(t *testing.T) {
 	limiter := NewRateLimiter(100, 100)
 	if err := limiter.WaitN(context.Background(), 100); err != nil {

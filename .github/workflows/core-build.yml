@@ -208,23 +208,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          previous_run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/core-build.yml/runs" \
+          successful_runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/core-build.yml/runs" \
             --method GET \
             --field "branch=${BASE_BRANCH}" \
             --field status=success \
             --field per_page=100 \
-            --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID}) | .id" | head -n 1 || true)"
+            --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID}) | [.id, .run_number] | @tsv" || true)"
 
-          if [ -z "$previous_run_id" ]; then
+          if [ -z "$successful_runs" ]; then
             printf '%s\n' "No previous successful TUI performance baseline found for ${BASE_BRANCH}; comparison skipped." > perf-comparison.txt
             cat perf-comparison.txt
             exit 0
           fi
 
-          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${previous_run_id}/artifacts" \
-            --jq '.artifacts[] | select(.expired == false and (.name | startswith("tui-perf-"))) | .id' | head -n 1)"
+          artifact_id=""
+          previous_run_id=""
+          while IFS=$'\t' read -r candidate_run_id candidate_run_number; do
+            [ -n "$candidate_run_id" ] || continue
+            candidate_artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/artifacts" \
+              --jq ".artifacts[] | select(.expired == false and .name == \"tui-perf-${candidate_run_number}\") | .id" | head -n 1)"
+            if [ -n "$candidate_artifact_id" ]; then
+              artifact_id="$candidate_artifact_id"
+              previous_run_id="$candidate_run_id"
+              break
+            fi
+          done <<< "$successful_runs"
+
           if [ -z "$artifact_id" ]; then
-            printf '%s\n' "Previous run ${previous_run_id} has no unexpired TUI performance artifact; comparison skipped." > perf-comparison.txt
+            printf '%s\n' "Previous successful runs have no unexpired TUI performance artifact; comparison skipped." > perf-comparison.txt
             cat perf-comparison.txt
             exit 0
           fi

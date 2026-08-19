@@ -63,10 +63,15 @@ func TestBitmapTracker_UpdateChunkStatus(t *testing.T) {
 		t.Errorf("expected state ChunkCompleted, got %v", state)
 	}
 
-	// Try to update chunk 0 again, should return 0 increment
+	// Try to update chunk 0 again, should return 0 increment without
+	// invalidating the cached snapshot a second time.
+	version := bt.snapVersion.Load()
 	inc = bt.UpdateChunkStatus(totalSize, 0, 250, types.ChunkCompleted)
 	if inc != 0 {
 		t.Errorf("expected increment 0, got %d", inc)
+	}
+	if got := bt.snapVersion.Load(); got != version {
+		t.Fatalf("repeated completion changed snapshot version from %d to %d", version, got)
 	}
 }
 

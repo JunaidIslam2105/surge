@@ -7,7 +7,7 @@ import argparse
 import re
 import statistics
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 TIME_RE = re.compile(r"(cached|invalidated) frame: ([0-9.]+)(ns|µs|ms)/op")
 ALLOCS_RE = re.compile(r"(cached|invalidated) frame: ([0-9.]+) allocs/op")
@@ -15,6 +15,23 @@ TIME_SCALE_MS = {"ns": 1e-6, "µs": 1e-3, "ms": 1.0}
 MODES = ("cached", "invalidated")
 TIME_RATIO_LIMIT = 1.25
 ALLOCS_RATIO_LIMIT = 1.10
+
+
+def percent_delta(current: float, previous: float) -> Optional[float]:
+    """Return the percentage change, or None when both values are zero."""
+    if previous == 0:
+        if current == 0:
+            return None
+        return float("inf")
+    return (current / previous - 1) * 100
+
+
+def format_delta(delta: Optional[float]) -> str:
+    if delta is None:
+        return "n/a"
+    if delta == float("inf"):
+        return "+inf"
+    return f"{delta:+.1f}%"
 
 
 def parse_report(text: str) -> Tuple[Dict[str, List[float]], Dict[str, List[float]]]:
@@ -47,16 +64,16 @@ def compare_reports(current_text: str, previous_text: str) -> Tuple[str, List[st
         previous_time = statistics.median(previous_times[mode])
         current_allocs = statistics.median(current_allocations[mode])
         previous_allocs = statistics.median(previous_allocations[mode])
-        time_delta = (current_time / previous_time - 1) * 100
-        alloc_delta = (current_allocs / previous_allocs - 1) * 100
+        time_delta = percent_delta(current_time, previous_time)
+        alloc_delta = percent_delta(current_allocs, previous_allocs)
 
         lines.append(
-            f"{mode}: {current_time:.3f} ms/op ({time_delta:+.1f}%), "
-            f"{current_allocs:.0f} allocs/op ({alloc_delta:+.1f}%)"
+            f"{mode}: {current_time:.3f} ms/op ({format_delta(time_delta)}), "
+            f"{current_allocs:.0f} allocs/op ({format_delta(alloc_delta)})"
         )
-        if current_time > previous_time * TIME_RATIO_LIMIT:
+        if (previous_time == 0 and current_time > 0) or current_time > previous_time * TIME_RATIO_LIMIT:
             failures.append(f"{mode} latency exceeds {TIME_RATIO_LIMIT:.2f}x baseline")
-        if current_allocs > previous_allocs * ALLOCS_RATIO_LIMIT:
+        if (previous_allocs == 0 and current_allocs > 0) or current_allocs > previous_allocs * ALLOCS_RATIO_LIMIT:
             failures.append(f"{mode} allocations exceed {ALLOCS_RATIO_LIMIT:.2f}x baseline")
 
     lines.append(

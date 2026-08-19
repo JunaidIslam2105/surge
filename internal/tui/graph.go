@@ -130,11 +130,16 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 		return g.lastRender
 	}
 
+	effectiveMaxVal := maxVal
+	if len(data) > 0 && effectiveMaxVal <= 0 {
+		effectiveMaxVal = 1
+	}
+
 	// Fast path: input fingerprint unchanged since the last render. The
 	// speed history only advances every GraphUpdateInterval, but View() is
 	// called far more often (spinner ticks), so this skips the per-block
 	// buffer work and RLE pass on every no-change frame.
-	if g.lastRender != "" && g.lastWidth == width && g.lastHeight == height && g.lastMax == maxVal && sameFloat64s(g.lastData, data) {
+	if g.lastRender != "" && g.lastWidth == width && g.lastHeight == height && g.lastMax == effectiveMaxVal && sameFloat64s(g.lastData, data) {
 		return g.lastRender
 	}
 
@@ -151,11 +156,6 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 
 	// 2. Map data
 	if len(data) > 0 {
-		// Bug fix: maxVal <= 0 causes NaN
-		if maxVal <= 0 {
-			maxVal = 1
-		}
-
 		// Bug fix: Downsample if data > width to prevent column loss
 		var plotData []float64
 		if len(data) > width {
@@ -188,7 +188,7 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 			if val < 0 {
 				val = 0
 			}
-			pct := val / maxVal
+			pct := val / effectiveMaxVal
 			if pct > 1.0 {
 				pct = 1.0
 			}
@@ -271,7 +271,7 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 	g.lastData = append(g.lastData[:0], data...)
 	g.lastWidth = width
 	g.lastHeight = height
-	g.lastMax = maxVal
+	g.lastMax = effectiveMaxVal
 	return g.lastRender
 }
 

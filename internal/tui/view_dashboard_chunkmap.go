@@ -13,6 +13,7 @@ type chunkMapRenderCache struct {
 	selectedID string
 	version    uint64
 	paused     bool
+	totalSize  int64
 	width      int
 	height     int
 	render     string
@@ -30,6 +31,7 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 		selectedID: selected.ID,
 		version:    bitmapVersion,
 		paused:     selected.paused,
+		totalSize:  totalSize,
 		width:      width,
 		height:     height,
 	}
@@ -39,6 +41,7 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 	if c.selectedID == key.selectedID &&
 		c.version == key.version &&
 		c.paused == key.paused &&
+		c.totalSize == key.totalSize &&
 		c.width == key.width &&
 		c.height == key.height &&
 		c.render != "" {

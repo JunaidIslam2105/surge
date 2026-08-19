@@ -178,7 +178,7 @@ func (r *RateLimiter) SetRate(rate int64, bucketSize int64) {
 	r.rate = rate
 	r.bucketSize = bucketSize
 
-	if rate == 0 {
+	if rate <= 0 {
 		r.tokens = 0
 	} else if oldRate <= 0 {
 		// Disabling a limiter intentionally drains its bucket. Re-seed the
