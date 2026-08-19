@@ -30,3 +30,5 @@ jobs:
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
       - name: unicode lint
         run: go test ./internal/lint/...
+      - name: GitHub Actions lint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7

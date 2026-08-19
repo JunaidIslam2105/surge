@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 )
@@ -13,6 +14,16 @@ var modalANSI = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func plainModal(s string) string {
 	return modalANSI.ReplaceAllString(s, "")
+}
+
+type goldenHelpKeys struct{}
+
+func (goldenHelpKeys) ShortHelp() []key.Binding {
+	return []key.Binding{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))}
+}
+
+func (goldenHelpKeys) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))}}
 }
 
 func TestModalGoldens(t *testing.T) {
@@ -82,6 +93,61 @@ func TestModalGoldens(t *testing.T) {
 │                                  │
 │                                  │
 ╰──────────────────────────────────╯`,
+		},
+		{
+			name: "help narrow",
+			render: func() string {
+				modal := HelpModal{
+					Title:       "Help",
+					HelpKeys:    goldenHelpKeys{},
+					Help:        help.New(),
+					BorderColor: lipgloss.Color("99"),
+					Width:       40,
+					Height:      10,
+				}
+				return plainModal(modal.RenderWithBtopBox(RenderBtopBox, lipgloss.NewStyle()))
+			},
+			want: `╭─────────────────────────────  Help  ─╮
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│            enter select              │
+│                                      │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯`,
+		},
+		{
+			name: "list input narrow",
+			render: func() string {
+				input := textinput.New()
+				input.SetValue("42")
+				modal := ListInputModal{
+					Title:       "Limits",
+					Items:       []ListInputItem{{Label: "Global", Value: "10 MB/s"}, {Label: "Workers", Value: "42", IsEditing: true}},
+					Cursor:      1,
+					Input:       input,
+					Help:        help.New(),
+					HelpKeys:    NoKeys{},
+					BorderColor: lipgloss.Color("99"),
+					Width:       40,
+					Height:      12,
+				}
+				return plainModal(modal.RenderWithBtopBox(RenderBtopBox, lipgloss.NewStyle()))
+			},
+			want: `╭─ Limits ─────────────────────────────╮
+│                                      │
+│    Global                            │
+│    10 MB/s                           │
+│                                      │
+│  ▸ Workers                           │
+│    > 42                              │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯`,
 		},
 	}
 

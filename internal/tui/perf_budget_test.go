@@ -27,6 +27,7 @@ func TestTUIRenderPerfBudget(t *testing.T) {
 	allocs := testing.AllocsPerRun(20, func() {
 		_ = model.View()
 	})
+	t.Logf("cached frame: %.0f allocs/op (budget %d)", allocs, stableDashboardAllocsBudget)
 	if allocs > stableDashboardAllocsBudget {
 		t.Fatalf("stable dashboard frame allocated %.0f objects, budget is %d", allocs, stableDashboardAllocsBudget)
 	}
@@ -37,6 +38,7 @@ func TestTUIRenderPerfBudget(t *testing.T) {
 		_ = model.View()
 	}
 	perFrame := time.Since(start) / iterations
+	t.Logf("cached frame: %v/op (budget %v)", perFrame, stableDashboardRenderBudget)
 	if perFrame > stableDashboardRenderBudget {
 		t.Fatalf("stable dashboard frame took %v, budget is %v", perFrame, stableDashboardRenderBudget)
 	}
@@ -59,6 +61,7 @@ func TestTUIInvalidatedRenderPerfBudget(t *testing.T) {
 		model.UpdateListItems()
 		_ = model.View()
 	})
+	t.Logf("invalidated frame: %.0f allocs/op (budget %d)", allocs, invalidatedDashboardAllocsBudget)
 	if allocs > invalidatedDashboardAllocsBudget {
 		t.Fatalf("invalidated dashboard frame allocated %.0f objects, budget is %d", allocs, invalidatedDashboardAllocsBudget)
 	}
@@ -71,6 +74,7 @@ func TestTUIInvalidatedRenderPerfBudget(t *testing.T) {
 		_ = model.View()
 	}
 	perFrame := time.Since(start) / iterations
+	t.Logf("invalidated frame: %v/op (budget %v)", perFrame, invalidatedDashboardRenderBudget)
 	if perFrame > invalidatedDashboardRenderBudget {
 		t.Fatalf("invalidated dashboard frame took %v, budget is %v", perFrame, invalidatedDashboardRenderBudget)
 	}

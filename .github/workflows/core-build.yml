@@ -140,11 +140,27 @@ jobs:
         with:
           go-version: "1.25.0"
           check-latest: false
-      - name: Enforce cached-frame budget
+      - name: Enforce TUI frame budgets
         env:
           GOMAXPROCS: "2"
           SURGE_PERF_BUDGET: "1"
-        run: go test ./internal/tui -run '^TestTUI.*RenderPerfBudget$' -count=3
+        run: |
+          set -o pipefail
+          go test ./internal/tui -run '^TestTUI.*RenderPerfBudget$' -count=3 -v | tee tui-perf.txt
+      - name: Report TUI performance values
+        if: always()
+        run: |
+          {
+            echo "### TUI performance budget"
+            echo
+            echo '```text'
+            if [ -f tui-perf.txt ]; then
+              cat tui-perf.txt
+            else
+              echo "No performance output was produced."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: Release
