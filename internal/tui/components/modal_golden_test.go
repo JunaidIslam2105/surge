@@ -1,9 +1,12 @@
 package components
 
 import (
+	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/filepicker"
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -24,6 +27,44 @@ func (goldenHelpKeys) ShortHelp() []key.Binding {
 
 func (goldenHelpKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))}}
+}
+
+func TestFilePickerModalGolden(t *testing.T) {
+	tmpDir := t.TempDir()
+	picker := filepicker.New()
+	picker.CurrentDirectory = tmpDir
+	picker.SetHeight(3)
+
+	modal := FilePickerModal{
+		Title:       " Select Directory ",
+		Picker:      &picker,
+		Help:        help.New(),
+		HelpKeys:    NoKeys{},
+		BorderColor: lipgloss.Color("99"),
+		Width:       44,
+		Height:      10,
+	}
+	got := plainModal(modal.RenderWithBtopBox(RenderBtopBox, lipgloss.NewStyle()))
+	lines := strings.Split(got, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, filepath.Base(tmpDir)) || strings.Contains(line, "TestFilePickerModalGolden") {
+			lines[i] = "│  <tmp>" + strings.Repeat(" ", 35) + "│"
+		}
+	}
+	got = strings.Join(lines, "\n")
+	want := `╭─ Select Directory ───────────────────────╮
+│                                          │
+│  <tmp>                                   │
+│                                          │
+│    Bummer. No Files Found.               │
+│                                          │
+│                                          │
+│                                          │
+│                                          │
+╰──────────────────────────────────────────╯`
+	if got != want {
+		t.Fatalf("file-picker golden mismatch:\n got:\n%s\nwant:\n%s", got, want)
+	}
 }
 
 func TestModalGoldens(t *testing.T) {

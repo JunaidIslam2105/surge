@@ -161,6 +161,29 @@ jobs:
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Record TUI performance metadata
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "sha=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "runner_os=$RUNNER_OS"
+            echo "runner_arch=$RUNNER_ARCH"
+            echo "gomaxprocs=${GOMAXPROCS:-2}"
+            date -u +"timestamp=%Y-%m-%dT%H:%M:%SZ"
+          } > tui-perf-metadata.txt
+      - name: Upload TUI performance history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-perf-${{ github.run_number }}
+          path: |
+            tui-perf.txt
+            tui-perf-metadata.txt
+          if-no-files-found: ignore
+          retention-days: 90
 
   release:
     name: Release
