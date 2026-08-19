@@ -144,7 +144,7 @@ jobs:
         env:
           GOMAXPROCS: "2"
           SURGE_PERF_BUDGET: "1"
-        run: go test ./internal/tui -run '^TestTUIRenderPerfBudget$' -count=3
+        run: go test ./internal/tui -run '^TestTUI.*RenderPerfBudget$' -count=3
 
   release:
     name: Release
