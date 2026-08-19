@@ -50,7 +50,7 @@ jobs:
             SURGE_VERSION=$(curl -s https://api.github.com/repos/SurgeDM/Surge/releases/latest | jq -r .tag_name | sed 's/^v//')
             echo "Latest Surge version: $SURGE_VERSION"
           fi
-          echo "version=$SURGE_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$SURGE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Release Assets
         run: |
@@ -68,7 +68,7 @@ jobs:
               exit 0
             fi
             echo "Attempt $i/$MAX_RETRIES: Release not ready yet, waiting ${RETRY_INTERVAL}s..."
-            sleep $RETRY_INTERVAL
+            sleep "$RETRY_INTERVAL"
           done
           
           echo "Timeout waiting for release assets after $((MAX_RETRIES * RETRY_INTERVAL / 60)) minutes."
@@ -85,7 +85,7 @@ jobs:
           elif [[ "${{ inputs.tag_as_latest }}" == "true" ]]; then
             ENABLE_LATEST=true
           fi
-          echo "enable=$ENABLE_LATEST" >> $GITHUB_OUTPUT
+          echo "enable=$ENABLE_LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -125,18 +125,20 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Docker Image Built Successfully! 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Surge Version:** ${{ steps.surge-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Images pushed:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Pull the image:" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.surge-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Docker Image Built Successfully! 🚀"
+            echo ""
+            echo "**Surge Version:** ${{ steps.surge-version.outputs.version }}"
+            echo ""
+            echo "**Images pushed:**"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "**Platforms:** linux/amd64, linux/arm64"
+            echo ""
+            echo "### Pull the image:"
+            echo '```bash'
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.surge-version.outputs.version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
