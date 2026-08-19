@@ -8,12 +8,31 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
+// bitmapSnap is an immutable snapshot of the tracker, cached until the next
+// mutation so callers (TUI render, progress aggregator, pause state) don't
+// re-scan and re-allocate the full width on every access.
+type bitmapSnap struct {
+	version   uint64
+	totalSize int64
+	packed    []byte
+	progress  []int64
+}
+
 type BitmapTracker struct {
 	mu              sync.RWMutex
 	chunkStatus     []atomic.Int32
 	chunkProgress   []atomic.Int64
 	actualChunkSize int64
 	width           int
+
+	// snapVersion bumps on every mutation; snap holds the last consistent view.
+	snapVersion atomic.Uint64
+	snap        atomic.Pointer[bitmapSnap]
+}
+
+// bumpVersion invalidates the cached snapshot after any state mutation.
+func (b *BitmapTracker) bumpVersion() {
+	b.snapVersion.Add(1)
 }
 
 // bitmapLayout returns the number of tracked chunks and backing bytes for a
@@ -39,6 +58,7 @@ func (b *BitmapTracker) Reset() {
 	if b.width > 0 {
 		b.chunkStatus = make([]atomic.Int32, b.width)
 		b.chunkProgress = make([]atomic.Int64, b.width)
+		b.bumpVersion()
 	}
 }
 
@@ -67,6 +87,7 @@ func (b *BitmapTracker) InitBitmap(totalSize int64, chunkSize int64) {
 	b.width = numChunks
 	b.chunkStatus = make([]atomic.Int32, numChunks)
 	b.chunkProgress = make([]atomic.Int64, numChunks)
+	b.bumpVersion()
 }
 
 // RestoreBitmap restores the chunk bitmap from saved state.
@@ -100,6 +121,7 @@ func (b *BitmapTracker) RestoreBitmap(totalSize int64, bitmap []byte, actualChun
 	if len(b.chunkProgress) != numChunks {
 		b.chunkProgress = make([]atomic.Int64, numChunks)
 	}
+	b.bumpVersion()
 }
 
 // SetChunkProgress updates chunk progress array from external sources.
@@ -116,6 +138,7 @@ func (b *BitmapTracker) SetChunkProgress(progress []int64) {
 	for i, v := range progress {
 		b.chunkProgress[i].Store(v)
 	}
+	b.bumpVersion()
 }
 
 // SetChunkState sets the state for a specific chunk index.
@@ -131,6 +154,7 @@ func (b *BitmapTracker) setChunkState(index int, status types.ChunkStatus) {
 		return
 	}
 	b.chunkStatus[index].Store(int32(status))
+	b.bumpVersion()
 }
 
 // GetChunkState gets the state for a specific chunk index.
@@ -167,6 +191,7 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 	}
 
 	var totalIncrement int64
+	var changed bool
 
 	for i := startIdx; i <= endIdx; i++ {
 		chunkStart := int64(i) * b.actualChunkSize
@@ -206,12 +231,14 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 					// We might have already reached the end or overlap is zero.
 					if currentProg >= (chunkEnd - chunkStart) {
 						b.chunkStatus[i].Store(int32(types.ChunkCompleted))
+						changed = true
 					}
 					break
 				}
 
 				if b.chunkProgress[i].CompareAndSwap(currentProg, currentProg+inc) {
 					totalIncrement += inc
+					changed = true
 					if currentProg+inc >= (chunkEnd - chunkStart) {
 						b.chunkStatus[i].Store(int32(types.ChunkCompleted))
 					} else {
@@ -221,10 +248,15 @@ func (b *BitmapTracker) UpdateChunkStatus(totalSize, offset, length int64, statu
 				}
 			}
 		case types.ChunkDownloading:
-			b.chunkStatus[i].CompareAndSwap(int32(types.ChunkPending), int32(types.ChunkDownloading))
+			if b.chunkStatus[i].CompareAndSwap(int32(types.ChunkPending), int32(types.ChunkDownloading)) {
+				changed = true
+			}
 		}
 	}
 
+	if changed {
+		b.bumpVersion()
+	}
 	return totalIncrement
 }
 
@@ -313,6 +345,7 @@ func (b *BitmapTracker) RecalculateProgress(totalSize int64, remainingTasks []ty
 			b.chunkStatus[i].Store(int32(types.ChunkPending))
 		}
 	}
+	b.bumpVersion()
 	return total
 }
 
@@ -325,6 +358,18 @@ func (b *BitmapTracker) GetBitmapSnapshot(totalSize int64, includeProgress bool)
 		return nil, 0, 0, 0, nil
 	}
 
+	// Fast path: return the previously-built snapshot when nothing has
+	// changed since it was cached. Snapshot reads are read-only by contract,
+	// so callers may safely share the cached slices.
+	if s := b.snap.Load(); s != nil && s.version == b.snapVersion.Load() && s.totalSize == totalSize {
+		if includeProgress {
+			return s.packed, b.width, totalSize, b.actualChunkSize, s.progress
+		}
+		return s.packed, b.width, totalSize, b.actualChunkSize, nil
+	}
+
+	v := b.snapVersion.Load()
+
 	_, bytesNeeded, _ := bitmapLayout(totalSize, b.actualChunkSize)
 	result := make([]byte, bytesNeeded)
 
@@ -336,13 +381,20 @@ func (b *BitmapTracker) GetBitmapSnapshot(totalSize int64, includeProgress bool)
 		result[byteIndex] |= val
 	}
 
-	var progressResult []int64
-	if includeProgress {
-		progressResult = make([]int64, len(b.chunkProgress))
-		for i := 0; i < len(b.chunkProgress); i++ {
-			progressResult[i] = b.chunkProgress[i].Load()
-		}
+	progressResult := make([]int64, len(b.chunkProgress))
+	for i := 0; i < len(b.chunkProgress); i++ {
+		progressResult[i] = b.chunkProgress[i].Load()
 	}
 
-	return result, b.width, totalSize, b.actualChunkSize, progressResult
+	// Only cache a view consistent with the version we scanned. If a
+	// mutation raced in mid-scan the version moved; drop the cache write and
+	// let the next call rebuild against the current state.
+	if b.snapVersion.Load() == v {
+		b.snap.Store(&bitmapSnap{version: v, totalSize: totalSize, packed: result, progress: progressResult})
+	}
+
+	if includeProgress {
+		return result, b.width, totalSize, b.actualChunkSize, progressResult
+	}
+	return result, b.width, totalSize, b.actualChunkSize, nil
 }
