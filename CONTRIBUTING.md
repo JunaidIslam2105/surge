@@ -12,6 +12,8 @@ go test ./...
 go test -race ./internal/...
 ```
 
+The core Go workflow uses the dependencies pinned in `go.mod` and `go.sum`. The Python performance scripts require Python 3.8+ but only use the standard library, so no pip install is needed. Browser-extension work additionally requires Node.js 22+ and `npm ci` in `extension/`; ShellCheck and actionlint are optional locally and are enforced by CI.
+
 For local configuration isolation while running the TUI or server:
 
 ```bash

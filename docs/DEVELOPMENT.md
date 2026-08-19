@@ -16,6 +16,20 @@ Optional tools:
 - `strace` and `perf` for Linux profiling
 - Nix, if you use the flake-based build
 
+## Development dependencies
+
+The core application has no separate vendored development-dependency file. Use the tools below only for the workflows that need them:
+
+- **Go modules:** `go mod download` fetches the versions pinned by `go.mod` and `go.sum`; no global Go packages are required for normal builds and tests.
+- **Python 3.8+:** the performance-history helper and its tests use only the Python standard library. There is no `pip install`, virtual environment, or `requirements.txt` step.
+- **Go lint tools:** the lint workflow runs `golangci-lint` and `actionlint` through `go run`, so they do not need to be installed globally.
+- **ShellCheck:** optional locally and installed by CI on Ubuntu; use it for shell-script changes when available.
+- **GitHub CLI (`gh`):** optional, useful for downloading TUI performance-history artifacts.
+- **Node.js 22+ and npm:** required only for browser-extension development; `npm ci` installs the locked extension development dependencies.
+- **Nix:** optional; the flake supplies a reproducible build environment if preferred.
+
+The profiling tools `strace`, `perf`, and `go tool pprof` are optional Linux/development tools and are not needed for normal tests.
+
 ## First-time setup
 
 ```bash
@@ -23,6 +37,20 @@ git clone https://github.com/SurgeDM/Surge.git
 cd Surge
 go mod download
 go build -o ./surge .
+```
+
+This setup is sufficient for the Go application, unit tests, and race tests. For the optional Python perf checks, verify the standard-library interpreter:
+
+```bash
+python3 --version
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
+
+For extension development, install the locked Node dependencies separately:
+
+```bash
+cd extension
+npm ci
 ```
 
 Run the CLI without installing it globally:
@@ -100,9 +128,12 @@ The core lint workflow runs Go linting, Unicode checks, ShellCheck, and actionli
 ```bash
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
 go test ./internal/lint/...
+python3 -m unittest discover -s scripts -p 'test_*.py'
 find scripts -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 ```
+
+The Go lint commands download their tools through the Go tool cache; actionlint uses the version shown above, while golangci-lint follows the workflow’s `@latest` policy. The Python command uses only the standard library. ShellCheck is the only command in this list that is not available through the repository or Go toolchain; CI installs it explicitly.
 
 If ShellCheck is not installed locally, install it using your platform package manager or rely on the Ubuntu CI lint job, which installs it before running the check.
 
@@ -136,6 +167,17 @@ rm -f .tui.cpu.pprof .tui.mem.pprof
 ```
 
 On Linux, `strace -f -c` helps identify syscall overhead and `perf stat -d` helps compare CPU/cache behavior. Keep generated profiles and reports out of commits.
+
+To compare two saved CI performance reports locally:
+
+```bash
+python3 scripts/compare_tui_perf.py \
+  --current current-perf/tui-perf.txt \
+  --previous previous-perf/tui-perf.txt \
+  --output perf-comparison.txt
+```
+
+The comparison uses medians and fails when latency grows by more than 25% or allocations by more than 10%. Missing or malformed samples are treated as failures rather than silently producing a misleading comparison.
 
 ## Browser extension development
 
@@ -182,4 +224,4 @@ cat .tmp/tui-perf/tui-perf-metadata.txt
 
 The regression job compares medians against the previous successful run on the target branch. It tolerates up to 25% latency growth and 10% allocation growth to avoid failing on ordinary hosted-runner noise; larger changes fail the job and are included in the step summary.
 
-`act` is not required for local workflow validation. Running actionlint plus the commands above catches YAML, expression, workflow, shell, and test issues without starting a local Actions runner.
+`act` is not required for local workflow validation. Running actionlint plus the commands above catches YAML, expression, workflow, shell, and test issues without starting a local Actions runner. `gh` is only needed when downloading historical artifacts; CI provides its own authenticated token for baseline lookup.

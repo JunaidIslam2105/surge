@@ -7,6 +7,7 @@ import argparse
 import re
 import statistics
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 TIME_RE = re.compile(r"(cached|invalidated) frame: ([0-9.]+)(ns|µs|ms)/op")
 ALLOCS_RE = re.compile(r"(cached|invalidated) frame: ([0-9.]+) allocs/op")
@@ -16,7 +17,7 @@ TIME_RATIO_LIMIT = 1.25
 ALLOCS_RATIO_LIMIT = 1.10
 
 
-def parse_report(text: str) -> tuple[dict[str, list[float]], dict[str, list[float]]]:
+def parse_report(text: str) -> Tuple[Dict[str, List[float]], Dict[str, List[float]]]:
     """Return per-mode latency in milliseconds and allocation samples."""
     times = {mode: [] for mode in MODES}
     allocations = {mode: [] for mode in MODES}
@@ -29,12 +30,12 @@ def parse_report(text: str) -> tuple[dict[str, list[float]], dict[str, list[floa
     return times, allocations
 
 
-def compare_reports(current_text: str, previous_text: str) -> tuple[str, list[str]]:
+def compare_reports(current_text: str, previous_text: str) -> Tuple[str, List[str]]:
     """Return a human-readable comparison and any budget violations."""
     current_times, current_allocations = parse_report(current_text)
     previous_times, previous_allocations = parse_report(previous_text)
-    failures: list[str] = []
-    lines: list[str] = []
+    failures: List[str] = []
+    lines: List[str] = []
 
     for mode in MODES:
         if not current_times[mode] or not previous_times[mode]:

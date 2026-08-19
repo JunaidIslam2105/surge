@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import unittest
+from typing import Final
 
 from compare_tui_perf import compare_reports, parse_report
 
 
-REPORT = """\
+REPORT: Final[str] = """\
     perf_budget_test.go:30: cached frame: 550 allocs/op (budget 850)
     perf_budget_test.go:41: cached frame: 0.250ms/op (budget 2ms)
     perf_budget_test.go:64: invalidated frame: 1500 allocs/op (budget 2200)
