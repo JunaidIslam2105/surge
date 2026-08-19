@@ -1,49 +1,74 @@
 # Contributing
 
-Thanks for checking out Surge. We are very open to contributions and happy to review PRs.
+Thanks for contributing to Surge. Start with the [Development Guide](docs/DEVELOPMENT.md) for prerequisites and the complete local workflow.
 
-This is intentionally short. If you see something that can be better, open a PR.
+## Quick start
 
-## Quick Codebase Map
-
-- `cmd/`: CLI commands and startup wiring (`surge get`, `surge server`, etc.).
-- `internal/core/`: service layer (`LocalDownloadService`) that orchestrates add/pause/resume/delete/list.
-- `internal/download/`: high-level download flow (`RunDownload`) and worker-pool lifecycle.
-- `internal/engine/`: low-level engine code.
-- `internal/engine/probe.go`: probe logic (range support, metadata, mirror probing).
-- `internal/engine/concurrent/`: concurrent HTTP downloader and worker/retry/failover logic.
-- `internal/engine/single/`: single-connection HTTP downloader fallback.
-- `internal/engine/state/`: Gob-backed file persistence for paused/history downloads.
-- `internal/tui/`: terminal UI models, update loop, views.
-- `internal/testutil/`: mock HTTP servers and test helpers.
-
-If you are looking for networking behavior, start here:
-
-1. `internal/engine/probe.go`
-2. `internal/engine/concurrent/`
-3. `internal/engine/single/`
-
-## Run Tests
-
-From repo root:
+From the repository root:
 
 ```bash
+go mod download
 go test ./...
+go test -race ./internal/...
 ```
 
-Useful focused runs:
+For local configuration isolation while running the TUI or server:
 
 ```bash
-go test ./internal/engine/concurrent -run TestConcurrentDownloader_SwitchOn429 -count=1
-go test ./internal/download -run TestIntegration_PauseResume -count=1
-go test ./internal/tui -count=1
+XDG_CONFIG_HOME="$(mktemp -d)" XDG_CACHE_HOME="$(mktemp -d)" go run .
 ```
 
-## PR Expectations
+## Codebase map
 
-- Keep PRs focused and readable.
-- Add or update tests for behavior changes.
-- Run `go test ./...` before opening/updating the PR.
-- If behavior or CLI usage changes, update docs (`README.md` or `docs/`).
+- `cmd/`: Cobra commands, startup wiring, and CLI/server entry points.
+- `internal/orchestrator/`: lifecycle management, enqueueing, pause/resume, and event coordination.
+- `internal/scheduler/`: queued/active download scheduling, rate-limit pools, and shutdown behavior.
+- `internal/strategy/concurrent/`: ranged, mirrored, retried, hedged, and health-monitored downloads.
+- `internal/strategy/single/`: single-connection fallback downloads and throttled streaming.
+- `internal/probe/`: server capability and metadata probing.
+- `internal/transport/`: network pools, host penalties, and byte rate limiters.
+- `internal/progress/`: live download state, chunk maps, and progress aggregation.
+- `internal/store/`: persisted download and resume state.
+- `internal/tui/`: Bubble Tea model/update loop, dashboard panes, modal components, and render tests.
+- `internal/testutil/`: mock servers, temporary directories, and test helpers.
+- `extension/`: WXT/Solid browser extension source and tests.
 
-That is it. If you are unsure about approach, open a draft PR early and we can iterate on it together.
+## Focused checks
+
+Use focused package tests while iterating:
+
+```bash
+go test ./internal/tui ./internal/tui/components -count=1
+go test ./internal/strategy/concurrent -count=1
+go test ./internal/strategy/single -count=1
+go test ./internal/transport -run 'RateLimiter|HostRateLimiter' -count=1
+```
+
+For TUI rendering changes, also run the opt-in budgets and rendering benchmarks:
+
+```bash
+GOMAXPROCS=2 SURGE_PERF_BUDGET=1 \
+  go test ./internal/tui -run '^TestTUI.*RenderPerfBudget$' -count=3 -v
+go test ./internal/tui -run '^$' \
+  -bench '^BenchmarkCPU_(FullView_Old|FullView_New|DashboardPanes_Cached)$' \
+  -benchmem -count=3 -benchtime=500ms
+```
+
+For workflow or shell changes:
+
+```bash
+find scripts -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
+go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+```
+
+## Pull requests
+
+- Keep each PR focused and explain the user-visible motivation.
+- Add regression tests for behavior changes and golden tests for terminal rendering changes.
+- Preserve existing platform behavior; avoid assuming Linux unless the code path is platform-specific.
+- Run `gofmt` on changed Go files.
+- Run `go test ./...` and, for core changes, `go test -race ./internal/...`.
+- Update `README.md`, `docs/`, or CLI help when setup, behavior, or user-facing commands change.
+- Do not commit generated binaries, profiles, perf reports, temporary config directories, or downloaded artifacts.
+
+CI runs the full race-tested Go suite across the supported operating systems, TUI performance budgets when relevant files change, ShellCheck, actionlint, and extension checks when extension files change.

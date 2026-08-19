@@ -12,6 +12,7 @@ on:
       - main
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
 
@@ -182,6 +183,130 @@ jobs:
           path: |
             tui-perf.txt
             tui-perf-metadata.txt
+          if-no-files-found: ignore
+          retention-days: 90
+
+  tui-perf-regression:
+    name: TUI Performance Regression
+    needs: [changes, tui-perf]
+    if: always() && needs.changes.outputs.tui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download current performance report
+        uses: actions/download-artifact@v4
+        with:
+          name: tui-perf-${{ github.run_number }}
+          path: current-perf
+
+      - name: Compare with previous successful baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          previous_run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/core-build.yml/runs" \
+            --method GET \
+            --field "branch=${BASE_BRANCH}" \
+            --field status=success \
+            --field per_page=100 \
+            --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID}) | .id" | head -n 1 || true)"
+
+          if [ -z "$previous_run_id" ]; then
+            printf '%s\n' "No previous successful TUI performance baseline found for ${BASE_BRANCH}; comparison skipped." > perf-comparison.txt
+            cat perf-comparison.txt
+            exit 0
+          fi
+
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${previous_run_id}/artifacts" \
+            --jq '.artifacts[] | select(.expired == false and (.name | startswith("tui-perf-"))) | .id' | head -n 1)"
+          if [ -z "$artifact_id" ]; then
+            printf '%s\n' "Previous run ${previous_run_id} has no unexpired TUI performance artifact; comparison skipped." > perf-comparison.txt
+            cat perf-comparison.txt
+            exit 0
+          fi
+
+          mkdir -p previous-perf
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > previous-perf.zip
+          unzip -q previous-perf.zip -d previous-perf
+
+          CURRENT_REPORT="$(find current-perf -name tui-perf.txt -type f -print -quit)"
+          PREVIOUS_REPORT="$(find previous-perf -name tui-perf.txt -type f -print -quit)"
+          if [ -z "$CURRENT_REPORT" ] || [ -z "$PREVIOUS_REPORT" ]; then
+            printf '%s\n' "Performance report missing from current or previous artifact; comparison skipped." > perf-comparison.txt
+            cat perf-comparison.txt
+            exit 0
+          fi
+
+          CURRENT_REPORT="$CURRENT_REPORT" PREVIOUS_REPORT="$PREVIOUS_REPORT" python3 - <<'PY'
+          import os
+          import re
+          import statistics
+          from pathlib import Path
+
+          time_re = re.compile(r"(cached|invalidated) frame: ([0-9.]+)(ns|µs|ms)/op")
+          alloc_re = re.compile(r"(cached|invalidated) frame: ([0-9.]+) allocs/op")
+          scale = {"ns": 1e-6, "µs": 1e-3, "ms": 1.0}
+
+          def read_report(path):
+              text = Path(path).read_text()
+              times = {"cached": [], "invalidated": []}
+              allocs = {"cached": [], "invalidated": []}
+              for mode, value, unit in time_re.findall(text):
+                  times[mode].append(float(value) * scale[unit])
+              for mode, value in alloc_re.findall(text):
+                  allocs[mode].append(float(value))
+              return times, allocs
+
+          current_times, current_allocs = read_report(os.environ["CURRENT_REPORT"])
+          previous_times, previous_allocs = read_report(os.environ["PREVIOUS_REPORT"])
+          failures = []
+          lines = [f"Baseline run: {os.environ.get('BASE_BRANCH', 'unknown')}"]
+
+          # Tolerances absorb normal hosted-runner variance while catching clear regressions.
+          limits = {"cached": (1.25, 1.10), "invalidated": (1.25, 1.10)}
+          for mode in ("cached", "invalidated"):
+              current_time = statistics.median(current_times[mode])
+              previous_time = statistics.median(previous_times[mode])
+              current_allocs_median = statistics.median(current_allocs[mode])
+              previous_allocs_median = statistics.median(previous_allocs[mode])
+              time_delta = (current_time / previous_time - 1) * 100
+              alloc_delta = (current_allocs_median / previous_allocs_median - 1) * 100
+              time_limit, alloc_limit = limits[mode]
+              lines.append(
+                  f"{mode}: {current_time:.3f} ms/op ({time_delta:+.1f}%), "
+                  f"{current_allocs_median:.0f} allocs/op ({alloc_delta:+.1f}%)"
+              )
+              if current_time > previous_time * time_limit:
+                  failures.append(f"{mode} latency exceeds {time_limit:.2f}x baseline")
+              if current_allocs_median > previous_allocs_median * alloc_limit:
+                  failures.append(f"{mode} allocations exceed {alloc_limit:.2f}x baseline")
+
+          if failures:
+              lines.append("FAIL: " + "; ".join(failures))
+          else:
+              lines.append("PASS: no material TUI performance regression detected")
+
+          Path("perf-comparison.txt").write_text("\n".join(lines) + "\n")
+          print(Path("perf-comparison.txt").read_text(), end="")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as f:
+                  f.write("### TUI performance regression\n\n```text\n")
+                  f.write(Path("perf-comparison.txt").read_text())
+                  f.write("```\n")
+          if failures:
+              raise SystemExit(1)
+          PY
+
+      - name: Upload performance comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-perf-comparison-${{ github.run_number }}
+          path: perf-comparison.txt
           if-no-files-found: ignore
           retention-days: 90
 

@@ -11,7 +11,7 @@
 [![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-violet.svg)](https://www.buymeacoffee.com/surge.downloader)
 [![Stars](https://img.shields.io/github/stars/SurgeDM/Surge?style=social)](https://github.com/SurgeDM/Surge/stargazers)
 
-[Installation](#installation) • [Usage](#usage) • [Themes](docs/THEMES.md) • [Fonts](docs/FONTS.md) • [Benchmarks](#benchmarks) • [Extension](#browser-extension) • [Settings](docs/SETTINGS.md) • [CLI Reference](docs/USAGE.md)
+[Installation](#installation) • [Usage](#usage) • [Development](docs/DEVELOPMENT.md) • [Themes](docs/THEMES.md) • [Fonts](docs/FONTS.md) • [Benchmarks](#benchmarks) • [Extension](#browser-extension) • [Settings](docs/SETTINGS.md) • [CLI Reference](docs/USAGE.md)
 
 </div>
 
@@ -133,7 +133,7 @@ surge service uninstall
 > [!NOTE]
 > On Linux, these commands may require `sudo`. On Windows, they should be run in an elevated (Administrator) terminal.
 
-### 4. Remote TUI
+### 4. Server Networking and Authentication
 
 `surge` and `surge server` bind the HTTP API to `0.0.0.0` (all interfaces) by default.
 This means the server is accessible via `localhost` (127.0.0.1) as well as your local network IP.
@@ -150,7 +150,7 @@ surge service token
 
 Alternatively, you can find it in the TUI under **Settings > Extension**.
 
-### 3. Remote TUI
+### 5. Remote TUI
 
 Connect to a running Surge daemon (local or remote).
 
@@ -170,7 +170,7 @@ By default, `surge connect` uses:
 - `http://` for loopback and private IP targets
 - `https://` for public/hostname targets
 
-### 4. Global Connection Flags (CLI + TUI)
+### 6. Global Connection Flags (CLI + TUI)
 
 These global flags are available on all commands:
 
@@ -182,7 +182,7 @@ Environment variable fallbacks:
 - `SURGE_HOST`
 - `SURGE_TOKEN`
 
-### 5. Server Mode with Docker Compose
+### 7. Server Mode with Docker Compose
 
 Download the compose file and start the container:
 
@@ -289,10 +289,11 @@ Huge thanks to the teams and sponsors helping us build and ship Surge:
 
 ---
 
-## Community & Contributing
+## Development & Contributing
 
-We love community contributions! Whether it's a bug fix, a new feature, or just cleaning up typos.
-PRs are always welcome. For a quick guide, see [CONTRIBUTING.md](CONTRIBUTING.md).
+For project setup, the current repository map, focused tests, race checks, TUI performance budgets, extension development, and CI conventions, see the [Development Guide](docs/DEVELOPMENT.md).
+
+We love community contributions! Whether it's a bug fix, a new feature, or just cleaning up typos, PRs are always welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the review checklist.
 
 You can check out the [Discussions](https://github.com/SurgeDM/Surge/discussions) for any questions or ideas, or follow us on [X (Twitter)](https://x.com/SurgeDownloader)!
 
