@@ -30,6 +30,8 @@ jobs:
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
       - name: unicode lint
         run: go test ./internal/lint/...
+      - name: TUI performance comparison tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y shellcheck
       - name: ShellCheck scripts

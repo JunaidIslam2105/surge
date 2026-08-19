@@ -162,6 +162,24 @@ npm run zip:firefox
 - `Core Build and Release` runs build and race-tested Go tests on Linux, macOS, and Windows.
 - The TUI performance job runs only when TUI or Go dependency files change. It reports cached and invalidated measurements in the job summary and uploads a 90-day artifact containing the raw report and metadata.
 - The TUI regression job compares the current report with the previous successful baseline on the target branch. It allows normal hosted-runner variance but fails on a material latency or allocation regression.
-- `Core Lint` runs Go linting, ShellCheck, and actionlint.
+- `Core Lint` runs Go linting, ShellCheck, actionlint, and the perf-comparison unit tests.
+
+### Inspecting performance history
+
+The TUI performance job uploads two artifacts for each run:
+
+- `tui-perf-<run-number>`: raw test output plus runner/commit metadata
+- `tui-perf-comparison-<run-number>`: the baseline comparison report
+
+Find recent successful core-build runs and download an artifact with the GitHub CLI:
+
+```bash
+gh run list --workflow core-build.yml --status success --limit 10
+gh run download <run-id> -n tui-perf-<run-number> -D .tmp/tui-perf
+cat .tmp/tui-perf/tui-perf.txt
+cat .tmp/tui-perf/tui-perf-metadata.txt
+```
+
+The regression job compares medians against the previous successful run on the target branch. It tolerates up to 25% latency growth and 10% allocation growth to avoid failing on ordinary hosted-runner noise; larger changes fail the job and are included in the step summary.
 
 `act` is not required for local workflow validation. Running actionlint plus the commands above catches YAML, expression, workflow, shell, and test issues without starting a local Actions runner.

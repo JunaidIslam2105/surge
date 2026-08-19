@@ -193,6 +193,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Download current performance report
         uses: actions/download-artifact@v4
         with:
@@ -240,66 +241,25 @@ jobs:
             exit 0
           fi
 
-          CURRENT_REPORT="$CURRENT_REPORT" PREVIOUS_REPORT="$PREVIOUS_REPORT" python3 - <<'PY'
-          import os
-          import re
-          import statistics
-          from pathlib import Path
+          python3 scripts/compare_tui_perf.py \
+            --current "$CURRENT_REPORT" \
+            --previous "$PREVIOUS_REPORT" \
+            --output perf-comparison.txt
 
-          time_re = re.compile(r"(cached|invalidated) frame: ([0-9.]+)(ns|µs|ms)/op")
-          alloc_re = re.compile(r"(cached|invalidated) frame: ([0-9.]+) allocs/op")
-          scale = {"ns": 1e-6, "µs": 1e-3, "ms": 1.0}
-
-          def read_report(path):
-              text = Path(path).read_text()
-              times = {"cached": [], "invalidated": []}
-              allocs = {"cached": [], "invalidated": []}
-              for mode, value, unit in time_re.findall(text):
-                  times[mode].append(float(value) * scale[unit])
-              for mode, value in alloc_re.findall(text):
-                  allocs[mode].append(float(value))
-              return times, allocs
-
-          current_times, current_allocs = read_report(os.environ["CURRENT_REPORT"])
-          previous_times, previous_allocs = read_report(os.environ["PREVIOUS_REPORT"])
-          failures = []
-          lines = [f"Baseline run: {os.environ.get('BASE_BRANCH', 'unknown')}"]
-
-          # Tolerances absorb normal hosted-runner variance while catching clear regressions.
-          limits = {"cached": (1.25, 1.10), "invalidated": (1.25, 1.10)}
-          for mode in ("cached", "invalidated"):
-              current_time = statistics.median(current_times[mode])
-              previous_time = statistics.median(previous_times[mode])
-              current_allocs_median = statistics.median(current_allocs[mode])
-              previous_allocs_median = statistics.median(previous_allocs[mode])
-              time_delta = (current_time / previous_time - 1) * 100
-              alloc_delta = (current_allocs_median / previous_allocs_median - 1) * 100
-              time_limit, alloc_limit = limits[mode]
-              lines.append(
-                  f"{mode}: {current_time:.3f} ms/op ({time_delta:+.1f}%), "
-                  f"{current_allocs_median:.0f} allocs/op ({alloc_delta:+.1f}%)"
-              )
-              if current_time > previous_time * time_limit:
-                  failures.append(f"{mode} latency exceeds {time_limit:.2f}x baseline")
-              if current_allocs_median > previous_allocs_median * alloc_limit:
-                  failures.append(f"{mode} allocations exceed {alloc_limit:.2f}x baseline")
-
-          if failures:
-              lines.append("FAIL: " + "; ".join(failures))
-          else:
-              lines.append("PASS: no material TUI performance regression detected")
-
-          Path("perf-comparison.txt").write_text("\n".join(lines) + "\n")
-          print(Path("perf-comparison.txt").read_text(), end="")
-          summary = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary:
-              with open(summary, "a") as f:
-                  f.write("### TUI performance regression\n\n```text\n")
-                  f.write(Path("perf-comparison.txt").read_text())
-                  f.write("```\n")
-          if failures:
-              raise SystemExit(1)
-          PY
+      - name: Report performance comparison
+        if: always()
+        run: |
+          {
+            echo "### TUI performance regression"
+            echo
+            echo '```text'
+            if [ -f perf-comparison.txt ]; then
+              cat perf-comparison.txt
+            else
+              echo "No comparison output was produced."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload performance comparison
         if: always()
