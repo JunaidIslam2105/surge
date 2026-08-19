@@ -165,12 +165,17 @@ type RootModel struct {
 	lastSpeedHistoryUpdate time.Time // Last time SpeedHistory was updated (for 0.5s sampling)
 	cachedTotalSpeed       int64     // Cached total speed (bytes/s), updated once per progress batch
 	graphRenderer          *GraphRenderer
-	// chunkMapCache and graphBoxCache are pointers (not values) because
-	// View() has a value receiver: an inline value would be copied and the
-	// write discarded every frame, defeating the cache.
-	chunkMapCache          *chunkMapRenderCache
-	graphBoxCache          *graphBoxCache
-	lastResizeTime         time.Time
+	// Dashboard render caches are pointers because View() has a value receiver:
+	// an inline value would be copied and the write discarded every frame.
+	chunkMapCache     *chunkMapRenderCache
+	graphBoxCache     *graphBoxCache
+	headerBoxCache    *headerBoxRenderCache
+	logBoxCache       *logBoxRenderCache
+	listBoxCache      *listBoxRenderCache
+	detailsPaneCache  *detailsPaneRenderCache
+	listRenderVersion uint64
+	logRenderVersion  uint64
+	lastResizeTime    time.Time
 
 	// Notification log system
 	logViewport viewport.Model // Scrollable log viewport
@@ -538,6 +543,10 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		graphRenderer:         NewGraphRenderer(),
 		chunkMapCache:         &chunkMapRenderCache{},
 		graphBoxCache:         &graphBoxCache{},
+		headerBoxCache:        &headerBoxRenderCache{},
+		logBoxCache:           &logBoxRenderCache{},
+		listBoxCache:          &listBoxRenderCache{},
+		detailsPaneCache:      &detailsPaneRenderCache{},
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,
@@ -773,6 +782,18 @@ func (m *RootModel) refreshThemeCaches() {
 	applyListTheme(&m.list)
 	applyFilepickerTheme(&m.filepicker)
 	m.logoCache = ""
+	if m.headerBoxCache != nil {
+		m.headerBoxCache.render = ""
+	}
+	if m.logBoxCache != nil {
+		m.logBoxCache.render = ""
+	}
+	if m.listBoxCache != nil {
+		m.listBoxCache.render = ""
+	}
+	if m.detailsPaneCache != nil {
+		m.detailsPaneCache.content = ""
+	}
 	if m.graphRenderer != nil {
 		m.graphRenderer.InvalidateCache()
 	}

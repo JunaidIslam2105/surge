@@ -370,18 +370,22 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if key.Matches(msg, m.keys.Dashboard.LogDown) {
 			m.logViewport.ScrollDown(1)
+			m.logRenderVersion++
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Dashboard.LogUp) {
 			m.logViewport.ScrollUp(1)
+			m.logRenderVersion++
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Dashboard.LogTop) {
 			m.logViewport.GotoTop()
+			m.logRenderVersion++
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Dashboard.LogBottom) {
 			m.logViewport.GotoBottom()
+			m.logRenderVersion++
 			return m, nil
 		}
 		return m, nil
@@ -395,6 +399,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Pass messages to the list for navigation/filtering
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
+	m.listRenderVersion++
 	return m, cmd
 }
 

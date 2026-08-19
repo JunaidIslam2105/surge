@@ -7,8 +7,39 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
+type listBoxRenderCache struct {
+	width, height                       int
+	version                             uint64
+	activeTab                           int
+	activeCount, queuedCount, doneCount int
+	searchActive                        bool
+	searchQuery, searchView             string
+	logFocused                          bool
+	render                              string
+}
+
 // renderDownloadsBox generates the download list box with the top-left corner search bar string.
 func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+	if m.listBoxCache == nil {
+		m.listBoxCache = &listBoxRenderCache{}
+	}
+	cache := m.listBoxCache
+	searchView := ""
+	if m.searchActive {
+		searchView = m.searchInput.View()
+	}
+	if cache.render != "" && cache.width == width && cache.height == height &&
+		cache.version == m.listRenderVersion && cache.activeTab == m.activeTab &&
+		cache.activeCount == stats.ActiveCount && cache.queuedCount == stats.QueuedCount &&
+		cache.doneCount == stats.DownloadedCount && cache.searchActive == m.searchActive &&
+		cache.searchQuery == m.searchQuery && cache.searchView == searchView &&
+		cache.logFocused == m.logFocused {
+		return cache.render
+	}
+
 	contentWidth := width - components.BorderFrameWidth
 	contentHeight := height - components.BorderFrameHeight
 
@@ -81,5 +112,18 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 
 	rightTitle := PaneTitleStyle.Render(" Downloads ")
 
-	return renderBtopBox(leftTitle, rightTitle, innerContent, width, height, downloadsBorderColor)
+	render := renderBtopBox(leftTitle, rightTitle, innerContent, width, height, downloadsBorderColor)
+	cache.width = width
+	cache.height = height
+	cache.version = m.listRenderVersion
+	cache.activeTab = m.activeTab
+	cache.activeCount = stats.ActiveCount
+	cache.queuedCount = stats.QueuedCount
+	cache.doneCount = stats.DownloadedCount
+	cache.searchActive = m.searchActive
+	cache.searchQuery = m.searchQuery
+	cache.searchView = searchView
+	cache.logFocused = m.logFocused
+	cache.render = render
+	return render
 }

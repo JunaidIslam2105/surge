@@ -5,10 +5,26 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
+type logBoxRenderCache struct {
+	width, height int
+	version       uint64
+	focused       bool
+	render        string
+}
+
 // renderLogBox returns the full Activity Log box with borders and title.
 func (m *RootModel) renderLogBox(width, height int) string {
 	if width < 1 || height < 1 {
 		return ""
+	}
+
+	if m.logBoxCache == nil {
+		m.logBoxCache = &logBoxRenderCache{}
+	}
+	cache := m.logBoxCache
+	if cache.render != "" && cache.width == width && cache.height == height &&
+		cache.version == m.logRenderVersion && cache.focused == m.logFocused {
+		return cache.render
 	}
 
 	var innerContent string
@@ -23,5 +39,11 @@ func (m *RootModel) renderLogBox(width, height int) string {
 		logBorderColor = colors.Pink()
 	}
 
-	return renderBtopBox(PaneTitleStyle.Render(" Activity Log "), "", innerContent, width, height, logBorderColor)
+	render := renderBtopBox(PaneTitleStyle.Render(" Activity Log "), "", innerContent, width, height, logBorderColor)
+	cache.width = width
+	cache.height = height
+	cache.version = m.logRenderVersion
+	cache.focused = m.logFocused
+	cache.render = render
+	return render
 }

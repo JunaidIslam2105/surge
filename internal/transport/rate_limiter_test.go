@@ -32,6 +32,22 @@ func TestRateLimiter_SetRateDisableWakesWaiter(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_ReenableSeedsFreshBurst(t *testing.T) {
+	limiter := NewRateLimiter(100, 100)
+	if err := limiter.WaitN(context.Background(), 100); err != nil {
+		t.Fatalf("initial WaitN returned error: %v", err)
+	}
+
+	limiter.SetRate(0, 0)
+	limiter.SetRate(1000, 1000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := limiter.WaitN(ctx, 1000); err != nil {
+		t.Fatalf("re-enabled limiter did not provide its fresh burst: %v", err)
+	}
+}
+
 func TestRateLimiter_SetRateIncreaseWakesWaiter(t *testing.T) {
 	limiter := NewRateLimiter(1, 0)
 	done := make(chan error, 1)

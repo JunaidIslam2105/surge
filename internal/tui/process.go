@@ -27,6 +27,9 @@ func (m *RootModel) processProgressMsg(msg types.DownloadEvent) tea.Cmd {
 	d.Elapsed = msg.Elapsed
 	d.Connections = msg.Connections
 	d.rateLimited = msg.RateLimited
+	// List items retain pointers to downloads, so progress does not require a
+	// structural list rebuild. It does require invalidating the cached pane.
+	m.listRenderVersion++
 
 	// Update smoothed ETA on every progress tick
 	d.UpdateETA()

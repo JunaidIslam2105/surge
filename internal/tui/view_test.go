@@ -347,6 +347,32 @@ func TestView_NetworkActivityShowsFiveAxisLabelsWhenTall(t *testing.T) {
 	}
 }
 
+func TestDashboardPaneCachesInvalidateProgress(t *testing.T) {
+	m := fullBenchModel(1)
+	_ = m.View()
+	if m.listBoxCache == nil || m.listBoxCache.render == "" {
+		t.Fatal("expected the dashboard list pane to be cached")
+	}
+
+	before := m.listRenderVersion
+	d := m.downloads[0]
+	m.processProgressMsg(types.DownloadEvent{
+		DownloadID: d.ID,
+		Downloaded: d.Downloaded + 1,
+		Total:      d.Total,
+		Speed:      d.Speed,
+		Elapsed:    time.Second,
+	})
+	if m.listRenderVersion == before {
+		t.Fatal("progress did not invalidate the cached list pane")
+	}
+
+	_ = m.View()
+	if m.listBoxCache.version != m.listRenderVersion {
+		t.Fatalf("list pane cache version = %d, want %d after progress", m.listBoxCache.version, m.listRenderVersion)
+	}
+}
+
 func BenchmarkLogoGradient(b *testing.B) {
 	logoText := `
    _______  ___________ ____ 

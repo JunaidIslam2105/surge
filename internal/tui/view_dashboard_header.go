@@ -8,8 +8,34 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
+type headerBoxRenderCache struct {
+	width, height int
+	host          string
+	port          int
+	remote        bool
+	render        string
+}
+
 // renderHeaderBox displays the Surge logo and the server connection status within a box.
 func (m *RootModel) renderHeaderBox(width, height int) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+
+	if m.headerBoxCache == nil {
+		m.headerBoxCache = &headerBoxRenderCache{}
+	}
+	cache := m.headerBoxCache
+	if cache.render != "" && cache.width == width && cache.height == height &&
+		cache.host == m.ServerHost && cache.port == m.ServerPort && cache.remote == m.IsRemote {
+		return cache.render
+	}
+
+	cache.width = width
+	cache.height = height
+	cache.host = m.ServerHost
+	cache.port = m.ServerPort
+	cache.remote = m.IsRemote
 	contentWidth := width - components.BorderFrameWidth
 	contentHeight := height - components.BorderFrameHeight
 
@@ -89,5 +115,7 @@ func (m *RootModel) renderHeaderBox(width, height int) string {
 		innerContent = lipgloss.JoinVertical(lipgloss.Center, logoBox, serverPortContent)
 	}
 
-	return renderBtopBox("", PaneTitleStyle.Render(" Server "), innerContent, width, height, colors.Gray())
+	render := renderBtopBox("", PaneTitleStyle.Render(" Server "), innerContent, width, height, colors.Gray())
+	cache.render = render
+	return render
 }

@@ -493,7 +493,7 @@ func (m RootModel) View() tea.View {
 		detailWidth = layout.LeftWidth
 	}
 	if selected != nil {
-		detailContent = renderFocusedDetails(selected, detailWidth-components.BorderFrameWidth, m.spinner.View())
+		detailContent = m.renderDetailsContentCached(selected, detailWidth-components.BorderFrameWidth, m.spinner.View())
 	} else {
 		detailContent = renderEmptyMessage(detailWidth-components.BorderFrameWidth, layout.DetailHeight-components.BorderFrameHeight, "No download selected")
 	}
