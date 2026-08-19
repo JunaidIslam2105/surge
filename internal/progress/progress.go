@@ -300,3 +300,13 @@ func (ps *DownloadProgress) GetBitmap() ([]byte, int, int64, int64, []int64) {
 func (ps *DownloadProgress) GetBitmapSnapshot(includeProgress bool) ([]byte, int, int64, int64, []int64) {
 	return ps.Bitmap.GetBitmapSnapshot(ps.Bytes.TotalSize.Load(), includeProgress)
 }
+
+// GetBitmapVersion returns the snapshot version of the bitmap. It changes
+// whenever chunk state is mutated, so callers can cheaply detect that a
+// previously computed bitmap snapshot is still current without re-scanning.
+func (ps *DownloadProgress) GetBitmapVersion() uint64 {
+	if ps == nil {
+		return 0
+	}
+	return ps.Bitmap.snapVersion.Load()
+}

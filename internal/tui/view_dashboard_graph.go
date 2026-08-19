@@ -11,10 +11,36 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
+// graphBoxCache memoizes the whole rendered graph box. The speed history
+// only advances every GraphUpdateInterval and progress batches arrive on
+// ReportInterval, but View() is called far more often (spinner ticks), so
+// caching the box output avoids re-running axis/stats/join work on frames
+// where none of its inputs changed.
+type graphBoxCache struct {
+	width, height    int
+	speedHistory     []float64
+	cachedTotalSpeed int64
+	totalDownloaded  int64
+	graphBoxRender   string
+}
+
 // renderGraphBox returns the network activity sparkline box layout.
 func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 	if width < 1 || height < 1 {
 		return ""
+	}
+
+	// Fast path: all inputs unchanged since the last render. Lazy-allocate
+	// because View() has a value receiver — inline fields would be copied
+	// and discarded each frame, so the cache must live behind a pointer.
+	if m.graphBoxCache == nil {
+		m.graphBoxCache = &graphBoxCache{}
+	}
+	c := m.graphBoxCache
+	if c.graphBoxRender != "" && c.width == width && c.height == height &&
+		c.cachedTotalSpeed == m.cachedTotalSpeed && c.totalDownloaded == stats.TotalDownloaded &&
+		sameFloat64s(c.speedHistory, m.SpeedHistory) {
+		return c.graphBoxRender
 	}
 
 	contentHeight := height - components.BorderFrameHeight
@@ -193,5 +219,14 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 	}
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Left, "", graphWithAxis, "")
-	return renderBtopBox(PaneTitleStyle.Render(" Network Activity "), "", innerContent, width, height, colors.Cyan())
+	render := renderBtopBox(PaneTitleStyle.Render(" Network Activity "), "", innerContent, width, height, colors.Cyan())
+
+	// Record the fingerprint for the next frame's fast-path check.
+	c.width = width
+	c.height = height
+	c.cachedTotalSpeed = m.cachedTotalSpeed
+	c.totalDownloaded = stats.TotalDownloaded
+	c.speedHistory = append(c.speedHistory[:0], m.SpeedHistory...)
+	c.graphBoxRender = render
+	return render
 }

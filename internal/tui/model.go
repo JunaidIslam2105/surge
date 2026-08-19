@@ -165,6 +165,11 @@ type RootModel struct {
 	lastSpeedHistoryUpdate time.Time // Last time SpeedHistory was updated (for 0.5s sampling)
 	cachedTotalSpeed       int64     // Cached total speed (bytes/s), updated once per progress batch
 	graphRenderer          *GraphRenderer
+	// chunkMapCache and graphBoxCache are pointers (not values) because
+	// View() has a value receiver: an inline value would be copied and the
+	// write discarded every frame, defeating the cache.
+	chunkMapCache          *chunkMapRenderCache
+	graphBoxCache          *graphBoxCache
 	lastResizeTime         time.Time
 
 	// Notification log system
@@ -531,6 +536,8 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		SettingsFocusedPane:   1,
 		SpeedHistory:          make([]float64, GraphHistoryPoints), // 60 points of history (60s at 1s interval)
 		graphRenderer:         NewGraphRenderer(),
+		chunkMapCache:         &chunkMapRenderCache{},
+		graphBoxCache:         &graphBoxCache{},
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,

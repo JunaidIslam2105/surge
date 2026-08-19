@@ -477,7 +477,12 @@ func (m RootModel) View() tea.View {
 	var bitmapWidth int
 	var totalSize, chunkSize int64
 	var chunkProgress []int64
+	var bitmapVersion uint64
 	if layout.ShowChunkMap && !layout.HideRightColumn && selected != nil && !selected.done && selected.state != nil {
+		// Read the version before the bitmap so a mutation between the two
+		// calls can never pair a stale bitmap with a newer version that a
+		// later frame would treat as cache-valid.
+		bitmapVersion = selected.state.GetBitmapVersion()
 		bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress = selected.state.GetBitmap()
 	}
 
@@ -547,7 +552,7 @@ func (m RootModel) View() tea.View {
 		rightParts = append(rightParts, detailBox)
 
 		if showActualChunkMap {
-			chunkBox := m.renderChunkMapBox(layout.RightWidth, layout.ChunkMapHeight, selected, bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress)
+			chunkBox := m.renderChunkMapBox(layout.RightWidth, layout.ChunkMapHeight, selected, bitmapVersion, bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress)
 			rightParts = append(rightParts, chunkBox)
 		}
 		rightColumn = lipgloss.JoinVertical(lipgloss.Left, rightParts...)
@@ -567,12 +572,19 @@ func (m RootModel) View() tea.View {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
 	}
 
-	body = lipgloss.NewStyle().
-		Width(layout.AvailableWidth).
-		Height(layout.AvailableHeight).
-		MaxWidth(layout.AvailableWidth).
-		MaxHeight(layout.AvailableHeight).
-		Render(body)
+	// The body is already laid out at exactly AvailableWidth × AvailableHeight:
+	// every pane is rendered at its exact box size (renderBtopBox pads each
+	// line to innerWidth) and the joins pad lines to the widest element, and
+	// the layout sums panes to AvailableHeight. The previous full
+	// Style.Render with Width/MaxWidth re-wrapped and re-measured every ANSI
+	// line each frame (the single largest per-frame cost in the profile) to
+	// produce the same dimensions the joins already guarantee. Only vertical
+	// pad/truncate can change anything, and that only needs line counting.
+	if h := strings.Count(body, "\n") + 1; h < layout.AvailableHeight {
+		body += strings.Repeat("\n", layout.AvailableHeight-h)
+	} else if h > layout.AvailableHeight {
+		body = strings.Join(strings.Split(body, "\n")[:layout.AvailableHeight], "\n")
+	}
 
 	fullView := lipgloss.JoinVertical(lipgloss.Left, body, footer)
 	// Place content into available space, then wrap with WindowStyle margins
