@@ -38,19 +38,19 @@ func TestRemoveFile_WindowsRetry_Success(t *testing.T) {
 
 func TestRemoveFile_WindowsRetry_Exhausted(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "testfile_exhaust.txt")
-
-	// Create a file and hold it open to lock it permanently
-	f, err := os.Create(file)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
+	blockedDir := filepath.Join(dir, "non-empty")
+	if err := os.Mkdir(blockedDir, 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
 	}
-	// Make sure we close it at the very end so we don't leak handles
-	defer func() { _ = f.Close() }()
+	child := filepath.Join(blockedDir, "child.txt")
+	if err := os.WriteFile(child, []byte("keep"), 0o644); err != nil {
+		t.Fatalf("Failed to create directory child: %v", err)
+	}
 
-	// Remove it (should exhaust retries and fail)
-	err = RemoveFile(file)
-	if err == nil {
-		t.Fatalf("RemoveFile succeeded unexpectedly while file was locked")
+	// A non-empty directory is a stable, non-transient removal failure on
+	// Windows; unlike an open file, its locking behavior does not vary with
+	// the runtime's file-sharing flags.
+	if err := RemoveFile(blockedDir); err == nil {
+		t.Fatal("RemoveFile succeeded unexpectedly for a non-empty directory")
 	}
 }
