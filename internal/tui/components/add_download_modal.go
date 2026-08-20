@@ -61,15 +61,15 @@ func (m AddDownloadModal) View() string {
 		ti := m.Inputs[i]
 		ti.SetWidth(inputW)
 
-		row := labelStyle.Render(m.Labels[i]) + ti.View()
+		rowParts := []string{labelStyle.Render(m.Labels[i]), ti.View()}
 		if m.BrowseHintIndex == i {
 			hintStyle := hintBase
 			if m.FocusedInput == i {
 				hintStyle = hintStyle.Foreground(colors.Pink())
 			}
-			row += hintStyle.Render(m.browseHint())
+			rowParts = append(rowParts, hintStyle.Render(m.browseHint()))
 		}
-		content = append(content, row, "")
+		content = append(content, lipgloss.JoinHorizontal(lipgloss.Left, rowParts...), "")
 	}
 
 	content = append(content, m.Help.View(m.HelpKeys))

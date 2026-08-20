@@ -67,6 +67,25 @@ func TestFilePickerModalGolden(t *testing.T) {
 	}
 }
 
+func TestAddDownloadModalAlignsMultilineRows(t *testing.T) {
+	input := textinput.New()
+	input.SetValue(".")
+	modal := AddDownloadModal{
+		Inputs:          []textinput.Model{input},
+		Labels:          []string{"URL:\nextra"},
+		FocusedInput:    0,
+		BrowseHintIndex: -1,
+		Help:            help.New(),
+		HelpKeys:        NoKeys{},
+		Width:           40,
+	}
+
+	got := plainModal(modal.View())
+	if !strings.Contains(got, "URL:      > .") {
+		t.Fatalf("multiline input row was not joined top-aligned:\n%s", got)
+	}
+}
+
 func TestModalGoldens(t *testing.T) {
 	tests := []struct {
 		name   string

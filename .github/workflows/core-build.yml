@@ -222,14 +222,12 @@ jobs:
           fi
 
           artifact_id=""
-          previous_run_id=""
           while IFS=$'\t' read -r candidate_run_id candidate_run_number; do
             [ -n "$candidate_run_id" ] || continue
             candidate_artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate_run_id}/artifacts" \
               --jq ".artifacts[] | select(.expired == false and .name == \"tui-perf-${candidate_run_number}\") | .id" | head -n 1)"
             if [ -n "$candidate_artifact_id" ]; then
               artifact_id="$candidate_artifact_id"
-              previous_run_id="$candidate_run_id"
               break
             fi
           done <<< "$successful_runs"
