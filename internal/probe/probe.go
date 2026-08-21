@@ -17,10 +17,6 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
-var ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-	"AppleWebKit/537.36 (KHTML, like Gecko) " +
-	"Chrome/120.0.0.0 Safari/537.36"
-
 var (
 	probeHostLocks sync.Map // map[string]*sync.Mutex
 )
@@ -78,8 +74,11 @@ func ProbeServerWithProxy(ctx context.Context, rawurl string, filenameHint strin
 		customDNS = runCfg.CustomDNS
 	}
 
-	// Standardize on PoolMaxConnsPerHost for probes to match the eventual download path
-	transport_ := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, types.PoolMaxConnsPerHost)
+	maxConns := types.PoolMaxConnsPerHost
+	if runCfg != nil {
+		maxConns = runCfg.GetMaxConnectionsPerDownload()
+	}
+	transport_ := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, maxConns)
 	defer transport.DefaultNetworkPool.ReleaseTransport(transport_)
 
 	client := &http.Client{
@@ -125,7 +124,7 @@ func ProbeServerWithProxy(ctx context.Context, rawurl string, filenameHint strin
 
 		probeCtx, cancel := context.WithTimeout(ctx, types.ProbeTimeout)
 
-		req, reqErr := newProbeRequest(probeCtx, rawurl, headers, true)
+		req, reqErr := newProbeRequest(probeCtx, rawurl, headers, runCfg, true)
 		if reqErr != nil {
 			cancel()
 			err = fmt.Errorf("%w: %w", ErrProbeRequestCreation, reqErr)
@@ -140,7 +139,7 @@ func ProbeServerWithProxy(ctx context.Context, rawurl string, filenameHint strin
 			utils.Debug("Probe got %d, retrying without Range header", resp.StatusCode)
 			_ = resp.Body.Close() // Close previous response
 
-			reqNoRange, reqNoRangeErr := newProbeRequest(probeCtx, rawurl, headers, false)
+			reqNoRange, reqNoRangeErr := newProbeRequest(probeCtx, rawurl, headers, runCfg, false)
 			if reqNoRangeErr != nil {
 				cancel()
 				err = fmt.Errorf("%w without range: %w", ErrProbeRequestCreation, reqNoRangeErr)
@@ -228,16 +227,16 @@ func ProbeServerWithProxy(ctx context.Context, rawurl string, filenameHint strin
 	return result, nil
 }
 
-func newProbeRequest(ctx context.Context, rawurl string, headers map[string]string, includeRange bool) (*http.Request, error) {
+func newProbeRequest(ctx context.Context, rawurl string, headers map[string]string, runCfg *types.RuntimeConfig, includeRange bool) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
 		return nil, err
 	}
-	applyProbeHeaders(req, headers, includeRange)
+	applyProbeHeaders(req, headers, runCfg, includeRange)
 	return req, nil
 }
 
-func applyProbeHeaders(req *http.Request, headers map[string]string, includeRange bool) {
+func applyProbeHeaders(req *http.Request, headers map[string]string, runCfg *types.RuntimeConfig, includeRange bool) {
 	if req == nil {
 		return
 	}
@@ -253,7 +252,7 @@ func applyProbeHeaders(req *http.Request, headers map[string]string, includeRang
 		req.Header.Set("Range", "bytes=0-0")
 	}
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", ua)
+		req.Header.Set("User-Agent", runCfg.GetUserAgent())
 	}
 }
 

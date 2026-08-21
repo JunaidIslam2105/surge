@@ -62,6 +62,30 @@ func TestHandlePause_Normal(t *testing.T) {
 	}
 }
 
+func TestHandlePause_FullEventChannelDoesNotBlock(t *testing.T) {
+	tmpDir := testutil.SetupStateDB(t)
+	destPath := filepath.Join(tmpDir, "test.bin")
+	state := progress.New("test-id", 1000)
+	progressCh := make(chan types.DownloadEvent, 1)
+	progressCh <- types.DownloadEvent{}
+	download := &ConcurrentDownloader{
+		ID:           "test-id",
+		URL:          "http://example.com/file.bin",
+		State:        state,
+		ProgressChan: progressCh,
+		Runtime:      &types.RuntimeConfig{},
+	}
+	queue := NewTaskQueue()
+	queue.Push(types.Task{Offset: 500, Length: 500})
+
+	if err := download.handlePause(destPath, 1000, queue, nil); !errors.Is(err, types.ErrPaused) {
+		t.Fatalf("handlePause = %v, want ErrPaused", err)
+	}
+	if snapshot := state.TakePendingResumeState(); snapshot == nil {
+		t.Fatal("pause state was not retained")
+	}
+}
+
 func TestHandlePause_UsesLiveRateLimitFromState(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	cleanup := func() {}

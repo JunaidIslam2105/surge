@@ -388,7 +388,9 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	if downloadErr != nil {
 		// Save state so that retries (like rate limit backoffs) resume from the correct progress
 		if d.State != nil && !errors.Is(downloadErr, context.Canceled) && !errors.Is(downloadErr, context.DeadlineExceeded) {
-			_ = d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false)
+			if saveErr := d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false); saveErr != nil {
+				return errors.Join(downloadErr, fmt.Errorf("save resume state: %w", saveErr))
+			}
 		}
 		return downloadErr
 	}
@@ -438,7 +440,7 @@ func (d *ConcurrentDownloader) setupNetwork() (*http.Client, *http.Transport) {
 		customDNS = d.Runtime.CustomDNS
 	}
 
-	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, types.PoolMaxConnsPerHost)
+	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, d.Runtime.GetMaxConnectionsPerDownload())
 	client := &http.Client{Transport: httpTransport}
 	d.applyClientSettings(client)
 	return client, httpTransport
@@ -691,13 +693,19 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		ActualChunkSize: chunkSize,
 		RateLimit:       rateLimit,
 		RateLimitSet:    rateLimitSet,
-		Workers:         d.Runtime.Workers,
-		MinChunkSize:    d.Runtime.MinChunkSize,
+		Workers:         d.Runtime.GetWorkers(),
+		MinChunkSize:    d.Runtime.GetMinChunkSize(),
 	}
+
+	d.State.SetPendingResumeState(s)
+	if err := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true}); err != nil {
+		return fmt.Errorf("save state snapshot: %w", err)
+	}
+	utils.Debug("Saved progress state snapshot (Downloaded=%d, RemainingTasks=%d)", s.Downloaded, len(s.Tasks))
 
 	if emitPauseEvent {
 		if d.ProgressChan != nil {
-			d.ProgressChan <- types.DownloadEvent{
+			event := types.DownloadEvent{
 				Type:         types.EventPaused,
 				DownloadID:   d.ID,
 				Filename:     filepath.Base(destPath),
@@ -705,8 +713,13 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 				State:        s,
 				RateLimit:    rateLimit,
 				RateLimitSet: rateLimitSet,
-				Workers:      d.Runtime.Workers,
-				MinChunkSize: d.Runtime.MinChunkSize,
+				Workers:      d.Runtime.GetWorkers(),
+				MinChunkSize: d.Runtime.GetMinChunkSize(),
+			}
+			select {
+			case d.ProgressChan <- event:
+			default:
+				utils.Debug("Pause event queue full; resume state was saved directly")
 			}
 		}
 		utils.Debug("Download paused, state saved (Downloaded=%d, RemainingTasks=%d, RemainingBytes=%d)",
@@ -714,14 +727,6 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		return types.ErrPaused
 	}
 
-	// Direct save on error/retry paths
-	d.State.SetPendingResumeState(s)
-	saveErr := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true})
-	if saveErr != nil {
-		utils.Debug("Failed to save state snapshot: %v", saveErr)
-	} else {
-		utils.Debug("Saved progress state snapshot (Downloaded=%d, RemainingTasks=%d)", s.Downloaded, len(s.Tasks))
-	}
 	return nil
 }
 

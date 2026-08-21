@@ -135,6 +135,12 @@ func TestHostRateLimiter_RecordSuccess(t *testing.T) {
 	if !bu.IsZero() {
 		t.Fatal("expected host to be free after RecordSuccess")
 	}
+	h.mu.Lock()
+	_, retained := h.hosts["example.com"]
+	h.mu.Unlock()
+	if retained {
+		t.Fatal("expected successful host to be removed")
+	}
 }
 
 func TestHostRateLimiter_PickMirror_FreeChosen(t *testing.T) {

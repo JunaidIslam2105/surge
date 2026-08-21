@@ -134,7 +134,7 @@ func (r *RuntimeConfig) GetWorkerBufferSize() int {
 }
 
 func (r *RuntimeConfig) GetMaxTaskRetries() int {
-	if r == nil || r.MaxTaskRetries <= 0 {
+	if r == nil || r.MaxTaskRetries < 0 {
 		return MaxTaskRetries
 	}
 	return r.MaxTaskRetries
