@@ -140,8 +140,7 @@ func (r *RuntimeConfig) GetMaxTaskRetries() int {
 	return r.MaxTaskRetries
 }
 
-// GetDialHedgeCount returns the extra dial count. Zero explicitly disables
-// both connection prewarming and late duplicate range requests.
+// GetDialHedgeCount returns the extra prewarmed connection count. Zero disables prewarming.
 func (r *RuntimeConfig) GetDialHedgeCount() int {
 	if r == nil || r.DialHedgeCount < 0 {
 		return DialHedgeCount

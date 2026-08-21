@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/transport"
@@ -53,10 +52,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			Task:        task,
 			StartTime:   now,
 			WindowStart: now,
-		}
-		if task.SharedMaxOffset != nil {
-			activeTask.SharedMaxOffset = task.SharedMaxOffset
-			activeTask.Hedged.Store(1)
 		}
 		activeTask.CurrentOffset.Store(task.Offset)
 		activeTask.StopAt.Store(task.Offset + task.Length)
@@ -396,40 +391,9 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 			}
 
 			now := time.Now()
-			rangeStart := offset // Start of this write
 			offset += int64(readSoFar)
 
-			// Compute newly written bytes deduplicated across racing workers
-			var newlyWritten int64
-			// Read pointer under RLock to avoid racing with hedger initialization
-			activeTask.SharedMaxOffsetMu.RLock()
-			ptr := activeTask.SharedMaxOffset
-			activeTask.SharedMaxOffsetMu.RUnlock()
-			if ptr != nil {
-				for {
-					maxOff := ptr.Load()
-					if offset <= maxOff {
-						// This exact byte range was already reported by the racing worker!
-						newlyWritten = 0
-						break
-					}
-					if rangeStart >= maxOff {
-						// Entirely new progress
-						if ptr.CompareAndSwap(maxOff, offset) {
-							newlyWritten = int64(readSoFar)
-							break
-						}
-					} else {
-						// Partially new progress
-						if ptr.CompareAndSwap(maxOff, offset) {
-							newlyWritten = offset - maxOff
-							break
-						}
-					}
-				}
-			} else {
-				newlyWritten = int64(readSoFar)
-			}
+			newlyWritten := int64(readSoFar)
 
 			activeTask.CurrentOffset.Store(offset)
 			activeTask.WindowBytes.Add(newlyWritten)
@@ -493,7 +457,7 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	// Find the worker with the MOST remaining work
 	for id, active := range d.activeTasks {
 		remaining := active.RemainingBytes()
-		if remaining > types.MinChunk && remaining > maxRemaining {
+		if remaining > d.Runtime.GetMinChunkSize() && remaining > maxRemaining {
 			maxRemaining = remaining
 			bestID = id
 			bestActive = active
@@ -509,7 +473,7 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	active := bestActive
 
 	// Split in half, aligned to AlignSize
-	splitSize := alignedSplitSize(remaining)
+	splitSize := alignedSplitSize(remaining, d.Runtime.GetMinChunkSize())
 	if splitSize == 0 {
 		return false
 	}
@@ -548,77 +512,6 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	queue.Push(stolenTask)
 	utils.Debug("Balancer: stole %s from worker %d (new range: %d-%d)",
 		utils.FormatBytes(stolenTask.Length), bestID, stolenTask.Offset, stolenTask.Offset+stolenTask.Length)
-
-	return true
-}
-
-// HedgeWork creates a duplicate task when stealing isn't possible (chunks too small).
-// An idle worker picks up the duplicate and races the original on a fresh HTTP connection.
-// Both workers write identical data to the same file offsets (WriteAt is idempotent),
-// so the file is always correct. Whichever finishes first wins; the other exits
-// naturally when the queue closes or its next read returns data already counted.
-func (d *ConcurrentDownloader) HedgeWork(queue *TaskQueue) bool {
-	if d.Runtime != nil && d.Runtime.GetDialHedgeCount() == 0 {
-		return false
-	}
-
-	d.activeMu.Lock()
-	defer d.activeMu.Unlock()
-
-	if len(d.activeTasks) == 0 {
-		return false
-	}
-
-	// Find the active task with the most remaining work that hasn't been hedged yet
-	var bestActive *ActiveTask
-	var maxRemaining int64
-
-	for _, active := range d.activeTasks {
-		// Skip tasks already being raced
-		if active.Hedged.Load() != 0 {
-			continue
-		}
-		remaining := active.RemainingBytes()
-		if remaining > 0 && remaining > maxRemaining {
-			maxRemaining = remaining
-			bestActive = active
-		}
-	}
-
-	if bestActive == nil || maxRemaining == 0 {
-		return false
-	}
-
-	// Mark as hedged so we don't create multiple duplicates
-	if !bestActive.Hedged.CompareAndSwap(0, 1) {
-		return false // Another goroutine hedged it first
-	}
-
-	// Create a duplicate task for the remaining byte range
-	current := bestActive.CurrentOffset.Load()
-	stopAt := bestActive.StopAt.Load()
-	if current >= stopAt {
-		return false
-	}
-
-	// Initialize the shared deduplication state for both tasks
-	bestActive.SharedMaxOffsetMu.Lock()
-	if bestActive.SharedMaxOffset == nil {
-		maxOff := &atomic.Int64{}
-		maxOff.Store(current)
-		bestActive.SharedMaxOffset = maxOff
-	}
-	// Create a duplicate task for the remaining byte range
-	hedgedTask := types.Task{
-		Offset:          current,
-		Length:          stopAt - current,
-		SharedMaxOffset: bestActive.SharedMaxOffset,
-	}
-	bestActive.SharedMaxOffsetMu.Unlock()
-
-	queue.Push(hedgedTask)
-	utils.Debug("Balancer: hedged %s (range: %d-%d) - idle worker will race on fresh connection",
-		utils.FormatBytes(hedgedTask.Length), hedgedTask.Offset, hedgedTask.Offset+hedgedTask.Length)
 
 	return true
 }

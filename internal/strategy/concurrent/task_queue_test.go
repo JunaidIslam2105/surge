@@ -97,7 +97,7 @@ func TestAlignedSplitSize(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := alignedSplitSize(tt.remaining)
+		got := alignedSplitSize(tt.remaining, types.MinChunk)
 		if tt.wantZero && got != 0 {
 			t.Errorf("alignedSplitSize(%d) = %d, want 0", tt.remaining, got)
 		}
@@ -108,5 +108,12 @@ func TestAlignedSplitSize(t *testing.T) {
 		if got != 0 && got%types.AlignSize != 0 {
 			t.Errorf("alignedSplitSize(%d) = %d, not aligned to %d", tt.remaining, got, types.AlignSize)
 		}
+	}
+}
+
+func TestAlignedSplitSize_UsesRuntimeMinimum(t *testing.T) {
+	minChunk := int64(64 * 1024)
+	if got := alignedSplitSize(2*minChunk, minChunk); got != minChunk {
+		t.Fatalf("alignedSplitSize(%d, %d) = %d, want %d", 2*minChunk, minChunk, got, minChunk)
 	}
 }

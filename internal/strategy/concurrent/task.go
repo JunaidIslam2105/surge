@@ -26,53 +26,27 @@ type ActiveTask struct {
 	WindowStart time.Time    // When current measurement window started
 	WindowBytes atomic.Int64 // Bytes downloaded in current window
 
-	// Hedged request tracking
-	Hedged atomic.Int32 // 1 if an idle worker is already racing this task
-	// SharedMaxOffset points to the highest offset reached by any racing worker.
-	// Protected by SharedMaxOffsetMu for safe concurrent initialization.
-	SharedMaxOffsetMu sync.RWMutex
-	SharedMaxOffset   *atomic.Int64
 	// Set while blocked on rate limiter so health monitor doesn't treat it as stalled
 	WaitingOnLimiter atomic.Bool
 }
 
-// currentOffset returns the effective offset, using the shared max if it is larger
-func (at *ActiveTask) currentOffset(sharedMax *atomic.Int64) int64 {
-	current := at.CurrentOffset.Load()
-	if sharedMax != nil {
-		if shared := sharedMax.Load(); shared > current {
-			current = shared
-		}
-	}
-	return current
-}
-
 // RemainingTask returns a Task representing the remaining work, or nil if complete
 func (at *ActiveTask) RemainingTask() *types.Task {
-	at.SharedMaxOffsetMu.RLock()
-	sharedMax := at.SharedMaxOffset
-	at.SharedMaxOffsetMu.RUnlock()
-
-	current := at.currentOffset(sharedMax)
+	current := at.CurrentOffset.Load()
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
 		return nil
 	}
 
 	return &types.Task{
-		Offset:          current,
-		Length:          stopAt - current,
-		SharedMaxOffset: sharedMax,
+		Offset: current,
+		Length: stopAt - current,
 	}
 }
 
 // RemainingBytes returns the number of bytes left in the current task
 func (at *ActiveTask) RemainingBytes() int64 {
-	at.SharedMaxOffsetMu.RLock()
-	sharedMax := at.SharedMaxOffset
-	at.SharedMaxOffsetMu.RUnlock()
-
-	current := at.currentOffset(sharedMax)
+	current := at.CurrentOffset.Load()
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
 		return 0
@@ -105,11 +79,10 @@ func (at *ActiveTask) GetSpeed() float64 {
 	return speed
 }
 
-// alignedSplitSize calculates a split size that is half of remaining, aligned to AlignSize
-// Returns 0 if the split would be smaller than MinChunk
-func alignedSplitSize(remaining int64) int64 {
+// alignedSplitSize calculates a split size that is half of remaining, aligned to AlignSize.
+func alignedSplitSize(remaining, minChunk int64) int64 {
 	half := (remaining / 2 / types.AlignSize) * types.AlignSize
-	if half < types.MinChunk {
+	if half < minChunk {
 		return 0
 	}
 	return half
