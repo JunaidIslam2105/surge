@@ -17,9 +17,15 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
-var (
-	probeHostLocks sync.Map // map[string]*sync.Mutex
-)
+type probeHostLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+var probeHostLocks = struct {
+	sync.Mutex
+	hosts map[string]*probeHostLock
+}{hosts: make(map[string]*probeHostLock)}
 
 // ErrProbeRequestCreation is returned when a probe request cannot be initialized.
 var ErrProbeRequestCreation = errors.New("failed to create probe request")
@@ -43,16 +49,33 @@ func ProbeServer(ctx context.Context, rawurl string, filenameHint string, header
 	return ProbeServerWithProxy(ctx, rawurl, filenameHint, headers, nil)
 }
 
-// getProbeHostLock returns a mutex for a specific host to sequentialize probes
-func getProbeHostLock(rawurl string) *sync.Mutex {
+// lockProbeHost sequentializes probes to one host without retaining a lock for every host ever seen.
+func lockProbeHost(rawurl string) func() {
 	parsed, err := neturl.Parse(rawurl)
 	host := "unknown"
 	if err == nil {
 		host = parsed.Host
 	}
 
-	rawLock, _ := probeHostLocks.LoadOrStore(host, &sync.Mutex{})
-	return rawLock.(*sync.Mutex)
+	probeHostLocks.Lock()
+	lock := probeHostLocks.hosts[host]
+	if lock == nil {
+		lock = &probeHostLock{}
+		probeHostLocks.hosts[host] = lock
+	}
+	lock.refs++
+	probeHostLocks.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		probeHostLocks.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(probeHostLocks.hosts, host)
+		}
+		probeHostLocks.Unlock()
+	}
 }
 
 // ProbeServerWithProxy is the hot-path variant for callers that already know
@@ -95,9 +118,7 @@ func ProbeServerWithProxy(ctx context.Context, rawurl string, filenameHint strin
 	}
 
 	// Sequentialize probes to the same host to prevent rate limiting (e.g., Google Drive)
-	hostLock := getProbeHostLock(rawurl)
-	hostLock.Lock()
-	defer hostLock.Unlock()
+	defer lockProbeHost(rawurl)()
 
 	var err error
 	var finalCancel context.CancelFunc

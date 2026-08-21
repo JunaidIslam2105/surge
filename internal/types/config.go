@@ -170,7 +170,7 @@ func (r *RuntimeConfig) GetStallTimeout() time.Duration {
 }
 
 func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
-	if r == nil || r.SpeedEmaAlpha < 0 || r.SpeedEmaAlpha > 1 {
+	if r == nil || r.SpeedEmaAlpha <= 0 || r.SpeedEmaAlpha > 1 {
 		return SpeedEMAAlpha
 	}
 	return r.SpeedEmaAlpha

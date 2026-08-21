@@ -76,8 +76,8 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetStallTimeout(); got != 0 {
 			t.Errorf("GetStallTimeout = %v, want 0", got)
 		}
-		if got := r.GetSpeedEmaAlpha(); got != 0 {
-			t.Errorf("GetSpeedEmaAlpha = %f, want 0", got)
+		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
+			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
 		}
 	})
 
