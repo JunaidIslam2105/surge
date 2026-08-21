@@ -252,7 +252,8 @@ func TestConcurrentDownloader_429RespectsRetryAfterHeader(t *testing.T) {
 		DialHedgeCount:            0,
 	}
 
-	downloader := NewConcurrentDownloader("retryafter-id", nil, state, runtime)
+	progressCh := make(chan types.DownloadEvent, 1)
+	downloader := NewConcurrentDownloader("retryafter-id", progressCh, state, runtime)
 	downloader.hostLimiter = transport.NewHostRateLimiter()
 
 	mirrors := []string{}
@@ -283,6 +284,15 @@ func TestConcurrentDownloader_429RespectsRetryAfterHeader(t *testing.T) {
 	}
 	if gap > 35*time.Second {
 		t.Errorf("gap between 429 and next request %v; expected <= ~30s cap", gap)
+	}
+
+	select {
+	case event := <-progressCh:
+		if event.Type != types.EventSystem || event.Message == "" {
+			t.Fatalf("rate-limit event = %+v, want system message", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected rate-limit activity event")
 	}
 }
 

@@ -163,6 +163,9 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			if lastErr == nil {
 				d.hostLimiter.RecordSuccess(mirrorHosts[currentMirrorIdx])
+				if d.State != nil {
+					d.State.RateLimited.Store(false)
+				}
 				stopAt := activeTask.StopAt.Load()
 				current := activeTask.CurrentOffset.Load()
 				if current < task.Offset+task.Length && current >= stopAt {
@@ -173,7 +176,19 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			var rlErr *rateLimitError
 			if errors.As(lastErr, &rlErr) {
-				d.hostLimiter.Penalize(mirrorHosts[currentMirrorIdx], rlErr.retryAfter, rlErr.explicit, time.Now())
+				host := mirrorHosts[currentMirrorIdx]
+				until := d.hostLimiter.Penalize(host, rlErr.retryAfter, rlErr.explicit, time.Now())
+				if d.State == nil || !d.State.RateLimited.Swap(true) {
+					wait := time.Until(until).Round(time.Second)
+					message := fmt.Sprintf("Rate limited by %s; cooling down for %s", host, wait)
+					utils.Debug("%s", message)
+					if d.ProgressChan != nil {
+						select {
+						case d.ProgressChan <- types.DownloadEvent{Type: types.EventSystem, DownloadID: d.ID, Message: message}:
+						default:
+						}
+					}
+				}
 				d.ReportMirrorError(currentURL)
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
 				resumeOnRetryOffset(&task, activeTask)
