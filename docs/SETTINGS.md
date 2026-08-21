@@ -133,6 +133,7 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 | `sequential_download`      | bool   | Download file pieces in strict order (Streaming Mode). Useful for previewing media but may be slower. | `false` |
 | `min_chunk_size`           | int64  | Minimum size of a download chunk in bytes (e.g., `2097152` for 2MB).                                  | `2MB`   |
 | `worker_buffer_size`       | int    | I/O buffer size per worker in bytes (e.g., `524288` for 512KB).                                       | `512KB` |
+| `dial_hedge_count`         | int    | Extra prewarmed connections (0-16). Set to 0 to disable prewarming and late duplicate range requests. | `4`     |
 
 ### Performance Settings
 

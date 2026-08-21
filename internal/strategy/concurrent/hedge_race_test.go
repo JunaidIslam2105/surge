@@ -68,3 +68,21 @@ func TestHedgeSharedMaxOffsetRace(t *testing.T) {
 	var sample types.Task
 	_ = sample
 }
+
+func TestHedgeWorkDisabled(t *testing.T) {
+	d := ConcurrentDownloader{
+		Runtime:     &types.RuntimeConfig{DialHedgeCount: 0},
+		activeTasks: make(map[int]*ActiveTask),
+	}
+	active := &ActiveTask{}
+	active.StopAt.Store(1 << 20)
+	d.activeTasks[0] = active
+
+	queue := NewTaskQueue()
+	if d.HedgeWork(queue) {
+		t.Fatal("HedgeWork created a request with dial_hedge_count=0")
+	}
+	if queue.Len() != 0 || active.Hedged.Load() != 0 {
+		t.Fatalf("disabled hedging mutated state: queue=%d hedged=%d", queue.Len(), active.Hedged.Load())
+	}
+}

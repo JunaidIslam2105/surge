@@ -44,6 +44,7 @@ type scenario struct {
 	Workers              int    `json:"workers"`
 	ServerDelayPerByteNS int64  `json:"server_delay_per_byte_ns"`
 	Transport            string `json:"transport"`
+	RequestHedging       bool   `json:"request_hedging"`
 }
 
 type environment struct {
@@ -140,7 +141,7 @@ type sample struct {
 func main() {
 	var output, baseline, reportName string
 	var runs, warmups, sizeMiB int
-	var profiles bool
+	var profiles, disableRequestHedging bool
 	flag.StringVar(&output, "output", "benchmark-results/latest", "artifact directory")
 	flag.StringVar(&baseline, "baseline", "", "prior report.json to compare")
 	flag.StringVar(&reportName, "report", "", "report filename (defaults to report.json or diagnostic.json)")
@@ -148,6 +149,7 @@ func main() {
 	flag.IntVar(&warmups, "warmup", 1, "warm-up runs")
 	flag.IntVar(&sizeMiB, "size-mib", int(defaultSize>>20), "transfer size in MiB")
 	flag.BoolVar(&profiles, "profiles", false, "capture diagnostic Go profiles")
+	flag.BoolVar(&disableRequestHedging, "disable-request-hedging", false, "disable late duplicate range requests")
 	flag.Parse()
 	if runs < 1 || warmups < 0 || runs > 20 || warmups > 5 || sizeMiB < 16 || sizeMiB > 2048 {
 		fatalf("runs must be 1..20, warmup 0..5, and size-mib 16..2048")
@@ -168,10 +170,10 @@ func main() {
 	defer store.CloseDB()
 
 	transferSize := int64(sizeMiB) << 20
-	s := scenario{Name: fmt.Sprintf("loopback-range-%dm-8w", sizeMiB), FileSizeBytes: transferSize, Workers: workerCount, ServerDelayPerByteNS: int64(byteLatency), Transport: "HTTP/1.1 loopback"}
+	s := scenario{Name: fmt.Sprintf("loopback-range-%dm-8w", sizeMiB), FileSizeBytes: transferSize, Workers: workerCount, ServerDelayPerByteNS: int64(byteLatency), Transport: "HTTP/1.1 loopback", RequestHedging: !disableRequestHedging}
 	for i := 0; i < warmups; i++ {
 		fmt.Fprintf(os.Stderr, "warm-up %d/%d\n", i+1, warmups)
-		if _, err := runOnce(tmpDir, -1, transferSize); err != nil {
+		if _, err := runOnce(tmpDir, -1, transferSize, disableRequestHedging); err != nil {
 			fatalf("warm-up: %v", err)
 		}
 	}
@@ -189,7 +191,7 @@ func main() {
 	results := make([]runResult, 0, runs)
 	for i := 0; i < runs; i++ {
 		fmt.Fprintf(os.Stderr, "measured run %d/%d\n", i+1, runs)
-		result, err := runOnce(tmpDir, i+1, transferSize)
+		result, err := runOnce(tmpDir, i+1, transferSize, disableRequestHedging)
 		if err != nil {
 			fatalf("run %d: %v", i+1, err)
 		}
@@ -234,7 +236,7 @@ func main() {
 	printSummary(path, rep)
 }
 
-func runOnce(tmpDir string, index int, transferSize int64) (runResult, error) {
+func runOnce(tmpDir string, index int, transferSize int64, disableRequestHedging bool) (runResult, error) {
 	server := testutil.NewStreamingMockServer(transferSize,
 		testutil.WithRangeSupport(true),
 		testutil.WithByteLatency(byteLatency),
@@ -255,6 +257,9 @@ func runOnce(tmpDir string, index int, transferSize int64) (runResult, error) {
 	runtimeCfg := types.DefaultRuntimeConfig()
 	runtimeCfg.Workers = workerCount
 	runtimeCfg.MaxConnectionsPerDownload = workerCount
+	if disableRequestHedging {
+		runtimeCfg.DialHedgeCount = 0
+	}
 	state := progress.New(fmt.Sprintf("benchmark-%d", index), transferSize)
 	cfg := types.DownloadRecord{
 		ID: fmt.Sprintf("benchmark-%d", index), URL: server.URL(), Filename: name,

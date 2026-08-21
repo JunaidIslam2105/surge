@@ -250,6 +250,9 @@ run without changing the fixed workload:
 ./scripts/benchmark.sh benchmark-results/<timestamp>/report.json
 ```
 
+To measure without late duplicate range requests, run
+`./scripts/benchmark.sh --disable-request-hedging`.
+
 ---
 
 ## Browser Extension

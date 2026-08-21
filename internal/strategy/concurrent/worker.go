@@ -558,6 +558,10 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 // so the file is always correct. Whichever finishes first wins; the other exits
 // naturally when the queue closes or its next read returns data already counted.
 func (d *ConcurrentDownloader) HedgeWork(queue *TaskQueue) bool {
+	if d.Runtime != nil && d.Runtime.GetDialHedgeCount() == 0 {
+		return false
+	}
+
 	d.activeMu.Lock()
 	defer d.activeMu.Unlock()
 

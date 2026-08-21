@@ -1,10 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# > 1 )); then
-  echo "usage: $0 [baseline-report.json]" >&2
-  exit 2
-fi
+baseline_args=()
+benchmark_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --disable-request-hedging)
+      benchmark_args+=("$arg")
+      ;;
+    -*)
+      echo "usage: $0 [--disable-request-hedging] [baseline-report.json]" >&2
+      exit 2
+      ;;
+    *)
+      if (( ${#baseline_args[@]} != 0 )); then
+        echo "usage: $0 [--disable-request-hedging] [baseline-report.json]" >&2
+        exit 2
+      fi
+      baseline_args=(--baseline "$arg")
+      ;;
+  esac
+done
 
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -15,21 +31,16 @@ mkdir -p -- "$result_dir"
 
 timeout 30s go build -o "$bench_bin" ./cmd/benchmark
 
-baseline_args=()
-if (( $# == 1 )); then
-  baseline_args=(--baseline "$1")
-fi
-
 echo "Running stable benchmark (one warm-up, five measured transfers)..."
-timeout 150s "$bench_bin" --output "$result_dir" "${baseline_args[@]}"
+timeout 150s "$bench_bin" --output "$result_dir" "${benchmark_args[@]}" "${baseline_args[@]}"
 
 echo "Running one separately-instrumented Go profile transfer..."
-timeout 30s "$bench_bin" --output "$result_dir" --report profile-run.json --runs 1 --warmup 0 --profiles
+timeout 30s "$bench_bin" --output "$result_dir" --report profile-run.json --runs 1 --warmup 0 --profiles "${benchmark_args[@]}"
 
 if command -v strace >/dev/null 2>&1 && strace -f -c true >/dev/null 2>&1; then
   echo "Running one syscall-counted 64 MiB diagnostic transfer..."
   if ! timeout 25s strace -f -c -o "$result_dir/syscalls.txt" \
-    "$bench_bin" --output "$result_dir" --report syscall-run.json --runs 1 --warmup 0 --size-mib 64; then
+    "$bench_bin" --output "$result_dir" --report syscall-run.json --runs 1 --warmup 0 --size-mib 64 "${benchmark_args[@]}"; then
     rm -f -- "$result_dir/syscalls.txt"
     printf '%s\n' 'strace: diagnostic transfer failed or timed out; syscall counts were skipped' >> "$result_dir/telemetry-gaps.txt"
   fi
@@ -41,7 +52,7 @@ perf_probe=$(mktemp /tmp/surge-perf-probe.XXXXXX)
 if command -v perf >/dev/null 2>&1 && perf stat -x, -o "$perf_probe" true >/dev/null 2>&1 && ! grep -q '<not supported>' "$perf_probe"; then
   echo "Running one hardware-counter 64 MiB diagnostic transfer..."
   if ! timeout 15s perf stat -x, -o "$result_dir/perf-stat.csv" -- \
-    "$bench_bin" --output "$result_dir" --report perf-run.json --runs 1 --warmup 0 --size-mib 64; then
+    "$bench_bin" --output "$result_dir" --report perf-run.json --runs 1 --warmup 0 --size-mib 64 "${benchmark_args[@]}"; then
     rm -f -- "$result_dir/perf-stat.csv"
     printf '%s\n' 'perf: diagnostic transfer failed or timed out; hardware counters were skipped' >> "$result_dir/telemetry-gaps.txt"
   fi

@@ -815,7 +815,7 @@ func DefaultSettings() *Settings {
 			DialHedgeCount: &Setting{
 				Key:          "dial_hedge_count",
 				Label:        "Dial Hedge Count",
-				Description:  "Number of extra connections to dial pre-emptively to avoid slow connects (0-16).",
+				Description:  "Number of extra connections to dial pre-emptively; 0 disables connection prewarming and late duplicate range requests (0-16).",
 				Type:         TypeInt,
 				DefaultValue: 4,
 				Value:        4,
