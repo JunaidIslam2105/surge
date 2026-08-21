@@ -339,9 +339,11 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 
 	workerMirrors := d.getWorkerMirrors(activeMirrors)
 
-	// Pre-warm connections if configured
+	// Prewarming helps a fresh transfer discover usable connections. A resumed
+	// transfer may be recovering from a host cooldown, so extra probe requests
+	// only make the rate-limit situation worse.
 	hedgeCount := d.Runtime.GetDialHedgeCount()
-	if hedgeCount > 0 {
+	if hedgeCount > 0 && !isResume {
 		d.prewarmConnections(downloadCtx, client, numConns, hedgeCount, workerMirrors)
 	}
 

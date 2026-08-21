@@ -76,7 +76,7 @@ func TestConcurrentDownloader_WithLatency(t *testing.T) {
 
 	destPath := filepath.Join(tmpDir, "latency_test.bin")
 	state := progress.New("latency-test", fileSize)
-	runtime := &types.RuntimeConfig{MaxConnectionsPerDownload: 2}
+	runtime := &types.RuntimeConfig{MaxConnectionsPerDownload: 2, DialHedgeCount: 1}
 
 	downloader := NewConcurrentDownloader("latency-id", nil, state, runtime)
 
@@ -627,6 +627,9 @@ func TestConcurrentDownloader_ResumePartialDownload(t *testing.T) {
 	err = downloader.Download(ctx, server.URL(), nil, nil, destPath, fileSize)
 	if err != nil {
 		t.Fatalf("Resume download failed: %v", err)
+	}
+	if got := server.Stats().RangeRequests; got != 1 {
+		t.Fatalf("resume issued %d range requests, want only the remaining task without prewarming", got)
 	}
 }
 
