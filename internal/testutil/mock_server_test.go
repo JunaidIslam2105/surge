@@ -42,6 +42,9 @@ func TestMockServer_BasicDownload(t *testing.T) {
 	if stats.FullRequests != 1 {
 		t.Errorf("Expected 1 full request, got %d", stats.FullRequests)
 	}
+	if stats.TCPConnections != 1 || stats.PeakRequests != 1 {
+		t.Errorf("Expected one connection and one peak request, got connections=%d peak=%d", stats.TCPConnections, stats.PeakRequests)
+	}
 }
 
 func TestMockServer_RangeRequest(t *testing.T) {

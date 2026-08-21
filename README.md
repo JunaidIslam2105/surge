@@ -236,6 +236,20 @@ We tested Surge against standard tools. Because of our connection optimization l
 
 We would love to see you benchmark Surge on your system!
 
+For repeatable Linux research measurements, run:
+
+```bash
+./scripts/benchmark.sh
+```
+
+The script finishes within five minutes, writes a JSON report plus Go profiles,
+and collects `strace`/`perf` telemetry when the host permits it. Compare a later
+run without changing the fixed workload:
+
+```bash
+./scripts/benchmark.sh benchmark-results/<timestamp>/report.json
+```
+
 ---
 
 ## Browser Extension

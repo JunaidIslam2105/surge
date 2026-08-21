@@ -39,8 +39,11 @@ type MockServer struct {
 	RangeRequests  atomic.Int64
 	FullRequests   atomic.Int64
 	FailedRequests atomic.Int64
+	PeakRequests   atomic.Int64
 	requestCountMu sync.Mutex
 	internalReqNum int
+	connectionsMu  sync.Mutex
+	connections    map[string]struct{}
 
 	// Internal
 	data          []byte
@@ -195,9 +198,13 @@ func (m *MockServer) Reset() {
 	m.RangeRequests.Store(0)
 	m.FullRequests.Store(0)
 	m.FailedRequests.Store(0)
+	m.PeakRequests.Store(0)
 	m.requestCountMu.Lock()
 	m.internalReqNum = 0
 	m.requestCountMu.Unlock()
+	m.connectionsMu.Lock()
+	m.connections = nil
+	m.connectionsMu.Unlock()
 }
 
 // Stats returns a summary of server statistics.
@@ -208,6 +215,8 @@ func (m *MockServer) Stats() MockServerStats {
 		RangeRequests:  m.RangeRequests.Load(),
 		FullRequests:   m.FullRequests.Load(),
 		FailedRequests: m.FailedRequests.Load(),
+		PeakRequests:   m.PeakRequests.Load(),
+		TCPConnections: m.connectionCount(),
 	}
 }
 
@@ -218,6 +227,26 @@ type MockServerStats struct {
 	RangeRequests  int64
 	FullRequests   int64
 	FailedRequests int64
+	PeakRequests   int64
+	TCPConnections int64
+}
+
+func (m *MockServer) trackRequest(r *http.Request) {
+	active := m.ActiveRequests.Add(1)
+	for peak := m.PeakRequests.Load(); active > peak && !m.PeakRequests.CompareAndSwap(peak, active); peak = m.PeakRequests.Load() {
+	}
+	m.connectionsMu.Lock()
+	if m.connections == nil {
+		m.connections = make(map[string]struct{})
+	}
+	m.connections[r.RemoteAddr] = struct{}{}
+	m.connectionsMu.Unlock()
+}
+
+func (m *MockServer) connectionCount() int64 {
+	m.connectionsMu.Lock()
+	defer m.connectionsMu.Unlock()
+	return int64(len(m.connections))
 }
 
 func (m *MockServer) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +256,7 @@ func (m *MockServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.RequestCount.Add(1)
-	m.ActiveRequests.Add(1)
+	m.trackRequest(r)
 	defer m.ActiveRequests.Add(-1)
 
 	// Track request number for fail-on-nth logic
@@ -455,7 +484,7 @@ func NewStreamingMockServerT(t *testing.T, fileSize int64, opts ...MockServerOpt
 
 func (s *StreamingMockServer) handleStreamingRequest(w http.ResponseWriter, r *http.Request) {
 	s.RequestCount.Add(1)
-	s.ActiveRequests.Add(1)
+	s.trackRequest(r)
 	defer s.ActiveRequests.Add(-1)
 
 	// Track request number for fail-on-nth logic

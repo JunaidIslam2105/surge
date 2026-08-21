@@ -16,6 +16,7 @@ uv.lock
 speed_graph.png
 worker_speeds.png
 *.log
+benchmark-results/
 
 # Added by goreleaser init:
 dist/
