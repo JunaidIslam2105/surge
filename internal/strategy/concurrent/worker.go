@@ -64,7 +64,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		var lastErr error
 		maxRetries := d.Runtime.GetMaxTaskRetries()
 		genericAttempt := 0
-		rlRetries := 0
 
 		for {
 			idx, wait := d.hostLimiter.PickMirror(mirrorHosts, currentMirrorIdx, time.Now())
@@ -176,10 +175,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			if errors.As(lastErr, &rlErr) {
 				d.hostLimiter.Penalize(mirrorHosts[currentMirrorIdx], rlErr.retryAfter, rlErr.explicit, time.Now())
 				d.ReportMirrorError(currentURL)
-				rlRetries++
-				if rlRetries > types.RateLimitMaxRetries {
-					break
-				}
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
 				resumeOnRetryOffset(&task, activeTask)
 				continue

@@ -490,7 +490,7 @@ func TestConcurrentDownloader_503WithRetryAfterTreatedAsThrottle(t *testing.T) {
 	}
 }
 
-func TestConcurrentDownloader_Persistent429ExhaustsBudget(t *testing.T) {
+func TestConcurrentDownloader_Persistent429WaitsForCancellation(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)
 	defer cleanup()
 
@@ -521,7 +521,7 @@ func TestConcurrentDownloader_Persistent429ExhaustsBudget(t *testing.T) {
 
 	mirrors := []string{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	if f, err := os.Create(destPath + ".surge"); err == nil {
@@ -529,11 +529,8 @@ func TestConcurrentDownloader_Persistent429ExhaustsBudget(t *testing.T) {
 	}
 
 	err := downloader.Download(ctx, server.URL(), mirrors, nil, destPath, fileSize)
-	if err == nil {
-		t.Fatal("expected download to fail after exhausting rate-limit budget")
-	}
-	if !errors.Is(err, ErrRateLimited) {
-		t.Fatalf("expected rate-limit error, got: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline after continued rate-limit waiting, got: %v", err)
 	}
 }
 
