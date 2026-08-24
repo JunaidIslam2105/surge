@@ -83,6 +83,12 @@ func TestDefaultSettings(t *testing.T) {
 		if Resolve[float64](settings.Performance.SpeedEmaAlpha) < 0 || Resolve[float64](settings.Performance.SpeedEmaAlpha) > 1 {
 			t.Errorf("SpeedEmaAlpha should be between 0 and 1, got: %f", Resolve[float64](settings.Performance.SpeedEmaAlpha))
 		}
+		if !Resolve[bool](settings.Performance.AdaptiveConcurrency) {
+			t.Error("AdaptiveConcurrency should be true by default")
+		}
+		if got := Resolve[time.Duration](settings.Performance.AdaptiveConcurrencyRecoveryWindow); got != 3*time.Second {
+			t.Errorf("AdaptiveConcurrencyRecoveryWindow = %v, want 3s", got)
+		}
 	})
 
 	// Verify Extension settings
@@ -319,6 +325,8 @@ func TestLoadSettings_CorruptedJSON(t *testing.T) {
 
 func TestToRuntimeConfig(t *testing.T) {
 	settings := DefaultSettings()
+	settings.Performance.AdaptiveConcurrency.Value = false
+	settings.Performance.AdaptiveConcurrencyRecoveryWindow.Value = 5 * time.Second
 	runtime := settings.ToRuntimeConfig()
 
 	if runtime == nil {
@@ -327,6 +335,12 @@ func TestToRuntimeConfig(t *testing.T) {
 
 	if runtime.MaxConnectionsPerDownload != Resolve[int](settings.Network.MaxConnectionsPerDownload) {
 		t.Error("MaxConnectionsPerDownload not correctly mapped")
+	}
+	if runtime.IsAdaptiveConcurrencyEnabled() {
+		t.Error("AdaptiveConcurrency not correctly mapped")
+	}
+	if runtime.GetAdaptiveConcurrencyRecoveryWindow() != 5*time.Second {
+		t.Error("AdaptiveConcurrencyRecoveryWindow not correctly mapped")
 	}
 }
 

@@ -38,6 +38,12 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
 			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
 		}
+		if !r.IsAdaptiveConcurrencyEnabled() {
+			t.Error("adaptive concurrency should default to enabled")
+		}
+		if got := r.GetAdaptiveConcurrencyRecoveryWindow(); got != DefaultAdaptiveConcurrencyRecoveryWindow {
+			t.Errorf("GetAdaptiveConcurrencyRecoveryWindow = %v, want %v", got, DefaultAdaptiveConcurrencyRecoveryWindow)
+		}
 	})
 
 	t.Run("zero values return defaults", func(t *testing.T) {
@@ -57,11 +63,12 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 
 	t.Run("explicit zero values are preserved where zero is valid", func(t *testing.T) {
 		r := &RuntimeConfig{
-			MaxTaskRetries:        0,
-			SlowWorkerThreshold:   0,
-			SlowWorkerGracePeriod: 0,
-			StallTimeout:          0,
-			SpeedEmaAlpha:         0,
+			MaxTaskRetries:             0,
+			SlowWorkerThreshold:        0,
+			SlowWorkerGracePeriod:      0,
+			StallTimeout:               0,
+			SpeedEmaAlpha:              0,
+			DisableAdaptiveConcurrency: true,
 		}
 		if got := r.GetMaxTaskRetries(); got != 0 {
 			t.Errorf("GetMaxTaskRetries = %d, want 0", got)
@@ -78,6 +85,9 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		}
 		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
 			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
+		}
+		if r.IsAdaptiveConcurrencyEnabled() {
+			t.Error("adaptive concurrency should be disabled")
 		}
 	})
 
@@ -109,15 +119,16 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 
 	t.Run("custom values are returned", func(t *testing.T) {
 		r := &RuntimeConfig{
-			MaxConnectionsPerDownload: 128,
-			UserAgent:                 "CustomAgent/1.0",
-			MinChunkSize:              4 * utils.MiB,
-			WorkerBufferSize:          1 * utils.MiB,
-			MaxTaskRetries:            5,
-			SlowWorkerThreshold:       0.75,
-			SlowWorkerGracePeriod:     10 * time.Second,
-			StallTimeout:              15 * time.Second,
-			SpeedEmaAlpha:             0.5,
+			MaxConnectionsPerDownload:         128,
+			UserAgent:                         "CustomAgent/1.0",
+			MinChunkSize:                      4 * utils.MiB,
+			WorkerBufferSize:                  1 * utils.MiB,
+			MaxTaskRetries:                    5,
+			SlowWorkerThreshold:               0.75,
+			SlowWorkerGracePeriod:             10 * time.Second,
+			StallTimeout:                      15 * time.Second,
+			SpeedEmaAlpha:                     0.5,
+			AdaptiveConcurrencyRecoveryWindow: 5 * time.Second,
 		}
 
 		if got := r.GetMaxConnectionsPerDownload(); got != 128 {
@@ -148,6 +159,9 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetSpeedEmaAlpha(); got != 0.5 {
 			t.Errorf("GetSpeedEmaAlpha = %f, want 0.5", got)
 		}
+		if got := r.GetAdaptiveConcurrencyRecoveryWindow(); got != 5*time.Second {
+			t.Errorf("GetAdaptiveConcurrencyRecoveryWindow = %v, want 5s", got)
+		}
 	})
 }
 
@@ -177,6 +191,12 @@ func TestDefaultRuntimeConfig_PopulatesDefaults(t *testing.T) {
 	}
 	if r.SlowWorkerThreshold != SlowWorkerThreshold {
 		t.Errorf("SlowWorkerThreshold = %f, want %f", r.SlowWorkerThreshold, SlowWorkerThreshold)
+	}
+	if r.DisableAdaptiveConcurrency {
+		t.Error("DisableAdaptiveConcurrency = true, want false")
+	}
+	if r.AdaptiveConcurrencyRecoveryWindow != DefaultAdaptiveConcurrencyRecoveryWindow {
+		t.Errorf("AdaptiveConcurrencyRecoveryWindow = %v, want %v", r.AdaptiveConcurrencyRecoveryWindow, DefaultAdaptiveConcurrencyRecoveryWindow)
 	}
 	if r.SlowWorkerGracePeriod != SlowWorkerGrace {
 		t.Errorf("SlowWorkerGracePeriod = %v, want %v", r.SlowWorkerGracePeriod, SlowWorkerGrace)

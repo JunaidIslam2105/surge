@@ -253,6 +253,29 @@ run without changing the fixed workload:
 To measure without late duplicate range requests, run
 `./scripts/benchmark.sh --disable-request-hedging`.
 
+To measure rate-limit behavior rather than healthy-path throughput, run:
+
+```bash
+./scripts/benchmark-throttle.sh
+```
+
+This runs fixed persistent-overload and burst-recovery workloads and records
+throttled request amplification, accepted concurrency, rate-limited zero-speed
+time, recovery concurrency, and final-10% duration. Compare revisions by passing
+an earlier throttle report:
+
+```bash
+./scripts/benchmark-throttle.sh --baseline benchmark-results/<timestamp>-throttle/throttle-report.json
+```
+
+For a same-binary Storm™ comparison, first capture a fixed-cap baseline and
+then compare the adaptive policy against it:
+
+```bash
+./scripts/benchmark-throttle.sh --adaptive-concurrency=false
+./scripts/benchmark-throttle.sh --baseline benchmark-results/<timestamp>-throttle/throttle-report.json
+```
+
 ---
 
 ## Browser Extension

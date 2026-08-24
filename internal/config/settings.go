@@ -67,11 +67,13 @@ type NetworkSettings struct {
 }
 
 type PerformanceSettings struct {
-	MaxTaskRetries        *Setting `json:"max_task_retries"`
-	SlowWorkerThreshold   *Setting `json:"slow_worker_threshold"`
-	SlowWorkerGracePeriod *Setting `json:"slow_worker_grace_period"`
-	StallTimeout          *Setting `json:"stall_timeout"`
-	SpeedEmaAlpha         *Setting `json:"speed_ema_alpha"`
+	MaxTaskRetries                    *Setting `json:"max_task_retries"`
+	SlowWorkerThreshold               *Setting `json:"slow_worker_threshold"`
+	SlowWorkerGracePeriod             *Setting `json:"slow_worker_grace_period"`
+	StallTimeout                      *Setting `json:"stall_timeout"`
+	SpeedEmaAlpha                     *Setting `json:"speed_ema_alpha"`
+	AdaptiveConcurrency               *Setting `json:"adaptive_concurrency"`
+	AdaptiveConcurrencyRecoveryWindow *Setting `json:"adaptive_concurrency_recovery_window"`
 }
 
 type CategorySettings struct {
@@ -295,6 +297,8 @@ func (s *Settings) initializeCategoriesList() {
 				s.Performance.SlowWorkerGracePeriod,
 				s.Performance.StallTimeout,
 				s.Performance.SpeedEmaAlpha,
+				s.Performance.AdaptiveConcurrency,
+				s.Performance.AdaptiveConcurrencyRecoveryWindow,
 			},
 		},
 		{
@@ -974,6 +978,39 @@ func DefaultSettings() *Settings {
 					return nil
 				},
 			},
+			AdaptiveConcurrency: &Setting{
+				Key:          "adaptive_concurrency",
+				Label:        "Adaptive Concurrency",
+				Description:  "Reduce per-download connections after server throttling and recover gradually. Disable to keep the connection cap fixed.",
+				Type:         TypeBool,
+				DefaultValue: true,
+				Value:        true,
+			},
+			AdaptiveConcurrencyRecoveryWindow: &Setting{
+				Key:          "adaptive_concurrency_recovery_window",
+				Label:        "Concurrency Recovery Window",
+				Description:  "Healthy time required before each one-connection recovery step (1s-60s).",
+				Type:         TypeDuration,
+				DefaultValue: types.DefaultAdaptiveConcurrencyRecoveryWindow,
+				Value:        types.DefaultAdaptiveConcurrencyRecoveryWindow,
+				ValidateFunc: func(val any) error {
+					var v time.Duration
+					switch actual := val.(type) {
+					case time.Duration:
+						v = actual
+					case float64:
+						v = time.Duration(actual)
+					case int64:
+						v = time.Duration(actual)
+					default:
+						return fmt.Errorf("invalid type")
+					}
+					if v < time.Second || v > time.Minute {
+						return fmt.Errorf("must be between 1s and 60s")
+					}
+					return nil
+				},
+			},
 		},
 		Categories: CategorySettings{
 			CategoryEnabled: &Setting{
@@ -1279,21 +1316,23 @@ func (s *Settings) ToRuntimeConfig() *types.RuntimeConfig {
 		}
 	}
 	return &types.RuntimeConfig{
-		MaxConnectionsPerDownload:   Resolve[int](s.Network.MaxConnectionsPerDownload),
-		UserAgent:                   Resolve[string](s.Network.UserAgent),
-		ProxyURL:                    Resolve[string](s.Network.ProxyURL),
-		CustomDNS:                   Resolve[string](s.Network.CustomDNS),
-		SequentialDownload:          Resolve[bool](s.Network.SequentialDownload),
-		MinChunkSize:                Resolve[int64](s.Network.MinChunkSize),
-		GlobalRateLimitBps:          globalRate,
-		DefaultDownloadRateLimitBps: defaultRate,
-		WorkerBufferSize:            Resolve[int](s.Network.WorkerBufferSize),
-		DialHedgeCount:              Resolve[int](s.Network.DialHedgeCount),
-		MaxTaskRetries:              Resolve[int](s.Performance.MaxTaskRetries),
-		SlowWorkerThreshold:         Resolve[float64](s.Performance.SlowWorkerThreshold),
-		SlowWorkerGracePeriod:       Resolve[time.Duration](s.Performance.SlowWorkerGracePeriod),
-		StallTimeout:                Resolve[time.Duration](s.Performance.StallTimeout),
-		SpeedEmaAlpha:               Resolve[float64](s.Performance.SpeedEmaAlpha),
+		MaxConnectionsPerDownload:         Resolve[int](s.Network.MaxConnectionsPerDownload),
+		UserAgent:                         Resolve[string](s.Network.UserAgent),
+		ProxyURL:                          Resolve[string](s.Network.ProxyURL),
+		CustomDNS:                         Resolve[string](s.Network.CustomDNS),
+		SequentialDownload:                Resolve[bool](s.Network.SequentialDownload),
+		MinChunkSize:                      Resolve[int64](s.Network.MinChunkSize),
+		GlobalRateLimitBps:                globalRate,
+		DefaultDownloadRateLimitBps:       defaultRate,
+		WorkerBufferSize:                  Resolve[int](s.Network.WorkerBufferSize),
+		DialHedgeCount:                    Resolve[int](s.Network.DialHedgeCount),
+		MaxTaskRetries:                    Resolve[int](s.Performance.MaxTaskRetries),
+		SlowWorkerThreshold:               Resolve[float64](s.Performance.SlowWorkerThreshold),
+		SlowWorkerGracePeriod:             Resolve[time.Duration](s.Performance.SlowWorkerGracePeriod),
+		StallTimeout:                      Resolve[time.Duration](s.Performance.StallTimeout),
+		SpeedEmaAlpha:                     Resolve[float64](s.Performance.SpeedEmaAlpha),
+		DisableAdaptiveConcurrency:        !Resolve[bool](s.Performance.AdaptiveConcurrency),
+		AdaptiveConcurrencyRecoveryWindow: Resolve[time.Duration](s.Performance.AdaptiveConcurrencyRecoveryWindow),
 	}
 }
 

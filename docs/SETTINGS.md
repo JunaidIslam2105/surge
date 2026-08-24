@@ -144,6 +144,8 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 | `slow_worker_grace_period` | duration | Time to wait before checking a worker's speed (e.g., `5s`).                  | `5s`    |
 | `stall_timeout`            | duration | Restart workers that haven't received data for this duration (e.g., `3s`).   | `3s`    |
 | `speed_ema_alpha`          | float    | Exponential moving average smoothing factor for speed calculation (0.0-1.0). | `0.3`   |
+| `adaptive_concurrency`     | bool     | Reduce per-download connections after HTTP throttling and recover gradually. Disable to keep the connection cap fixed. | `true` |
+| `adaptive_concurrency_recovery_window` | duration | Healthy time required before each one-connection recovery step (1s-60s). | `3s` |
 
 ### Category Settings
 

@@ -46,6 +46,7 @@ type ConcurrentDownloader struct {
 	soft403Exhaustions int
 	soft403Progress    int64
 	soft403Since       time.Time
+	concurrencyGate    *adaptiveConcurrencyGate
 }
 
 const (
@@ -335,6 +336,10 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	effectiveSizeForWorkers := d.getEffectiveSizeForWorkers(fileSize, savedState, isResume)
 
 	numConns := d.getInitialConnections(effectiveSizeForWorkers)
+	d.concurrencyGate = newAdaptiveConcurrencyGate(numConns, d.Runtime.IsAdaptiveConcurrencyEnabled(), d.Runtime.GetAdaptiveConcurrencyRecoveryWindow())
+	if d.State != nil {
+		d.State.RateLimited.Store(false)
+	}
 	chunkSize := d.determineChunkSize(fileSize, numConns)
 
 	workerMirrors := d.getWorkerMirrors(activeMirrors)
@@ -504,6 +509,21 @@ func (d *ConcurrentDownloader) setupTasks(destPath string, fileSize, chunkSize i
 }
 
 func (d *ConcurrentDownloader) startHelpers(ctx context.Context, wg *sync.WaitGroup, queue *TaskQueue, fileSize int64, numConns int) {
+	if d.concurrencyGate != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.concurrencyGate.runRecovery(ctx, func(oldCap, newCap int, recovered bool) {
+				if newCap > oldCap {
+					utils.Debug("Adaptive concurrency: increased cap from %d to %d after healthy window", oldCap, newCap)
+				}
+				if recovered && d.State != nil {
+					d.State.RateLimited.Store(false)
+				}
+			})
+		}()
+	}
+
 	// Balancer for dynamic chunk splitting and work stealing
 	wg.Add(1)
 	go func() {
@@ -567,7 +587,11 @@ func (d *ConcurrentDownloader) runCompletionMonitor(ctx context.Context, queue *
 			// 2. All workers are idle OR we've accounted for all bytes
 			// Ensure queue is empty (no pending retries) before considering byte count.
 			// This protects against cutting off active retries even if byte count seems high (due to overlaps etc).
-			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
+			parked := int64(0)
+			if d.concurrencyGate != nil {
+				parked = d.concurrencyGate.parkedWorkers()
+			}
+			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()+parked) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
 			if isDone {
 				queue.Close()
 				return

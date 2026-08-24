@@ -38,8 +38,14 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 	}
 
 	for {
+		if d.concurrencyGate != nil && !d.concurrencyGate.acquire(ctx) {
+			return ctx.Err()
+		}
 		task, ok := queue.Pop()
 		if !ok {
+			if d.concurrencyGate != nil {
+				d.concurrencyGate.release()
+			}
 			return nil
 		}
 
@@ -62,6 +68,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		d.activeMu.Unlock()
 
 		var lastErr error
+		var throttledRequeue *types.Task
 		maxRetries := d.Runtime.GetMaxTaskRetries()
 		genericAttempt := 0
 
@@ -74,6 +81,9 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 					activeTask.WaitingOnLimiter.Store(false)
 					if d.State != nil {
 						d.State.ActiveWorkers.Add(-1)
+					}
+					if d.concurrencyGate != nil {
+						d.concurrencyGate.release()
 					}
 					return ctx.Err()
 				}
@@ -132,12 +142,18 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				if d.State != nil {
 					d.State.ActiveWorkers.Add(-1)
 				}
+				if d.concurrencyGate != nil {
+					d.concurrencyGate.release()
+				}
 				return lastErr
 			}
 
 			if ctx.Err() != nil {
 				if d.State != nil {
 					d.State.ActiveWorkers.Add(-1)
+				}
+				if d.concurrencyGate != nil {
+					d.concurrencyGate.release()
 				}
 				return ctx.Err()
 			}
@@ -163,9 +179,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			if lastErr == nil {
 				d.hostLimiter.RecordSuccess(mirrorHosts[currentMirrorIdx])
-				if d.State != nil {
-					d.State.RateLimited.Store(false)
-				}
 				stopAt := activeTask.StopAt.Load()
 				current := activeTask.CurrentOffset.Load()
 				if current < task.Offset+task.Length && current >= stopAt {
@@ -177,7 +190,14 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			var rlErr *rateLimitError
 			if errors.As(lastErr, &rlErr) {
 				host := mirrorHosts[currentMirrorIdx]
-				until := d.hostLimiter.Penalize(host, rlErr.retryAfter, rlErr.explicit, time.Now())
+				now := time.Now()
+				until := d.hostLimiter.Penalize(host, rlErr.retryAfter, rlErr.explicit, now)
+				if d.concurrencyGate != nil {
+					oldCap, newCap, _ := d.concurrencyGate.throttle(now, until)
+					if newCap < oldCap {
+						utils.Debug("Adaptive concurrency: reduced cap from %d to %d after throttle", oldCap, newCap)
+					}
+				}
 				if d.State == nil || !d.State.RateLimited.Swap(true) {
 					wait := time.Until(until).Round(time.Second)
 					message := fmt.Sprintf("Rate limited by %s; cooling down for %s", host, wait)
@@ -191,8 +211,11 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				}
 				d.ReportMirrorError(currentURL)
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
-				resumeOnRetryOffset(&task, activeTask)
-				continue
+				if remaining := activeTask.RemainingTask(); remaining != nil && remaining.Length > 0 {
+					throttledRequeue = remaining
+				}
+				lastErr = nil
+				break
 			}
 
 			genericAttempt++
@@ -213,16 +236,26 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			d.State.ActiveWorkers.Add(-1)
 		}
 
+		d.activeMu.Lock()
+		delete(d.activeTasks, id)
+		d.activeMu.Unlock()
+		if d.concurrencyGate != nil {
+			d.concurrencyGate.release()
+		}
+
+		if throttledRequeue != nil {
+			queue.Push(*throttledRequeue)
+			utils.Debug("Worker %d: throttled task requeued (remaining: %d bytes from offset %d)",
+				id, throttledRequeue.Length, throttledRequeue.Offset)
+			continue
+		}
+
 		if lastErr != nil {
 			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
 
 			if remain := activeTask.RemainingTask(); remain != nil {
 				queue.Push(*remain)
 			}
-
-			d.activeMu.Lock()
-			delete(d.activeTasks, id)
-			d.activeMu.Unlock()
 
 			if errors.Is(lastErr, errSoftForbidden) {
 				if !d.shouldEscalate403(time.Now()) {
@@ -233,10 +266,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			return lastErr
 		}
-
-		d.activeMu.Lock()
-		delete(d.activeTasks, id)
-		d.activeMu.Unlock()
 	}
 }
 

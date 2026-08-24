@@ -52,6 +52,8 @@ const (
 	RateLimitJitterFraction = 0.2
 	RateLimitPenaltyDecay   = 60 * time.Second
 	RateLimitMaxRetries     = 6
+
+	DefaultAdaptiveConcurrencyRecoveryWindow = 3 * time.Second
 )
 
 // ByteLimiter abstracts byte-based throttling for downloads.
@@ -83,6 +85,9 @@ type RuntimeConfig struct {
 	SlowWorkerGracePeriod time.Duration
 	StallTimeout          time.Duration
 	SpeedEmaAlpha         float64
+
+	DisableAdaptiveConcurrency        bool
+	AdaptiveConcurrencyRecoveryWindow time.Duration
 }
 
 const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -176,26 +181,39 @@ func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
 	return r.SpeedEmaAlpha
 }
 
+func (r *RuntimeConfig) IsAdaptiveConcurrencyEnabled() bool {
+	return r == nil || !r.DisableAdaptiveConcurrency
+}
+
+func (r *RuntimeConfig) GetAdaptiveConcurrencyRecoveryWindow() time.Duration {
+	if r == nil || r.AdaptiveConcurrencyRecoveryWindow <= 0 {
+		return DefaultAdaptiveConcurrencyRecoveryWindow
+	}
+	return r.AdaptiveConcurrencyRecoveryWindow
+}
+
 // DefaultRuntimeConfig returns a fully-populated runtime config for callers
 // that want engine defaults rather than relying on zero-value semantics.
 func DefaultRuntimeConfig() *RuntimeConfig {
 	return &RuntimeConfig{
-		MaxConnectionsPerDownload:   PerDownloadMax,
-		Workers:                     0,
-		UserAgent:                   DefaultUserAgent,
-		ProxyURL:                    "",
-		CustomDNS:                   "",
-		SequentialDownload:          false,
-		MinChunkSize:                MinChunk,
-		PrecheckSafetyBuffer:        DefaultPrecheckSafetyBuffer,
-		GlobalRateLimitBps:          0,
-		DefaultDownloadRateLimitBps: 0,
-		WorkerBufferSize:            WorkerBuffer,
-		MaxTaskRetries:              MaxTaskRetries,
-		DialHedgeCount:              DialHedgeCount,
-		SlowWorkerThreshold:         SlowWorkerThreshold,
-		SlowWorkerGracePeriod:       SlowWorkerGrace,
-		StallTimeout:                StallTimeout,
-		SpeedEmaAlpha:               SpeedEMAAlpha,
+		MaxConnectionsPerDownload:         PerDownloadMax,
+		Workers:                           0,
+		UserAgent:                         DefaultUserAgent,
+		ProxyURL:                          "",
+		CustomDNS:                         "",
+		SequentialDownload:                false,
+		MinChunkSize:                      MinChunk,
+		PrecheckSafetyBuffer:              DefaultPrecheckSafetyBuffer,
+		GlobalRateLimitBps:                0,
+		DefaultDownloadRateLimitBps:       0,
+		WorkerBufferSize:                  WorkerBuffer,
+		MaxTaskRetries:                    MaxTaskRetries,
+		DialHedgeCount:                    DialHedgeCount,
+		SlowWorkerThreshold:               SlowWorkerThreshold,
+		SlowWorkerGracePeriod:             SlowWorkerGrace,
+		StallTimeout:                      StallTimeout,
+		SpeedEmaAlpha:                     SpeedEMAAlpha,
+		DisableAdaptiveConcurrency:        false,
+		AdaptiveConcurrencyRecoveryWindow: DefaultAdaptiveConcurrencyRecoveryWindow,
 	}
 }
