@@ -14,7 +14,10 @@ type ActiveTask struct {
 	Task          types.Task
 	CurrentOffset atomic.Int64
 	StopAt        atomic.Int64
-	RangeMu       sync.Mutex // Serializes writes with work-steal boundary changes.
+	// RangeMu serializes writes with work-steal boundary changes.
+	// ponytail: When both are needed, acquire ConcurrentDownloader.activeMu
+	// before RangeMu; never acquire them in the reverse order.
+	RangeMu sync.Mutex
 
 	// Health monitoring fields
 	LastActivity atomic.Int64       // Unix nano timestamp of last data received

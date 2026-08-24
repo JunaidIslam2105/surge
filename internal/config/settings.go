@@ -674,8 +674,8 @@ func DefaultSettings() *Settings {
 				Label:        "Max Connections/Download",
 				Description:  "Maximum concurrent connections per download (1-64).",
 				Type:         TypeInt,
-				DefaultValue: 32,
-				Value:        32,
+				DefaultValue: types.PerDownloadMax,
+				Value:        types.PerDownloadMax,
 				ValidateFunc: func(val any) error {
 					v, err := parseAnyInt(val)
 					if err != nil {

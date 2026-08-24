@@ -6,7 +6,7 @@ Surge is designed to maximize download speeds by overcoming the limitations of s
 
 A standard browser usually opens one HTTP connection to the server.
 A server usually limits the bandwidth it gives to a single connection to make it fair for all users.
-Download managers (like Surge) open up a lot of requests at once (32 in Surge). They use it to split the file into a lot of small parts and download those parts individually.
+Download managers (like Surge) open multiple requests at once (16 by default in Surge). They use them to split the file into smaller parts and download those parts individually.
 
 ## Connection Variability
 

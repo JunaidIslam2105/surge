@@ -27,7 +27,7 @@ Surge is designed for power users who prefer a keyboard-driven workflow. It feat
 
 ## Why use Surge?
 
-Most browsers open a single connection for a download. Surge opens multiple (up to 32), splits the file, and downloads chunks in parallel. But we take it a step further:
+Most browsers open a single connection for a download. Surge opens multiple (up to 16 by default), splits the file, and downloads chunks in parallel. But we take it a step further:
 
 - **Blazing Fast:** Designed to maximize your bandwidth utilization and download files as quickly as possible.
 - **Multiple Mirrors:** Download from multiple sources simultaneously. Surge distributes workers across all available mirrors and automatically handles failover.

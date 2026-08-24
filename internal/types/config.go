@@ -19,7 +19,7 @@ const (
 	WorkerBatchSize     = 1 * utils.MiB
 	WorkerBatchInterval = 200 * time.Millisecond
 
-	PerDownloadMax = 32
+	PerDownloadMax = 16
 	DialHedgeCount = 4
 
 	DefaultMaxIdleConns          = 100
