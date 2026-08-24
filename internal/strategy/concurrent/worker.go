@@ -399,16 +399,6 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 		}
 
 		if readSoFar > 0 {
-			// check stopAt again before writing
-			// truncate readSoFar
-			currentStopAt := activeTask.StopAt.Load()
-			if offset+int64(readSoFar) > currentStopAt {
-				readSoFar = int(currentStopAt - offset)
-				if readSoFar <= 0 {
-					return nil // stolen completely
-				}
-			}
-
 			if d.Limiter != nil {
 				// Reset stall clock before the wait so the health monitor measures
 				// time from when throttling begins, not from the last network read.
@@ -424,8 +414,21 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 				activeTask.LastActivity.Store(time.Now().UnixNano())
 			}
 
+			activeTask.RangeMu.Lock()
+			// Recheck the boundary while excluding StealWork. Without this lock,
+			// stealing between the check and WriteAt could overlap the new task.
+			currentStopAt := activeTask.StopAt.Load()
+			if offset+int64(readSoFar) > currentStopAt {
+				readSoFar = int(currentStopAt - offset)
+				if readSoFar <= 0 {
+					activeTask.RangeMu.Unlock()
+					return nil // stolen completely
+				}
+			}
+
 			_, writeErr := writeAtFn(file, buf[:readSoFar], offset)
 			if writeErr != nil {
+				activeTask.RangeMu.Unlock()
 				return fmt.Errorf("write error: %w", writeErr)
 			}
 
@@ -435,6 +438,7 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 			newlyWritten := int64(readSoFar)
 
 			activeTask.CurrentOffset.Store(offset)
+			activeTask.RangeMu.Unlock()
 			activeTask.WindowBytes.Add(newlyWritten)
 			activeTask.LastActivity.Store(now.UnixNano())
 
@@ -489,6 +493,12 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	d.activeMu.Lock()
 	defer d.activeMu.Unlock()
 
+	splitFloor := d.Runtime.GetMinChunkSize()
+	if d.Runtime.IsAdaptiveConcurrencyEnabled() &&
+		(d.concurrencyGate == nil || !d.concurrencyGate.sawThrottle()) {
+		splitFloor = types.AlignSize
+	}
+
 	bestID := -1
 	var maxRemaining int64 = 0
 	var bestActive *ActiveTask
@@ -496,7 +506,7 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	// Find the worker with the MOST remaining work
 	for id, active := range d.activeTasks {
 		remaining := active.RemainingBytes()
-		if remaining > d.Runtime.GetMinChunkSize() && remaining > maxRemaining {
+		if remaining > splitFloor && remaining > maxRemaining {
 			maxRemaining = remaining
 			bestID = id
 			bestActive = active
@@ -508,44 +518,30 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	}
 
 	// Found the best candidate, now try to steal
-	remaining := maxRemaining
 	active := bestActive
+	active.RangeMu.Lock()
+	defer active.RangeMu.Unlock()
+	current := active.CurrentOffset.Load()
+	originalEnd := active.StopAt.Load()
+	remaining := originalEnd - current
+	if remaining <= 0 {
+		return false
+	}
 
 	// Split in half, aligned to AlignSize
-	splitSize := alignedSplitSize(remaining, d.Runtime.GetMinChunkSize())
+	splitSize := alignedSplitSize(remaining, splitFloor)
 	if splitSize == 0 {
 		return false
 	}
 
-	current := active.CurrentOffset.Load()
 	newStopAt := current + splitSize
 
 	// Update the active task stop point
 	active.StopAt.Store(newStopAt)
 
-	finalCurrent := active.CurrentOffset.Load()
-
-	// The actual start of the stolen chunk must be after where the worker effectively stops.
-	stolenStart := newStopAt
-	if finalCurrent > newStopAt {
-		stolenStart = finalCurrent
-	}
-
-	// Double check: ensure we didn't race and lose the chunk
-	currentStopAt := active.StopAt.Load()
-	if stolenStart >= currentStopAt && currentStopAt != newStopAt {
-		utils.Debug("StealWork race detected: stolenStart >= currentStopAt")
-	}
-
-	originalEnd := current + remaining
-
-	if stolenStart >= originalEnd {
-		return false
-	}
-
 	stolenTask := types.Task{
-		Offset: stolenStart,
-		Length: originalEnd - stolenStart,
+		Offset: newStopAt,
+		Length: originalEnd - newStopAt,
 	}
 
 	queue.Push(stolenTask)

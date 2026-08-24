@@ -144,7 +144,7 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 | `slow_worker_grace_period` | duration | Time to wait before checking a worker's speed (e.g., `5s`).                  | `5s`    |
 | `stall_timeout`            | duration | Restart workers that haven't received data for this duration (e.g., `3s`).   | `3s`    |
 | `speed_ema_alpha`          | float    | Exponential moving average smoothing factor for speed calculation (0.0-1.0, 0 disables smoothing). | `0.3`   |
-| `adaptive_concurrency_interval` | duration | Halve connections when throttled, then add one connection per interval. Set to `0` to disable adaptation. | `0` |
+| `adaptive_concurrency_interval` | duration | Halve connections when throttled, add one connection per interval, and split small tail ranges among idle workers on healthy hosts. Set to `0` to disable adaptation. | `0` |
 
 ### Category Settings
 

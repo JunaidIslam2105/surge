@@ -2,6 +2,7 @@ package concurrent
 
 import (
 	"testing"
+	"time"
 
 	"github.com/SurgeDM/Surge/internal/types"
 )
@@ -115,5 +116,72 @@ func TestAlignedSplitSize_UsesRuntimeMinimum(t *testing.T) {
 	minChunk := int64(64 * 1024)
 	if got := alignedSplitSize(2*minChunk, minChunk); got != minChunk {
 		t.Fatalf("alignedSplitSize(%d, %d) = %d, want %d", 2*minChunk, minChunk, got, minChunk)
+	}
+}
+
+func TestStealWork_AdaptiveTailFloor(t *testing.T) {
+	const (
+		workerID  = 3
+		current   = 2 * types.AlignSize
+		remaining = 15 * types.AlignSize
+		minChunk  = 16 * types.AlignSize
+	)
+	originalEnd := int64(current + remaining)
+
+	newDownloader := func(adaptive bool) (*ConcurrentDownloader, *ActiveTask) {
+		runtime := &types.RuntimeConfig{MinChunkSize: minChunk}
+		if adaptive {
+			runtime.AdaptiveConcurrencyInterval = time.Second
+		}
+		downloader := NewConcurrentDownloader("steal-tail", nil, nil, runtime)
+		active := &ActiveTask{Task: types.Task{Offset: 0, Length: originalEnd}}
+		active.CurrentOffset.Store(current)
+		active.StopAt.Store(originalEnd)
+		downloader.activeTasks[workerID] = active
+		return downloader, active
+	}
+
+	disabled, disabledActive := newDownloader(false)
+	disabledQueue := NewTaskQueue()
+	if disabled.StealWork(disabledQueue) {
+		t.Fatal("disabled adaptation stole a sub-MinChunkSize tail")
+	}
+	if disabledQueue.Len() != 0 || disabledActive.StopAt.Load() != originalEnd {
+		t.Fatal("disabled adaptation changed the active range")
+	}
+
+	enabled, enabledActive := newDownloader(true)
+	enabledQueue := NewTaskQueue()
+	if !enabled.StealWork(enabledQueue) {
+		t.Fatal("enabled adaptation did not steal an aligned tail range")
+	}
+	stolenTasks := enabledQueue.DrainRemaining()
+	if len(stolenTasks) != 1 {
+		t.Fatalf("stolen task count = %d, want 1", len(stolenTasks))
+	}
+	stolen := stolenTasks[0]
+	newStopAt := enabledActive.StopAt.Load()
+	if newStopAt%types.AlignSize != 0 || stolen.Offset%types.AlignSize != 0 || stolen.Length%types.AlignSize != 0 {
+		t.Fatalf("unaligned split: stop=%d stolen=%+v align=%d", newStopAt, stolen, types.AlignSize)
+	}
+	if stolen.Offset != newStopAt {
+		t.Fatalf("gap or overlap at split: original stops at %d, stolen starts at %d", newStopAt, stolen.Offset)
+	}
+	if got := (newStopAt - current) + stolen.Length; got != remaining {
+		t.Fatalf("covered bytes = %d, want %d", got, remaining)
+	}
+	if got := stolen.Offset + stolen.Length; got != originalEnd {
+		t.Fatalf("stolen range ends at %d, want %d", got, originalEnd)
+	}
+
+	throttled, throttledActive := newDownloader(true)
+	throttled.concurrencyGate = newAdaptiveConcurrencyGate(2, time.Second)
+	throttled.concurrencyGate.throttle(time.Now(), time.Now())
+	throttledQueue := NewTaskQueue()
+	if throttled.StealWork(throttledQueue) {
+		t.Fatal("throttled adaptation stole a sub-MinChunkSize tail")
+	}
+	if throttledQueue.Len() != 0 || throttledActive.StopAt.Load() != originalEnd {
+		t.Fatal("throttled adaptation changed the active range")
 	}
 }

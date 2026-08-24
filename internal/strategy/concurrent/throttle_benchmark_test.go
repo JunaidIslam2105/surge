@@ -34,6 +34,8 @@ type throttleWorkload struct {
 	accepted         int
 	initialThrottles int64
 	responseDelay    time.Duration
+	slowRangeStart   int64
+	slowBlockDelay   time.Duration
 }
 
 type throttleMetrics struct {
@@ -62,6 +64,12 @@ func BenchmarkThrottle(b *testing.B) {
 	workloads := []throttleWorkload{
 		{name: "storm", accepted: 2, responseDelay: 50 * time.Millisecond},
 		{name: "recovery", initialThrottles: benchmarkWorkers, responseDelay: 100 * time.Millisecond},
+		{
+			name:           "slow-tail",
+			responseDelay:  5 * time.Millisecond,
+			slowRangeStart: 7 * benchmarkChunkSize,
+			slowBlockDelay: 20 * time.Millisecond,
+		},
 	}
 	for _, work := range workloads {
 		for _, adaptive := range []bool{false, true} {
@@ -120,6 +128,9 @@ func benchmarkThrottlePolicy(b *testing.B, tmpDir string, work throttleWorkload,
 			b.Fatalf("verified %d bytes, want %d", got, benchmarkFileSize)
 		}
 		metrics := server.metrics()
+		if metrics.peak > benchmarkWorkers {
+			b.Fatalf("peak requests = %d, exceeds worker count %d", metrics.peak, benchmarkWorkers)
+		}
 		totals.requests += metrics.requests
 		totals.throttled += metrics.throttled
 		totals.peak += metrics.peak
@@ -169,11 +180,26 @@ func (s *throttleServer) handle(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusPartialContent)
 
 	buf := make([]byte, 64*utils.KiB)
+	slowRange := s.work.slowBlockDelay > 0 && start >= s.work.slowRangeStart
 	for remaining := length; remaining > 0; {
+		if slowRange {
+			timer := time.NewTimer(s.work.slowBlockDelay)
+			select {
+			case <-r.Context().Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			case <-timer.C:
+			}
+		}
 		n, err := w.Write(buf[:min(int64(len(buf)), remaining)])
 		remaining -= int64(n)
 		if err != nil {
 			return
+		}
+		if slowRange {
+			w.(http.Flusher).Flush()
 		}
 	}
 }

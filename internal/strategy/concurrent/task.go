@@ -14,6 +14,7 @@ type ActiveTask struct {
 	Task          types.Task
 	CurrentOffset atomic.Int64
 	StopAt        atomic.Int64
+	RangeMu       sync.Mutex // Serializes writes with work-steal boundary changes.
 
 	// Health monitoring fields
 	LastActivity atomic.Int64       // Unix nano timestamp of last data received

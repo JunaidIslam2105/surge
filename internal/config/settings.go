@@ -979,7 +979,7 @@ func DefaultSettings() *Settings {
 			AdaptiveConcurrencyInterval: &Setting{
 				Key:          "adaptive_concurrency_interval",
 				Label:        "Adaptive Concurrency Interval",
-				Description:  "Halve connections when throttled, then add one connection per interval; 0 disables adaptation (0s or 1s-60s).",
+				Description:  "Halve connections when throttled, add one connection per interval, and split small tail ranges among idle workers on healthy hosts; 0 disables adaptation (0s or 1s-60s).",
 				Type:         TypeDuration,
 				DefaultValue: types.DefaultAdaptiveConcurrencyInterval,
 				Value:        types.DefaultAdaptiveConcurrencyInterval,

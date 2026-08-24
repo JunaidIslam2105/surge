@@ -26,6 +26,7 @@ type adaptiveConcurrencyGate struct {
 	changed        chan struct{}
 	policyChanged  chan struct{}
 	throttled      bool
+	hasThrottled   bool
 
 	cooldownUntil time.Time
 	lastThrottle  time.Time
@@ -98,6 +99,7 @@ func (g *adaptiveConcurrencyGate) throttle(now, cooldownUntil time.Time) (int, i
 	}
 
 	g.throttled = true
+	g.hasThrottled = true
 	g.lastThrottle = now
 	if cooldownUntil.After(g.cooldownUntil) {
 		g.cooldownUntil = cooldownUntil
@@ -141,6 +143,12 @@ func (g *adaptiveConcurrencyGate) recover(now time.Time) (int, int, bool) {
 
 func (g *adaptiveConcurrencyGate) parkedWorkers() int64 {
 	return g.parked.Load()
+}
+
+func (g *adaptiveConcurrencyGate) sawThrottle() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.hasThrottled
 }
 
 func (g *adaptiveConcurrencyGate) runRecovery(ctx context.Context, onTransition func(oldCap, newCap int, recovered bool)) {
