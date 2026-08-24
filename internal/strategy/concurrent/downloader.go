@@ -159,12 +159,10 @@ func (d *ConcurrentDownloader) shouldEscalate403(now time.Time) bool {
 	d.soft403Mu.Lock()
 	defer d.soft403Mu.Unlock()
 
-	if d.State == nil {
-		d.soft403Exhaustions++
-		return d.soft403Exhaustions >= soft403MaxExhaustions
+	progress := d.soft403Progress
+	if d.State != nil {
+		progress = d.State.Bytes.VerifiedProgress.Load()
 	}
-
-	progress := d.State.Bytes.VerifiedProgress.Load()
 	if progress != d.soft403Progress {
 		d.soft403Progress = progress
 		d.soft403Exhaustions = 0
@@ -186,7 +184,10 @@ func (d *ConcurrentDownloader) shouldEscalate403(now time.Time) bool {
 	}
 
 	// Progress can race the decision above; recheck before stopping healthy peers.
-	if progress = d.State.Bytes.VerifiedProgress.Load(); progress != d.soft403Progress {
+	if d.State != nil {
+		progress = d.State.Bytes.VerifiedProgress.Load()
+	}
+	if progress != d.soft403Progress {
 		d.soft403Progress = progress
 		d.soft403Exhaustions = 1
 		d.soft403Since = time.Time{}

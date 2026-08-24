@@ -412,6 +412,23 @@ func TestConcurrentDownloader_403DoesNotCancelHealthyWorker(t *testing.T) {
 	}
 }
 
+func TestSoft403NilStateWaitsForConfirmation(t *testing.T) {
+	downloader := NewConcurrentDownloader("soft403-nil-state", nil, nil, nil)
+	now := time.Unix(100, 0)
+
+	for i := 0; i < soft403MaxExhaustions; i++ {
+		if downloader.shouldEscalate403(now) {
+			t.Fatalf("escalated on exhaustion %d before confirmation", i+1)
+		}
+	}
+	if downloader.shouldEscalate403(now.Add(soft403ConfirmWindow - time.Nanosecond)) {
+		t.Fatal("escalated before the confirmation window elapsed")
+	}
+	if !downloader.shouldEscalate403(now.Add(soft403ConfirmWindow)) {
+		t.Fatal("did not escalate after the confirmation window elapsed")
+	}
+}
+
 func TestConcurrentDownloader_503WithRetryAfterTreatedAsThrottle(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)
 	defer cleanup()
