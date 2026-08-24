@@ -681,34 +681,7 @@ func (p *Scheduler) worker() {
 
 		if isPaused {
 			utils.Debug("Scheduler: Download %s paused cleanly", localCfg.ID)
-			// The concurrent downloader sends DownloadPausedMsg itself via handlePause()
-			// (which causes RunDownload to return nil). When a single-threaded download is
-			// paused, RunDownload returns a non-nil error, and the pool must fill the gap.
-			if err != nil && localCfg.ProgressCh != nil {
-				var downloaded int64
-				var rateLimit int64
-				var rateLimitSet bool
-				var workers int
-				var minChunkSize int64
-				if localCfg.ProgressState != nil {
-					downloaded = progress.CfgProgress(&localCfg).Bytes.Downloaded.Load()
-				}
-				if localCfg.Runtime != nil {
-					workers = localCfg.Runtime.Workers
-					minChunkSize = localCfg.Runtime.MinChunkSize
-				}
-				rateLimit, rateLimitSet = localCfg.RateLimit, localCfg.RateLimitSet
-				safeSendProgress(localCfg.ProgressCh, types.DownloadEvent{
-					Type:         types.EventPaused,
-					DownloadID:   localCfg.ID,
-					Filename:     localCfg.Filename,
-					Downloaded:   downloaded,
-					RateLimit:    rateLimit,
-					RateLimitSet: rateLimitSet,
-					Workers:      workers,
-					MinChunkSize: minChunkSize,
-				}, p.progressDone)
-			}
+			sendPausedFallback(localCfg.ProgressCh, &localCfg, err, p.progressDone)
 		} else if err != nil {
 			p.mu.Lock()
 			delete(p.downloads, localCfg.ID)
@@ -822,6 +795,49 @@ func (p *Scheduler) worker() {
 		// If paused, we keep it in downloads map for potential resume
 		p.wg.Done()
 	}
+}
+
+func sendPausedFallback(ch chan<- types.DownloadEvent, cfg *types.DownloadRecord, runErr error, doneCh <-chan struct{}) {
+	if ch == nil || cfg == nil {
+		return
+	}
+
+	var pending *types.DownloadRecord
+	var downloaded int64
+	rateLimit, rateLimitSet := cfg.RateLimit, cfg.RateLimitSet
+	if cfg.ProgressState != nil {
+		state := progress.CfgProgress(cfg)
+		pending = state.TakePendingResumeState()
+		downloaded = state.Bytes.Downloaded.Load()
+		rateLimit, rateLimitSet = state.GetRateLimit()
+	}
+	// A nil error and no pending snapshot means the concurrent downloader
+	// already queued EventPaused and consumed the delivery handshake.
+	if runErr == nil && pending == nil {
+		return
+	}
+
+	event := types.DownloadEvent{
+		Type:         types.EventPaused,
+		DownloadID:   cfg.ID,
+		Filename:     cfg.Filename,
+		Downloaded:   downloaded,
+		State:        pending,
+		RateLimit:    rateLimit,
+		RateLimitSet: rateLimitSet,
+	}
+	if cfg.Runtime != nil {
+		event.Workers = cfg.Runtime.GetWorkers()
+		event.MinChunkSize = cfg.Runtime.GetMinChunkSize()
+	}
+	if pending != nil {
+		event.Downloaded = pending.Downloaded
+		event.DestPath = pending.DestPath
+		if pending.Filename != "" {
+			event.Filename = pending.Filename
+		}
+	}
+	safeSendProgress(ch, event, doneCh)
 }
 
 // shouldRetryFailedDownload reports whether a failed download should be

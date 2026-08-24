@@ -263,8 +263,7 @@ func RunDownload(ctx context.Context, cfg *types.DownloadRecord) error {
 		}
 	}
 
-	// Only send completion if NO error AND not paused
-	// Check specifically for ErrPaused to avoid treating it as error
+	// Only send completion if NO error AND not paused.
 	if errors.Is(downloadErr, types.ErrPaused) {
 		utils.Debug("Download paused cleanly")
 		return nil // Return nil so worker can remove it from active map

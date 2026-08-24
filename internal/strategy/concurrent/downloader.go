@@ -447,7 +447,10 @@ func (d *ConcurrentDownloader) setupNetwork() (*http.Client, *http.Transport) {
 		customDNS = d.Runtime.CustomDNS
 	}
 
-	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, d.Runtime.GetMaxConnectionsPerDownload())
+	// The worker pool enforces the per-download request budget. Keep the shared
+	// transport ceiling process-wide so downloads with identical settings do not
+	// accidentally share one per-download MaxConnsPerHost allowance.
+	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, 0)
 	client := &http.Client{Transport: httpTransport}
 	d.applyClientSettings(client)
 	return client, httpTransport
@@ -744,8 +747,11 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 			}
 			select {
 			case d.ProgressChan <- event:
+				// A consumed pending snapshot is the delivery handshake used by the
+				// scheduler to avoid sending a duplicate fallback event.
+				d.State.TakePendingResumeState()
 			default:
-				utils.Debug("Pause event queue full; resume state was saved directly")
+				utils.Debug("Pause event queue full; scheduler will deliver saved state")
 			}
 		}
 		utils.Debug("Download paused, state saved (Downloaded=%d, RemainingTasks=%d, RemainingBytes=%d)",

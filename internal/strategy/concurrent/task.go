@@ -36,6 +36,8 @@ type ActiveTask struct {
 
 // RemainingTask returns a Task representing the remaining work, or nil if complete
 func (at *ActiveTask) RemainingTask() *types.Task {
+	at.RangeMu.Lock()
+	defer at.RangeMu.Unlock()
 	current := at.CurrentOffset.Load()
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {
@@ -50,6 +52,8 @@ func (at *ActiveTask) RemainingTask() *types.Task {
 
 // RemainingBytes returns the number of bytes left in the current task
 func (at *ActiveTask) RemainingBytes() int64 {
+	at.RangeMu.Lock()
+	defer at.RangeMu.Unlock()
 	current := at.CurrentOffset.Load()
 	stopAt := at.StopAt.Load()
 	if current >= stopAt {

@@ -185,3 +185,27 @@ func TestStealWork_AdaptiveTailFloor(t *testing.T) {
 		t.Fatal("throttled adaptation changed the active range")
 	}
 }
+
+func TestDetachRemainingTaskRemovesTaskFromStealSet(t *testing.T) {
+	runtime := &types.RuntimeConfig{
+		MinChunkSize:                4 * types.AlignSize,
+		AdaptiveConcurrencyInterval: time.Second,
+	}
+	downloader := NewConcurrentDownloader("detach-before-steal", nil, nil, runtime)
+	active := &ActiveTask{Task: types.Task{Offset: 0, Length: 16 * types.AlignSize}}
+	active.CurrentOffset.Store(4 * types.AlignSize)
+	active.StopAt.Store(16 * types.AlignSize)
+	downloader.activeTasks[1] = active
+
+	remaining := downloader.detachRemainingTask(1, active)
+	if remaining == nil || remaining.Offset != 4*types.AlignSize || remaining.Length != 12*types.AlignSize {
+		t.Fatalf("detached remaining task = %+v", remaining)
+	}
+	queue := NewTaskQueue()
+	if downloader.StealWork(queue) {
+		t.Fatal("detached task remained visible to StealWork")
+	}
+	if queue.Len() != 0 {
+		t.Fatalf("queue length = %d, want 0", queue.Len())
+	}
+}

@@ -869,9 +869,8 @@ func TestConcurrentDownloader_PauseDuringRetryBackoff(t *testing.T) {
 			break
 		}
 	}
-
 	if pausedEvent == nil {
-		t.Fatalf("Expected EventPaused on progress channel")
+		t.Fatal("Expected EventPaused on progress channel")
 	}
 
 	savedState := pausedEvent.State

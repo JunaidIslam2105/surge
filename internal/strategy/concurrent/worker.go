@@ -21,6 +21,8 @@ var writeAtFn = func(f *os.File, b []byte, off int64) (int, error) {
 
 var errSoftForbidden = errors.New("unexpected status: 403")
 
+const soft403RetryDelay = 500 * time.Millisecond
+
 // worker downloads tasks from the queue
 func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []string, file *os.File, queue *TaskQueue, totalSize int64, client *http.Client) error {
 	bufPtr := d.bufPool.Get().(*[]byte)
@@ -124,7 +126,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			// still persist the unfinished range after peers are cancelled.
 			if types.IsInsufficientDiskSpace(lastErr) {
 				var stash *types.Task
-				if remaining := activeTask.RemainingTask(); remaining != nil {
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil {
 					originalEnd := task.Offset + task.Length
 					if remaining.Offset+remaining.Length > originalEnd {
 						remaining.Length = originalEnd - remaining.Offset
@@ -133,12 +135,11 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 						stash = remaining
 					}
 				}
-				d.activeMu.Lock()
 				if stash != nil {
+					d.activeMu.Lock()
 					d.abandonedRemaining = append(d.abandonedRemaining, *stash)
+					d.activeMu.Unlock()
 				}
-				delete(d.activeTasks, id)
-				d.activeMu.Unlock()
 				if d.State != nil {
 					d.State.ActiveWorkers.Add(-1)
 				}
@@ -162,7 +163,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
 				utils.Debug("Worker %d: Health check cancelled task, rotating from mirror %s to %s", id, mirrors[(currentMirrorIdx+len(mirrors)-1)%len(mirrors)], mirrors[currentMirrorIdx])
 
-				if remaining := activeTask.RemainingTask(); remaining != nil {
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil {
 					originalEnd := task.Offset + task.Length
 					if remaining.Offset+remaining.Length > originalEnd {
 						remaining.Length = originalEnd - remaining.Offset
@@ -211,7 +212,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				}
 				d.ReportMirrorError(currentURL)
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
-				if remaining := activeTask.RemainingTask(); remaining != nil && remaining.Length > 0 {
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil && remaining.Length > 0 {
 					throttledRequeue = remaining
 				}
 				lastErr = nil
@@ -253,20 +254,39 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		if lastErr != nil {
 			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
 
-			if remain := activeTask.RemainingTask(); remain != nil {
-				queue.Push(*remain)
-			}
+			remain := activeTask.RemainingTask()
 
 			if errors.Is(lastErr, errSoftForbidden) {
 				if !d.shouldEscalate403(time.Now()) {
+					if !interruptibleSleep(ctx, soft403RetryDelay) {
+						if remain != nil {
+							queue.Push(*remain)
+						}
+						return ctx.Err()
+					}
+					if remain != nil {
+						queue.Push(*remain)
+					}
 					continue
 				}
 				lastErr = fmt.Errorf("%v: %w", lastErr, types.ErrPermanentHTTP)
+			}
+			if remain != nil {
+				queue.Push(*remain)
 			}
 
 			return lastErr
 		}
 	}
+}
+
+// detachRemainingTask removes an active task from the steal set and snapshots
+// its remaining range under the documented activeMu -> RangeMu lock order.
+func (d *ConcurrentDownloader) detachRemainingTask(id int, active *ActiveTask) *types.Task {
+	d.activeMu.Lock()
+	defer d.activeMu.Unlock()
+	delete(d.activeTasks, id)
+	return active.RemainingTask()
 }
 
 // downloadTask downloads a single byte range and writes to file at offset

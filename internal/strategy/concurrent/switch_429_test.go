@@ -439,6 +439,47 @@ func TestSoft403NilStateWaitsForConfirmation(t *testing.T) {
 	}
 }
 
+func TestConcurrentDownloader_Soft403ZeroRetriesHasCooldown(t *testing.T) {
+	tmpDir, cleanup := initTestState(t)
+	defer cleanup()
+
+	const fileSize = int64(64 * utils.KiB)
+	var requests atomic.Int64
+	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	destPath := filepath.Join(tmpDir, "soft403-zero-retries.bin")
+	file, err := os.Create(destPath + types.IncompleteSuffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	state := progress.New("soft403-zero-retries", fileSize)
+	downloader := NewConcurrentDownloader(state.ID, nil, state, &types.RuntimeConfig{
+		MaxConnectionsPerDownload: 1,
+		Workers:                   1,
+		MinChunkSize:              fileSize,
+		MaxTaskRetries:            0,
+		DialHedgeCount:            0,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	err = downloader.Download(ctx, server.URL, nil, nil, destPath, fileSize)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Download error = %v, want context deadline", err)
+	}
+	if got := requests.Load(); got > 1 {
+		t.Fatalf("soft 403 requests = %d in 150ms, want at most 1", got)
+	}
+}
+
 func TestConcurrentDownloader_503WithRetryAfterTreatedAsThrottle(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)
 	defer cleanup()

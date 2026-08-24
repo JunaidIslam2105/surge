@@ -64,6 +64,36 @@ func TestActiveTask_RemainingTask(t *testing.T) {
 	}
 }
 
+func TestActiveTask_RemainingTaskWaitsForRangeMutation(t *testing.T) {
+	at := &ActiveTask{Task: types.Task{Offset: 0, Length: 1000}}
+	at.CurrentOffset.Store(250)
+	at.StopAt.Store(1000)
+
+	at.RangeMu.Lock()
+	result := make(chan *types.Task, 1)
+	go func() {
+		result <- at.RemainingTask()
+	}()
+
+	select {
+	case <-result:
+		at.RangeMu.Unlock()
+		t.Fatal("RemainingTask returned while the range boundary was being mutated")
+	case <-time.After(20 * time.Millisecond):
+	}
+	at.StopAt.Store(750)
+	at.RangeMu.Unlock()
+
+	select {
+	case remaining := <-result:
+		if remaining == nil || remaining.Offset != 250 || remaining.Length != 500 {
+			t.Fatalf("remaining task = %+v, want offset 250 length 500", remaining)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("RemainingTask did not resume after the range mutation")
+	}
+}
+
 func TestActiveTask_GetSpeed(t *testing.T) {
 	at := &ActiveTask{
 		Speed: 1024.0 * 1024.0, // 1 MB/s

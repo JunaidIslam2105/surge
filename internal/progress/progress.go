@@ -131,8 +131,8 @@ func (ps *DownloadProgress) GetError() error {
 	return nil
 }
 
-// SetPendingResumeState stashes a pause-grade DownloadRecord for the
-// scheduler to attach onto EventError. Nil-safe; overwrites prior.
+// SetPendingResumeState stashes a pause-grade DownloadRecord for lifecycle
+// fallback delivery and EventError recovery. Nil-safe; overwrites prior.
 func (ps *DownloadProgress) SetPendingResumeState(s *types.DownloadRecord) {
 	if ps == nil {
 		return

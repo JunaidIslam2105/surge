@@ -62,7 +62,7 @@ func TestHandlePause_Normal(t *testing.T) {
 	}
 }
 
-func TestHandlePause_FullEventChannelDoesNotBlock(t *testing.T) {
+func TestHandlePause_PersistsWithoutLifecycleConsumer(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	destPath := filepath.Join(tmpDir, "test.bin")
 	state := progress.New("test-id", 1000)
@@ -123,6 +123,9 @@ func TestHandlePause_UsesLiveRateLimitFromState(t *testing.T) {
 	}
 	if msg.State == nil {
 		t.Fatal("expected pause state")
+	}
+	if pending := state.TakePendingResumeState(); pending != nil {
+		t.Fatalf("delivered pause event left fallback state pending: %+v", pending)
 	}
 }
 
