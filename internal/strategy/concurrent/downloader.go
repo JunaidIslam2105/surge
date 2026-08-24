@@ -336,7 +336,7 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	effectiveSizeForWorkers := d.getEffectiveSizeForWorkers(fileSize, savedState, isResume)
 
 	numConns := d.getInitialConnections(effectiveSizeForWorkers)
-	d.concurrencyGate = newAdaptiveConcurrencyGate(numConns, d.Runtime.IsAdaptiveConcurrencyEnabled(), d.Runtime.GetAdaptiveConcurrencyRecoveryWindow())
+	d.concurrencyGate = newAdaptiveConcurrencyGate(numConns, d.Runtime.GetAdaptiveConcurrencyInterval())
 	if d.State != nil {
 		d.State.RateLimited.Store(false)
 	}

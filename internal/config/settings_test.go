@@ -83,11 +83,14 @@ func TestDefaultSettings(t *testing.T) {
 		if Resolve[float64](settings.Performance.SpeedEmaAlpha) < 0 || Resolve[float64](settings.Performance.SpeedEmaAlpha) > 1 {
 			t.Errorf("SpeedEmaAlpha should be between 0 and 1, got: %f", Resolve[float64](settings.Performance.SpeedEmaAlpha))
 		}
-		if !Resolve[bool](settings.Performance.AdaptiveConcurrency) {
-			t.Error("AdaptiveConcurrency should be true by default")
+		if got := Resolve[time.Duration](settings.Performance.AdaptiveConcurrencyInterval); got != 0 {
+			t.Errorf("AdaptiveConcurrencyInterval = %v, want 0", got)
 		}
-		if got := Resolve[time.Duration](settings.Performance.AdaptiveConcurrencyRecoveryWindow); got != 3*time.Second {
-			t.Errorf("AdaptiveConcurrencyRecoveryWindow = %v, want 3s", got)
+		if err := settings.Performance.AdaptiveConcurrencyInterval.Validate(time.Duration(0)); err != nil {
+			t.Errorf("AdaptiveConcurrencyInterval should allow 0: %v", err)
+		}
+		if err := settings.Performance.AdaptiveConcurrencyInterval.Validate(500 * time.Millisecond); err == nil {
+			t.Error("AdaptiveConcurrencyInterval should reject sub-second values")
 		}
 	})
 
@@ -325,8 +328,7 @@ func TestLoadSettings_CorruptedJSON(t *testing.T) {
 
 func TestToRuntimeConfig(t *testing.T) {
 	settings := DefaultSettings()
-	settings.Performance.AdaptiveConcurrency.Value = false
-	settings.Performance.AdaptiveConcurrencyRecoveryWindow.Value = 5 * time.Second
+	settings.Performance.AdaptiveConcurrencyInterval.Value = 0 * time.Second
 	runtime := settings.ToRuntimeConfig()
 
 	if runtime == nil {
@@ -336,11 +338,8 @@ func TestToRuntimeConfig(t *testing.T) {
 	if runtime.MaxConnectionsPerDownload != Resolve[int](settings.Network.MaxConnectionsPerDownload) {
 		t.Error("MaxConnectionsPerDownload not correctly mapped")
 	}
-	if runtime.IsAdaptiveConcurrencyEnabled() {
-		t.Error("AdaptiveConcurrency not correctly mapped")
-	}
-	if runtime.GetAdaptiveConcurrencyRecoveryWindow() != 5*time.Second {
-		t.Error("AdaptiveConcurrencyRecoveryWindow not correctly mapped")
+	if runtime.IsAdaptiveConcurrencyEnabled() || runtime.GetAdaptiveConcurrencyInterval() != 0 {
+		t.Error("AdaptiveConcurrencyInterval not correctly mapped")
 	}
 }
 

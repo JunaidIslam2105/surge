@@ -38,11 +38,11 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
 			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
 		}
-		if !r.IsAdaptiveConcurrencyEnabled() {
-			t.Error("adaptive concurrency should default to enabled")
+		if r.IsAdaptiveConcurrencyEnabled() {
+			t.Error("adaptive concurrency should default to disabled")
 		}
-		if got := r.GetAdaptiveConcurrencyRecoveryWindow(); got != DefaultAdaptiveConcurrencyRecoveryWindow {
-			t.Errorf("GetAdaptiveConcurrencyRecoveryWindow = %v, want %v", got, DefaultAdaptiveConcurrencyRecoveryWindow)
+		if got := r.GetAdaptiveConcurrencyInterval(); got != DefaultAdaptiveConcurrencyInterval {
+			t.Errorf("GetAdaptiveConcurrencyInterval = %v, want %v", got, DefaultAdaptiveConcurrencyInterval)
 		}
 	})
 
@@ -63,12 +63,12 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 
 	t.Run("explicit zero values are preserved where zero is valid", func(t *testing.T) {
 		r := &RuntimeConfig{
-			MaxTaskRetries:             0,
-			SlowWorkerThreshold:        0,
-			SlowWorkerGracePeriod:      0,
-			StallTimeout:               0,
-			SpeedEmaAlpha:              0,
-			DisableAdaptiveConcurrency: true,
+			MaxTaskRetries:              0,
+			SlowWorkerThreshold:         0,
+			SlowWorkerGracePeriod:       0,
+			StallTimeout:                0,
+			SpeedEmaAlpha:               0,
+			AdaptiveConcurrencyInterval: 0,
 		}
 		if got := r.GetMaxTaskRetries(); got != 0 {
 			t.Errorf("GetMaxTaskRetries = %d, want 0", got)
@@ -83,8 +83,8 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetStallTimeout(); got != 0 {
 			t.Errorf("GetStallTimeout = %v, want 0", got)
 		}
-		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
-			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
+		if got := r.GetSpeedEmaAlpha(); got != 0 {
+			t.Errorf("GetSpeedEmaAlpha = %f, want 0", got)
 		}
 		if r.IsAdaptiveConcurrencyEnabled() {
 			t.Error("adaptive concurrency should be disabled")
@@ -93,11 +93,12 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 
 	t.Run("invalid values fall back to defaults", func(t *testing.T) {
 		r := &RuntimeConfig{
-			MaxTaskRetries:        -1,
-			SlowWorkerThreshold:   1.5,
-			SlowWorkerGracePeriod: -1 * time.Second,
-			StallTimeout:          -1 * time.Second,
-			SpeedEmaAlpha:         -0.1,
+			MaxTaskRetries:              -1,
+			SlowWorkerThreshold:         1.5,
+			SlowWorkerGracePeriod:       -1 * time.Second,
+			StallTimeout:                -1 * time.Second,
+			SpeedEmaAlpha:               -0.1,
+			AdaptiveConcurrencyInterval: -1 * time.Second,
 		}
 
 		if got := r.GetMaxTaskRetries(); got != MaxTaskRetries {
@@ -115,20 +116,23 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetSpeedEmaAlpha(); got != SpeedEMAAlpha {
 			t.Errorf("GetSpeedEmaAlpha = %f, want %f", got, SpeedEMAAlpha)
 		}
+		if got := r.GetAdaptiveConcurrencyInterval(); got != DefaultAdaptiveConcurrencyInterval {
+			t.Errorf("GetAdaptiveConcurrencyInterval = %v, want %v", got, DefaultAdaptiveConcurrencyInterval)
+		}
 	})
 
 	t.Run("custom values are returned", func(t *testing.T) {
 		r := &RuntimeConfig{
-			MaxConnectionsPerDownload:         128,
-			UserAgent:                         "CustomAgent/1.0",
-			MinChunkSize:                      4 * utils.MiB,
-			WorkerBufferSize:                  1 * utils.MiB,
-			MaxTaskRetries:                    5,
-			SlowWorkerThreshold:               0.75,
-			SlowWorkerGracePeriod:             10 * time.Second,
-			StallTimeout:                      15 * time.Second,
-			SpeedEmaAlpha:                     0.5,
-			AdaptiveConcurrencyRecoveryWindow: 5 * time.Second,
+			MaxConnectionsPerDownload:   128,
+			UserAgent:                   "CustomAgent/1.0",
+			MinChunkSize:                4 * utils.MiB,
+			WorkerBufferSize:            1 * utils.MiB,
+			MaxTaskRetries:              5,
+			SlowWorkerThreshold:         0.75,
+			SlowWorkerGracePeriod:       10 * time.Second,
+			StallTimeout:                15 * time.Second,
+			SpeedEmaAlpha:               0.5,
+			AdaptiveConcurrencyInterval: 5 * time.Second,
 		}
 
 		if got := r.GetMaxConnectionsPerDownload(); got != 128 {
@@ -159,8 +163,8 @@ func TestRuntimeConfig_Getters(t *testing.T) {
 		if got := r.GetSpeedEmaAlpha(); got != 0.5 {
 			t.Errorf("GetSpeedEmaAlpha = %f, want 0.5", got)
 		}
-		if got := r.GetAdaptiveConcurrencyRecoveryWindow(); got != 5*time.Second {
-			t.Errorf("GetAdaptiveConcurrencyRecoveryWindow = %v, want 5s", got)
+		if got := r.GetAdaptiveConcurrencyInterval(); got != 5*time.Second {
+			t.Errorf("GetAdaptiveConcurrencyInterval = %v, want 5s", got)
 		}
 	})
 }
@@ -192,11 +196,8 @@ func TestDefaultRuntimeConfig_PopulatesDefaults(t *testing.T) {
 	if r.SlowWorkerThreshold != SlowWorkerThreshold {
 		t.Errorf("SlowWorkerThreshold = %f, want %f", r.SlowWorkerThreshold, SlowWorkerThreshold)
 	}
-	if r.DisableAdaptiveConcurrency {
-		t.Error("DisableAdaptiveConcurrency = true, want false")
-	}
-	if r.AdaptiveConcurrencyRecoveryWindow != DefaultAdaptiveConcurrencyRecoveryWindow {
-		t.Errorf("AdaptiveConcurrencyRecoveryWindow = %v, want %v", r.AdaptiveConcurrencyRecoveryWindow, DefaultAdaptiveConcurrencyRecoveryWindow)
+	if r.AdaptiveConcurrencyInterval != DefaultAdaptiveConcurrencyInterval {
+		t.Errorf("AdaptiveConcurrencyInterval = %v, want %v", r.AdaptiveConcurrencyInterval, DefaultAdaptiveConcurrencyInterval)
 	}
 	if r.SlowWorkerGracePeriod != SlowWorkerGrace {
 		t.Errorf("SlowWorkerGracePeriod = %v, want %v", r.SlowWorkerGracePeriod, SlowWorkerGrace)

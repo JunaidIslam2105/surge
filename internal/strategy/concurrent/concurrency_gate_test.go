@@ -7,7 +7,7 @@ import (
 )
 
 func TestAdaptiveConcurrencyGateThrottleEpisodes(t *testing.T) {
-	g := newAdaptiveConcurrencyGate(8, true, 15*time.Second)
+	g := newAdaptiveConcurrencyGate(8, 15*time.Second)
 	now := time.Unix(100, 0)
 
 	oldCap, newCap, episode := g.throttle(now, now.Add(5*time.Second))
@@ -33,7 +33,7 @@ func TestAdaptiveConcurrencyGateThrottleEpisodes(t *testing.T) {
 
 func TestAdaptiveConcurrencyGateRecoversOnePerHealthyWindow(t *testing.T) {
 	recoveryWindow := 15 * time.Second
-	g := newAdaptiveConcurrencyGate(8, true, recoveryWindow)
+	g := newAdaptiveConcurrencyGate(8, recoveryWindow)
 	now := time.Unix(200, 0)
 	g.throttle(now, now.Add(2*time.Second))
 
@@ -64,24 +64,21 @@ func TestAdaptiveConcurrencyGateRecoversOnePerHealthyWindow(t *testing.T) {
 }
 
 func TestAdaptiveConcurrencyGateCanBeDisabled(t *testing.T) {
-	g := newAdaptiveConcurrencyGate(8, false, 3*time.Second)
+	g := newAdaptiveConcurrencyGate(8, 0)
 	now := time.Unix(250, 0)
 
 	oldCap, newCap, _ := g.throttle(now, now.Add(time.Second))
 	if oldCap != 8 || newCap != 8 {
 		t.Fatalf("disabled throttle changed cap from %d to %d", oldCap, newCap)
 	}
-	if _, capBeforeWindow, recovered := g.recover(now.Add(2 * time.Second)); capBeforeWindow != 8 || recovered {
-		t.Fatalf("early disabled recovery = cap %d, recovered %v", capBeforeWindow, recovered)
-	}
-	if _, capAfterWindow, recovered := g.recover(now.Add(3 * time.Second)); capAfterWindow != 8 || !recovered {
+	if _, capAfterWindow, recovered := g.recover(now.Add(time.Second)); capAfterWindow != 8 || !recovered {
 		t.Fatalf("disabled recovery = cap %d, recovered %v; want cap 8 and recovered", capAfterWindow, recovered)
 	}
 }
 
 func TestAdaptiveConcurrencyGateRecoversOnTimerWithoutTaskCompletion(t *testing.T) {
 	const window = 20 * time.Millisecond
-	g := newAdaptiveConcurrencyGate(4, true, window)
+	g := newAdaptiveConcurrencyGate(4, window)
 	now := time.Now()
 	g.throttle(now, now)
 
@@ -109,7 +106,7 @@ func TestAdaptiveConcurrencyGateRecoversOnTimerWithoutTaskCompletion(t *testing.
 }
 
 func TestAdaptiveConcurrencyGateParksUntilBelowCapAndCancels(t *testing.T) {
-	g := newAdaptiveConcurrencyGate(3, true, 15*time.Second)
+	g := newAdaptiveConcurrencyGate(3, 15*time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -163,7 +160,7 @@ func TestAdaptiveConcurrencyGateParksUntilBelowCapAndCancels(t *testing.T) {
 
 func TestCompletionMonitorCountsParkedAndQueueIdleWorkers(t *testing.T) {
 	queue := NewTaskQueue()
-	g := newAdaptiveConcurrencyGate(3, true, 15*time.Second)
+	g := newAdaptiveConcurrencyGate(3, 15*time.Second)
 	g.parked.Store(2)
 	d := &ConcurrentDownloader{concurrencyGate: g}
 

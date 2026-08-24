@@ -236,45 +236,15 @@ We tested Surge against standard tools. Because of our connection optimization l
 
 We would love to see you benchmark Surge on your system!
 
-For repeatable Linux research measurements, run:
+To compare fixed and adaptive concurrency under deterministic throttling, run:
 
 ```bash
-./scripts/benchmark.sh
+go test ./internal/strategy/concurrent -run '^$' -bench BenchmarkThrottle -benchtime=1x -count=5
 ```
 
-The script finishes within five minutes, writes a JSON report plus Go profiles,
-and collects `strace`/`perf` telemetry when the host permits it. Compare a later
-run without changing the fixed workload:
-
-```bash
-./scripts/benchmark.sh benchmark-results/<timestamp>/report.json
-```
-
-To measure without late duplicate range requests, run
-`./scripts/benchmark.sh --disable-request-hedging`.
-
-To measure rate-limit behavior rather than healthy-path throughput, run:
-
-```bash
-./scripts/benchmark-throttle.sh
-```
-
-This runs fixed persistent-overload and burst-recovery workloads and records
-throttled request amplification, accepted concurrency, rate-limited zero-speed
-time, recovery concurrency, and final-10% duration. Compare revisions by passing
-an earlier throttle report:
-
-```bash
-./scripts/benchmark-throttle.sh --baseline benchmark-results/<timestamp>-throttle/throttle-report.json
-```
-
-For a same-binary Storm™ comparison, first capture a fixed-cap baseline and
-then compare the adaptive policy against it:
-
-```bash
-./scripts/benchmark-throttle.sh --adaptive-concurrency=false
-./scripts/benchmark-throttle.sh --baseline benchmark-results/<timestamp>-throttle/throttle-report.json
-```
+The native Go benchmark runs persistent-overload and burst-recovery workloads
+with both policies and reports elapsed time, request amplification, throttled
+requests, and peak accepted concurrency.
 
 ---
 

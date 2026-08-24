@@ -53,7 +53,7 @@ const (
 	RateLimitPenaltyDecay   = 60 * time.Second
 	RateLimitMaxRetries     = 6
 
-	DefaultAdaptiveConcurrencyRecoveryWindow = 3 * time.Second
+	DefaultAdaptiveConcurrencyInterval = 0 * time.Second
 )
 
 // ByteLimiter abstracts byte-based throttling for downloads.
@@ -86,8 +86,7 @@ type RuntimeConfig struct {
 	StallTimeout          time.Duration
 	SpeedEmaAlpha         float64
 
-	DisableAdaptiveConcurrency        bool
-	AdaptiveConcurrencyRecoveryWindow time.Duration
+	AdaptiveConcurrencyInterval time.Duration
 }
 
 const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -175,45 +174,44 @@ func (r *RuntimeConfig) GetStallTimeout() time.Duration {
 }
 
 func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
-	if r == nil || r.SpeedEmaAlpha <= 0 || r.SpeedEmaAlpha > 1 {
+	if r == nil || r.SpeedEmaAlpha < 0 || r.SpeedEmaAlpha > 1 {
 		return SpeedEMAAlpha
 	}
 	return r.SpeedEmaAlpha
 }
 
 func (r *RuntimeConfig) IsAdaptiveConcurrencyEnabled() bool {
-	return r == nil || !r.DisableAdaptiveConcurrency
+	return r.GetAdaptiveConcurrencyInterval() > 0
 }
 
-func (r *RuntimeConfig) GetAdaptiveConcurrencyRecoveryWindow() time.Duration {
-	if r == nil || r.AdaptiveConcurrencyRecoveryWindow <= 0 {
-		return DefaultAdaptiveConcurrencyRecoveryWindow
+func (r *RuntimeConfig) GetAdaptiveConcurrencyInterval() time.Duration {
+	if r == nil || r.AdaptiveConcurrencyInterval < 0 {
+		return DefaultAdaptiveConcurrencyInterval
 	}
-	return r.AdaptiveConcurrencyRecoveryWindow
+	return r.AdaptiveConcurrencyInterval
 }
 
 // DefaultRuntimeConfig returns a fully-populated runtime config for callers
 // that want engine defaults rather than relying on zero-value semantics.
 func DefaultRuntimeConfig() *RuntimeConfig {
 	return &RuntimeConfig{
-		MaxConnectionsPerDownload:         PerDownloadMax,
-		Workers:                           0,
-		UserAgent:                         DefaultUserAgent,
-		ProxyURL:                          "",
-		CustomDNS:                         "",
-		SequentialDownload:                false,
-		MinChunkSize:                      MinChunk,
-		PrecheckSafetyBuffer:              DefaultPrecheckSafetyBuffer,
-		GlobalRateLimitBps:                0,
-		DefaultDownloadRateLimitBps:       0,
-		WorkerBufferSize:                  WorkerBuffer,
-		MaxTaskRetries:                    MaxTaskRetries,
-		DialHedgeCount:                    DialHedgeCount,
-		SlowWorkerThreshold:               SlowWorkerThreshold,
-		SlowWorkerGracePeriod:             SlowWorkerGrace,
-		StallTimeout:                      StallTimeout,
-		SpeedEmaAlpha:                     SpeedEMAAlpha,
-		DisableAdaptiveConcurrency:        false,
-		AdaptiveConcurrencyRecoveryWindow: DefaultAdaptiveConcurrencyRecoveryWindow,
+		MaxConnectionsPerDownload:   PerDownloadMax,
+		Workers:                     0,
+		UserAgent:                   DefaultUserAgent,
+		ProxyURL:                    "",
+		CustomDNS:                   "",
+		SequentialDownload:          false,
+		MinChunkSize:                MinChunk,
+		PrecheckSafetyBuffer:        DefaultPrecheckSafetyBuffer,
+		GlobalRateLimitBps:          0,
+		DefaultDownloadRateLimitBps: 0,
+		WorkerBufferSize:            WorkerBuffer,
+		MaxTaskRetries:              MaxTaskRetries,
+		DialHedgeCount:              DialHedgeCount,
+		SlowWorkerThreshold:         SlowWorkerThreshold,
+		SlowWorkerGracePeriod:       SlowWorkerGrace,
+		StallTimeout:                StallTimeout,
+		SpeedEmaAlpha:               SpeedEMAAlpha,
+		AdaptiveConcurrencyInterval: DefaultAdaptiveConcurrencyInterval,
 	}
 }

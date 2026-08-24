@@ -32,18 +32,19 @@ type adaptiveConcurrencyGate struct {
 	nextIncrease  time.Time
 }
 
-func newAdaptiveConcurrencyGate(workers int, enabled bool, recoveryWindow time.Duration) *adaptiveConcurrencyGate {
+func newAdaptiveConcurrencyGate(workers int, interval time.Duration) *adaptiveConcurrencyGate {
 	if workers < 1 {
 		workers = 1
 	}
-	if recoveryWindow <= 0 {
-		recoveryWindow = types.DefaultAdaptiveConcurrencyRecoveryWindow
+	enabled := interval > 0
+	if interval <= 0 {
+		interval = types.DefaultAdaptiveConcurrencyInterval
 	}
 	return &adaptiveConcurrencyGate{
 		max:            workers,
 		cap:            workers,
 		enabled:        enabled,
-		recoveryWindow: recoveryWindow,
+		recoveryWindow: interval,
 		changed:        make(chan struct{}),
 		policyChanged:  make(chan struct{}),
 	}
