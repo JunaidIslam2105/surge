@@ -189,12 +189,6 @@ func (g *adaptiveConcurrencyGate) runRecovery(ctx context.Context, onTransition 
 	}
 }
 
-func (g *adaptiveConcurrencyGate) currentCap() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.cap
-}
-
 func (g *adaptiveConcurrencyGate) notifyLocked() {
 	close(g.changed)
 	g.changed = make(chan struct{})
