@@ -351,6 +351,67 @@ func TestConcurrentDownloader_429DoesNotTearDownWithHealthyMirror(t *testing.T) 
 	}
 }
 
+func TestConcurrentDownloader_403DoesNotCancelHealthyWorker(t *testing.T) {
+	tmpDir, cleanup := initTestState(t)
+	defer cleanup()
+
+	const fileSize = int64(128 * utils.KiB)
+	const chunkSize = fileSize / 2
+	payload := make([]byte, chunkSize)
+	healthyDone := make(chan struct{})
+	var healthyDoneOnce sync.Once
+	var forbiddenRequests atomic.Int64
+
+	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") == "bytes=0-65535" {
+			select {
+			case <-time.After(100 * time.Millisecond):
+				healthyDoneOnce.Do(func() { close(healthyDone) })
+			case <-r.Context().Done():
+				return
+			}
+		} else if forbiddenRequests.Add(1) == 1 {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		} else {
+			select {
+			case <-healthyDone:
+			case <-r.Context().Done():
+				return
+			}
+		}
+
+		w.Header().Set("Content-Length", strconv.FormatInt(chunkSize, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	destPath := filepath.Join(tmpDir, "soft403_healthy.bin")
+	if f, err := os.Create(destPath + types.IncompleteSuffix); err == nil {
+		_ = f.Close()
+	}
+
+	state := progress.New("soft403-healthy", fileSize)
+	downloader := NewConcurrentDownloader("soft403-healthy", nil, state, &types.RuntimeConfig{
+		MaxConnectionsPerDownload: 2,
+		Workers:                   2,
+		MinChunkSize:              chunkSize,
+		MaxTaskRetries:            1,
+		DialHedgeCount:            0,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := downloader.Download(ctx, server.URL, nil, nil, destPath, fileSize); err != nil {
+		t.Fatalf("Download failed after transient 403: %v", err)
+	}
+	if forbiddenRequests.Load() < 2 {
+		t.Fatal("expected the forbidden range to be retried after its soft limit")
+	}
+}
+
 func TestConcurrentDownloader_503WithRetryAfterTreatedAsThrottle(t *testing.T) {
 	tmpDir, cleanup := initTestState(t)
 	defer cleanup()

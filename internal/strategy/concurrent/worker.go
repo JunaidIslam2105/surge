@@ -20,6 +20,8 @@ var writeAtFn = func(f *os.File, b []byte, off int64) (int, error) {
 	return f.WriteAt(b, off)
 }
 
+var errSoftForbidden = errors.New("unexpected status: 403")
+
 // worker downloads tasks from the queue
 func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []string, file *os.File, queue *TaskQueue, totalSize int64, client *http.Client) error {
 	bufPtr := d.bufPool.Get().(*[]byte)
@@ -217,6 +219,13 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			delete(d.activeTasks, id)
 			d.activeMu.Unlock()
 
+			if errors.Is(lastErr, errSoftForbidden) {
+				if !d.shouldEscalate403(time.Now()) {
+					continue
+				}
+				lastErr = fmt.Errorf("%v: %w", lastErr, types.ErrPermanentHTTP)
+			}
+
 			return lastErr
 		}
 
@@ -275,6 +284,9 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 			return fmt.Errorf("server indicated success (200) but ignored range request (expected 206)")
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
+		if resp.StatusCode == http.StatusForbidden {
+			return errSoftForbidden
+		}
 		if types.IsPermanentHTTPStatus(resp.StatusCode) {
 			return fmt.Errorf("unexpected status: %d: %w", resp.StatusCode, types.ErrPermanentHTTP)
 		}

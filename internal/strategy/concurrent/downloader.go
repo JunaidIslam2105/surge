@@ -43,7 +43,18 @@ type ConcurrentDownloader struct {
 	bufPool            sync.Pool
 	Headers            map[string]string // Custom HTTP headers from browser (cookies, auth, etc.)
 	hostLimiter        *transport.HostRateLimiter
+	soft403Mu          sync.Mutex
+	soft403Exhaustions int
+	soft403Progress    int64
+	soft403Since       time.Time
 }
+
+const (
+	// Each exhaustion already includes the normal per-task retry burn. The
+	// confirmation window gives in-flight workers one final chance to advance.
+	soft403MaxExhaustions = 16
+	soft403ConfirmWindow  = 5 * time.Second
+)
 
 // NewConcurrentDownloader creates a new concurrent downloader with all required parameters
 func NewConcurrentDownloader(id string, progressCh chan<- types.DownloadEvent, progState *progress.DownloadProgress, runtime *types.RuntimeConfig) *ConcurrentDownloader {
@@ -144,6 +155,46 @@ func (d *ConcurrentDownloader) ReportMirrorError(url string) {
 	}
 }
 
+func (d *ConcurrentDownloader) shouldEscalate403(now time.Time) bool {
+	d.soft403Mu.Lock()
+	defer d.soft403Mu.Unlock()
+
+	if d.State == nil {
+		d.soft403Exhaustions++
+		return d.soft403Exhaustions >= soft403MaxExhaustions
+	}
+
+	progress := d.State.Bytes.VerifiedProgress.Load()
+	if progress != d.soft403Progress {
+		d.soft403Progress = progress
+		d.soft403Exhaustions = 0
+		d.soft403Since = time.Time{}
+	}
+
+	if d.soft403Exhaustions < soft403MaxExhaustions {
+		d.soft403Exhaustions++
+	}
+	if d.soft403Exhaustions < soft403MaxExhaustions {
+		return false
+	}
+	if d.soft403Since.IsZero() {
+		d.soft403Since = now
+		return false
+	}
+	if now.Before(d.soft403Since.Add(soft403ConfirmWindow)) {
+		return false
+	}
+
+	// Progress can race the decision above; recheck before stopping healthy peers.
+	if progress = d.State.Bytes.VerifiedProgress.Load(); progress != d.soft403Progress {
+		d.soft403Progress = progress
+		d.soft403Exhaustions = 1
+		d.soft403Since = time.Time{}
+		return false
+	}
+	return true
+}
+
 // calculateChunkSize determines optimal chunk size
 func (d *ConcurrentDownloader) calculateChunkSize(fileSize int64, numConns int) int64 {
 	// Safety check
@@ -237,6 +288,12 @@ func (d *ConcurrentDownloader) applyClientSettings(client *http.Client) {
 // Uses pre-probed metadata (file size already known)
 func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, candidateMirrors []string, activeMirrors []string, destPath string, fileSize int64) error {
 	utils.Debug("ConcurrentDownloader.Download: %s -> %s (size: %d, mirrors: %d)", rawurl, destPath, fileSize, len(activeMirrors))
+
+	d.soft403Mu.Lock()
+	d.soft403Exhaustions = 0
+	d.soft403Progress = 0
+	d.soft403Since = time.Time{}
+	d.soft403Mu.Unlock()
 
 	if d.hostLimiter == nil {
 		d.hostLimiter = transport.DefaultHostRateLimiter
