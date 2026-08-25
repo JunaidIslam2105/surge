@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -47,6 +48,9 @@ type ConcurrentDownloader struct {
 	soft403Progress    int64
 	soft403Since       time.Time
 	concurrencyGate    *adaptiveConcurrencyGate
+	// completing is set when the completion monitor has decided the download
+	// is done. Worker taskCtx cancel is then a completion signal, not a stall.
+	completing atomic.Bool
 }
 
 const (
@@ -295,6 +299,7 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	d.soft403Progress = 0
 	d.soft403Since = time.Time{}
 	d.soft403Mu.Unlock()
+	d.completing.Store(false)
 
 	if d.hostLimiter == nil {
 		d.hostLimiter = transport.DefaultHostRateLimiter
@@ -596,6 +601,9 @@ func (d *ConcurrentDownloader) runCompletionMonitor(ctx context.Context, queue *
 			}
 			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()+parked) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
 			if isDone {
+				// Mark first so a cancelled worker does not treat this as a
+				// health stall and Push after Close.
+				d.completing.Store(true)
 				// Close wakes Pop waiters; Body.Read needs the registered cancel.
 				d.activeMu.Lock()
 				for _, at := range d.activeTasks {

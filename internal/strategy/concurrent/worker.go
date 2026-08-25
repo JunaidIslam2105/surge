@@ -160,6 +160,10 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			}
 
 			if wasExternallyCancelled && lastErr != nil {
+				if d.completing.Load() {
+					lastErr = nil
+					break
+				}
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
 				utils.Debug("Worker %d: Health check cancelled task, rotating from mirror %s to %s", id, mirrors[(currentMirrorIdx+len(mirrors)-1)%len(mirrors)], mirrors[currentMirrorIdx])
 
@@ -249,6 +253,10 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		d.activeMu.Unlock()
 		if d.concurrencyGate != nil {
 			d.concurrencyGate.release()
+		}
+
+		if d.completing.Load() {
+			return nil
 		}
 
 		if throttledRequeue != nil {
@@ -513,8 +521,9 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 
 	// Clean io.EOF with offset still short of StopAt is a truncated body,
 	// not success. UnexpectedEOF stays on the read-error path above.
-	if offset < activeTask.StopAt.Load() {
-		return fmt.Errorf("early EOF: read up to %d, expected %d", offset, activeTask.StopAt.Load())
+	stopAt := activeTask.StopAt.Load()
+	if offset < stopAt {
+		return fmt.Errorf("early EOF: read up to %d, expected %d", offset, stopAt)
 	}
 
 	return nil

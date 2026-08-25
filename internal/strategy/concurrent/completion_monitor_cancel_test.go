@@ -2,10 +2,16 @@ package concurrent
 
 import (
 	"context"
+	"net/http"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/progress"
+	"github.com/SurgeDM/Surge/internal/testutil"
+	"github.com/SurgeDM/Surge/internal/transport"
+	"github.com/SurgeDM/Surge/internal/types"
 )
 
 func TestRunCompletionMonitor_DownloadedCancelsActives(t *testing.T) {
@@ -156,5 +162,86 @@ func TestRunCompletionMonitor_NilCancelDoesNotPanic(t *testing.T) {
 	case <-taskCtx.Done():
 	default:
 		t.Fatal("non-nil Cancel was not invoked")
+	}
+}
+
+func TestRunCompletionMonitor_CompletionCancelDoesNotRequeue(t *testing.T) {
+	const fileSize int64 = 1024
+	var startedOnce sync.Once
+	started := make(chan struct{})
+	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Range", "bytes 0-1023/1024")
+		w.WriteHeader(http.StatusPartialContent)
+		w.(http.Flusher).Flush()
+		startedOnce.Do(func() { close(started) })
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	outFile, err := os.CreateTemp(t.TempDir(), "completion-no-requeue-*.surge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = outFile.Close() }()
+
+	state := progress.New("completion-no-requeue", fileSize)
+	d := NewConcurrentDownloader("completion-no-requeue", nil, state, &types.RuntimeConfig{
+		MaxTaskRetries: 3,
+	})
+	d.hostLimiter = transport.NewHostRateLimiter()
+
+	queue := NewTaskQueue()
+	queue.Push(types.Task{Offset: 0, Length: fileSize})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	workerErr := make(chan error, 1)
+	go func() {
+		workerErr <- d.worker(ctx, 0, []string{server.URL}, outFile, queue, fileSize, server.Client())
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not start the tarpit GET")
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		d.activeMu.Lock()
+		at := d.activeTasks[0]
+		registered := at != nil && at.Cancel != nil
+		d.activeMu.Unlock()
+		if registered {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	state.Bytes.Downloaded.Store(fileSize)
+	monDone := make(chan struct{})
+	go func() {
+		defer close(monDone)
+		d.runCompletionMonitor(ctx, queue, fileSize, 4)
+	}()
+
+	select {
+	case err := <-workerErr:
+		if err != nil {
+			t.Fatalf("worker err=%v, want nil after completion cancel", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker hung after completion cancel (likely requeued onto the tarpit)")
+	}
+
+	select {
+	case <-monDone:
+	case <-time.After(time.Second):
+		t.Fatal("completion monitor did not exit")
+	}
+
+	if remaining := queue.DrainRemaining(); len(remaining) != 0 {
+		t.Fatalf("completion cancel requeued %d tasks: %+v", len(remaining), remaining)
 	}
 }

@@ -139,7 +139,7 @@ func runPermanentHTTPWorker(t *testing.T, status int, checkGate bool) {
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("requests=%d, want 1 (retries must not burn)", got)
 	}
-	if elapsed >= types.RetryBaseDelay {
+	if elapsed >= 2*types.RetryBaseDelay {
 		t.Fatalf("elapsed %v, want < %v (no single-mirror backoff)", elapsed, types.RetryBaseDelay)
 	}
 

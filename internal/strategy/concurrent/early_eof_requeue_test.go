@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -125,8 +126,10 @@ func TestEarlyEOF_DownloadFailsOverToHealthyMirror(t *testing.T) {
 
 	fileSize := int64(256 * utils.KiB)
 	partial := int64(64 * utils.KiB)
+	var eofHits atomic.Int64
 
 	eofServer := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		eofHits.Add(1)
 		start, end, err := parseTestByteRange(r.Header.Get("Range"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusRequestedRangeNotSatisfiable)
@@ -173,6 +176,9 @@ func TestEarlyEOF_DownloadFailsOverToHealthyMirror(t *testing.T) {
 	err := d.Download(ctx, eofServer.URL, []string{healthy.URL()}, []string{healthy.URL()}, destPath, fileSize)
 	if err != nil {
 		t.Fatalf("Download failed: %v", err)
+	}
+	if eofHits.Load() < 1 {
+		t.Fatal("expected the early-EOF primary to be contacted")
 	}
 	if got := state.Bytes.Downloaded.Load(); got != fileSize {
 		t.Errorf("Downloaded = %d, want %d", got, fileSize)
