@@ -596,6 +596,14 @@ func (d *ConcurrentDownloader) runCompletionMonitor(ctx context.Context, queue *
 			}
 			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()+parked) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
 			if isDone {
+				// Close wakes Pop waiters; Body.Read needs the registered cancel.
+				d.activeMu.Lock()
+				for _, at := range d.activeTasks {
+					if at != nil && at.Cancel != nil {
+						at.Cancel()
+					}
+				}
+				d.activeMu.Unlock()
 				queue.Close()
 				return
 			}
