@@ -5,17 +5,16 @@ import (
 	"time"
 )
 
-// detailsPaneRenderCache memoizes the focused details content. The elapsed time
+// detailsPaneRenderKey identifies focused details content. The elapsed time
 // displayed by the pane has one-second precision, so the current second is part
 // of the key; progress and mirror state are included to keep the cache correct
 // between progress events as well.
-type detailsPaneRenderCache struct {
+type detailsPaneRenderKey struct {
 	width       int
 	second      int64
 	spinner     string
 	selected    string
 	fingerprint string
-	content     string
 }
 
 func (m *RootModel) renderDetailsContentCached(d *DownloadModel, width int, spinnerView string) string {
@@ -23,25 +22,19 @@ func (m *RootModel) renderDetailsContentCached(d *DownloadModel, width int, spin
 		return ""
 	}
 	if m.detailsPaneCache == nil {
-		m.detailsPaneCache = &detailsPaneRenderCache{}
+		m.detailsPaneCache = &renderCache[detailsPaneRenderKey]{}
 	}
 
-	fingerprint := detailsFingerprint(d)
-	second := time.Now().Unix()
-	cache := m.detailsPaneCache
-	if cache.content != "" && cache.width == width && cache.second == second &&
-		cache.spinner == spinnerView && cache.selected == d.ID && cache.fingerprint == fingerprint {
-		return cache.content
+	key := detailsPaneRenderKey{
+		width: width, second: time.Now().Unix(), spinner: spinnerView,
+		selected: d.ID, fingerprint: detailsFingerprint(d),
+	}
+	if render, ok := m.detailsPaneCache.Get(key); ok {
+		return render
 	}
 
 	content := renderFocusedDetails(d, width, spinnerView)
-	cache.width = width
-	cache.second = second
-	cache.spinner = spinnerView
-	cache.selected = d.ID
-	cache.fingerprint = fingerprint
-	cache.content = content
-	return content
+	return m.detailsPaneCache.Set(key, content)
 }
 
 func detailsFingerprint(d *DownloadModel) string {

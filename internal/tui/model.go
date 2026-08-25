@@ -167,12 +167,12 @@ type RootModel struct {
 	graphRenderer          *GraphRenderer
 	// Dashboard render caches are pointers because View() has a value receiver:
 	// an inline value would be copied and the write discarded every frame.
-	chunkMapCache     *chunkMapRenderCache
+	chunkMapCache     *renderCache[chunkMapRenderKey]
 	graphBoxCache     *graphBoxCache
-	headerBoxCache    *headerBoxRenderCache
-	logBoxCache       *logBoxRenderCache
-	listBoxCache      *listBoxRenderCache
-	detailsPaneCache  *detailsPaneRenderCache
+	headerBoxCache    *renderCache[headerBoxRenderKey]
+	logBoxCache       *renderCache[logBoxRenderKey]
+	listBoxCache      *renderCache[listBoxRenderKey]
+	detailsPaneCache  *renderCache[detailsPaneRenderKey]
 	listRenderVersion uint64
 	logRenderVersion  uint64
 	lastResizeTime    time.Time
@@ -541,12 +541,12 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		SettingsFocusedPane:   1,
 		SpeedHistory:          make([]float64, GraphHistoryPoints), // 60 points of history (60s at 1s interval)
 		graphRenderer:         NewGraphRenderer(),
-		chunkMapCache:         &chunkMapRenderCache{},
+		chunkMapCache:         &renderCache[chunkMapRenderKey]{},
 		graphBoxCache:         &graphBoxCache{},
-		headerBoxCache:        &headerBoxRenderCache{},
-		logBoxCache:           &logBoxRenderCache{},
-		listBoxCache:          &listBoxRenderCache{},
-		detailsPaneCache:      &detailsPaneRenderCache{},
+		headerBoxCache:        &renderCache[headerBoxRenderKey]{},
+		logBoxCache:           &renderCache[logBoxRenderKey]{},
+		listBoxCache:          &renderCache[listBoxRenderKey]{},
+		detailsPaneCache:      &renderCache[detailsPaneRenderKey]{},
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,
@@ -783,22 +783,22 @@ func (m *RootModel) refreshThemeCaches() {
 	applyFilepickerTheme(&m.filepicker)
 	m.logoCache = ""
 	if m.headerBoxCache != nil {
-		m.headerBoxCache.render = ""
+		m.headerBoxCache.Invalidate()
 	}
 	if m.logBoxCache != nil {
-		m.logBoxCache.render = ""
+		m.logBoxCache.Invalidate()
 	}
 	if m.listBoxCache != nil {
-		m.listBoxCache.render = ""
+		m.listBoxCache.Invalidate()
 	}
 	if m.graphBoxCache != nil {
-		m.graphBoxCache.graphBoxRender = ""
+		m.graphBoxCache.Invalidate()
 	}
 	if m.chunkMapCache != nil {
-		m.chunkMapCache.render = ""
+		m.chunkMapCache.Invalidate()
 	}
 	if m.detailsPaneCache != nil {
-		m.detailsPaneCache.content = ""
+		m.detailsPaneCache.Invalidate()
 	}
 	if m.graphRenderer != nil {
 		m.graphRenderer.InvalidateCache()

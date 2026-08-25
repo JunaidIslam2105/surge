@@ -16,12 +16,16 @@ import (
 // ReportInterval, but View() is called far more often (spinner ticks), so
 // caching the box output avoids re-running axis/stats/join work on frames
 // where none of its inputs changed.
-type graphBoxCache struct {
+type graphBoxRenderKey struct {
 	width, height    int
-	speedHistory     []float64
+	resizing         bool
 	cachedTotalSpeed int64
 	totalDownloaded  int64
-	graphBoxRender   string
+}
+
+type graphBoxCache struct {
+	renderCache[graphBoxRenderKey]
+	speedHistory []float64
 }
 
 // renderGraphBox returns the network activity sparkline box layout.
@@ -37,10 +41,13 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 		m.graphBoxCache = &graphBoxCache{}
 	}
 	c := m.graphBoxCache
-	if c.graphBoxRender != "" && c.width == width && c.height == height &&
-		c.cachedTotalSpeed == m.cachedTotalSpeed && c.totalDownloaded == stats.TotalDownloaded &&
-		sameFloat64s(c.speedHistory, m.SpeedHistory) {
-		return c.graphBoxRender
+	resizing := m.isResizing()
+	key := graphBoxRenderKey{
+		width: width, height: height, resizing: resizing,
+		cachedTotalSpeed: m.cachedTotalSpeed, totalDownloaded: stats.TotalDownloaded,
+	}
+	if render, ok := c.Get(key); ok && sameFloat64s(c.speedHistory, m.SpeedHistory) {
+		return render
 	}
 
 	contentHeight := height - components.BorderFrameHeight
@@ -154,7 +161,7 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 	if hideGraphStats {
 		// No stats box - graph gets almost full width
 		graphAreaWidth, axisWidth := GetGraphAreaDimensions(width, true)
-		graphVisual := m.graphRenderer.Render(graphData, graphAreaWidth, graphContentHeight, maxSpeed, m.isResizing())
+		graphVisual := m.graphRenderer.Render(graphData, graphAreaWidth, graphContentHeight, maxSpeed, resizing)
 
 		axisStyle := lipgloss.NewStyle().Width(axisWidth).Foreground(colors.Cyan()).Align(lipgloss.Right)
 		axisLines := buildAxisLines(graphContentHeight, axisStyle)
@@ -206,7 +213,7 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 		statsBox := statsBoxStyle.Render(statsContent)
 
 		graphAreaWidth, axisWidth := GetGraphAreaDimensions(width, false)
-		graphVisual := m.graphRenderer.Render(graphData, graphAreaWidth, graphContentHeight, maxSpeed, m.isResizing())
+		graphVisual := m.graphRenderer.Render(graphData, graphAreaWidth, graphContentHeight, maxSpeed, resizing)
 
 		axisStyle := lipgloss.NewStyle().Width(axisWidth).Foreground(colors.Cyan()).Align(lipgloss.Right)
 		axisLines := buildAxisLines(graphContentHeight, axisStyle)
@@ -222,11 +229,6 @@ func (m *RootModel) renderGraphBox(width, height int, stats ViewStats) string {
 	render := renderBtopBox(PaneTitleStyle.Render(" Network Activity "), "", innerContent, width, height, colors.Cyan())
 
 	// Record the fingerprint for the next frame's fast-path check.
-	c.width = width
-	c.height = height
-	c.cachedTotalSpeed = m.cachedTotalSpeed
-	c.totalDownloaded = stats.TotalDownloaded
 	c.speedHistory = append(c.speedHistory[:0], m.SpeedHistory...)
-	c.graphBoxRender = render
-	return render
+	return c.Set(key, render)
 }

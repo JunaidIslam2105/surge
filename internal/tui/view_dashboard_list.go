@@ -7,7 +7,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
-type listBoxRenderCache struct {
+type listBoxRenderKey struct {
 	width, height                       int
 	version                             uint64
 	activeTab                           int
@@ -15,7 +15,6 @@ type listBoxRenderCache struct {
 	searchActive                        bool
 	searchQuery, searchView             string
 	logFocused                          bool
-	render                              string
 }
 
 // renderDownloadsBox generates the download list box with the top-left corner search bar string.
@@ -24,20 +23,19 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 		return ""
 	}
 	if m.listBoxCache == nil {
-		m.listBoxCache = &listBoxRenderCache{}
+		m.listBoxCache = &renderCache[listBoxRenderKey]{}
 	}
-	cache := m.listBoxCache
 	searchView := ""
 	if m.searchActive {
 		searchView = m.searchInput.View()
 	}
-	if cache.render != "" && cache.width == width && cache.height == height &&
-		cache.version == m.listRenderVersion && cache.activeTab == m.activeTab &&
-		cache.activeCount == stats.ActiveCount && cache.queuedCount == stats.QueuedCount &&
-		cache.doneCount == stats.DownloadedCount && cache.searchActive == m.searchActive &&
-		cache.searchQuery == m.searchQuery && cache.searchView == searchView &&
-		cache.logFocused == m.logFocused {
-		return cache.render
+	key := listBoxRenderKey{
+		width: width, height: height, version: m.listRenderVersion, activeTab: m.activeTab,
+		activeCount: stats.ActiveCount, queuedCount: stats.QueuedCount, doneCount: stats.DownloadedCount,
+		searchActive: m.searchActive, searchQuery: m.searchQuery, searchView: searchView, logFocused: m.logFocused,
+	}
+	if render, ok := m.listBoxCache.Get(key); ok {
+		return render
 	}
 
 	contentWidth := width - components.BorderFrameWidth
@@ -113,17 +111,5 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 	rightTitle := PaneTitleStyle.Render(" Downloads ")
 
 	render := renderBtopBox(leftTitle, rightTitle, innerContent, width, height, downloadsBorderColor)
-	cache.width = width
-	cache.height = height
-	cache.version = m.listRenderVersion
-	cache.activeTab = m.activeTab
-	cache.activeCount = stats.ActiveCount
-	cache.queuedCount = stats.QueuedCount
-	cache.doneCount = stats.DownloadedCount
-	cache.searchActive = m.searchActive
-	cache.searchQuery = m.searchQuery
-	cache.searchView = searchView
-	cache.logFocused = m.logFocused
-	cache.render = render
-	return render
+	return m.listBoxCache.Set(key, render)
 }

@@ -6,17 +6,16 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
-// chunkMapRenderCache memoizes the rendered chunk map box so the per-block
+// chunkMapRenderKey identifies a rendered chunk map box so the per-block
 // recompute (visual chunk downsample + lipgloss.Render per block) only runs
 // when the underlying bitmap actually changed, mirroring GraphRenderer.
-type chunkMapRenderCache struct {
+type chunkMapRenderKey struct {
 	selectedID string
 	version    uint64
 	paused     bool
 	totalSize  int64
 	width      int
 	height     int
-	render     string
 }
 
 // renderChunkMapBox returns the visual chunk map layout inside a btop box.
@@ -25,9 +24,9 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 	// discarded each frame; the cache must live behind a pointer like
 	// graphRenderer to survive between View() calls.
 	if m.chunkMapCache == nil {
-		m.chunkMapCache = &chunkMapRenderCache{}
+		m.chunkMapCache = &renderCache[chunkMapRenderKey]{}
 	}
-	key := chunkMapRenderCache{
+	key := chunkMapRenderKey{
 		selectedID: selected.ID,
 		version:    bitmapVersion,
 		paused:     selected.paused,
@@ -35,17 +34,8 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 		width:      width,
 		height:     height,
 	}
-	// Compare key fields only: the cached render string is not part of the
-	// identity (a fresh key always has an empty render).
-	c := m.chunkMapCache
-	if c.selectedID == key.selectedID &&
-		c.version == key.version &&
-		c.paused == key.paused &&
-		c.totalSize == key.totalSize &&
-		c.width == key.width &&
-		c.height == key.height &&
-		c.render != "" {
-		return c.render
+	if render, ok := m.chunkMapCache.Get(key); ok {
+		return render
 	}
 
 	contentWidth := width - components.BorderFrameWidth
@@ -88,7 +78,5 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 	}
 
 	render := renderBtopBox("", PaneTitleStyle.Render(" Chunk Map "), innerContent, width, height, colors.Gray())
-	key.render = render
-	*m.chunkMapCache = key
-	return render
+	return m.chunkMapCache.Set(key, render)
 }

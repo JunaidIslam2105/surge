@@ -350,7 +350,7 @@ func TestView_NetworkActivityShowsFiveAxisLabelsWhenTall(t *testing.T) {
 func TestDashboardPaneCachesInvalidateProgress(t *testing.T) {
 	m := fullBenchModel(1)
 	_ = m.View()
-	if m.listBoxCache == nil || m.listBoxCache.render == "" {
+	if m.listBoxCache == nil || !m.listBoxCache.valid {
 		t.Fatal("expected the dashboard list pane to be cached")
 	}
 
@@ -368,8 +368,8 @@ func TestDashboardPaneCachesInvalidateProgress(t *testing.T) {
 	}
 
 	_ = m.View()
-	if m.listBoxCache.version != m.listRenderVersion {
-		t.Fatalf("list pane cache version = %d, want %d after progress", m.listBoxCache.version, m.listRenderVersion)
+	if m.listBoxCache.key.version != m.listRenderVersion {
+		t.Fatalf("list pane cache version = %d, want %d after progress", m.listBoxCache.key.version, m.listRenderVersion)
 	}
 }
 

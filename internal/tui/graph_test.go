@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -112,5 +113,28 @@ func TestGraphRenderer_ResizeCache(t *testing.T) {
 
 	if out1 != out2 {
 		t.Errorf("Cached render output during resize does not match initial render!")
+	}
+}
+
+func TestGraphBoxCacheExpiresWhenResizeSettles(t *testing.T) {
+	m := fullBenchModel(1)
+	stats := m.ComputeViewStats()
+	const oldBoxWidth, newBoxWidth, boxHeight = 80, 100, 12
+
+	m.lastResizeTime = time.Time{}
+	m.renderGraphBox(oldBoxWidth, boxHeight, stats)
+	oldWidth := m.graphRenderer.lastWidth
+
+	m.lastResizeTime = time.Now()
+	m.renderGraphBox(newBoxWidth, boxHeight, stats)
+	if m.graphRenderer.lastWidth != oldWidth {
+		t.Fatal("graph renderer did not reuse its previous render during resize")
+	}
+
+	m.lastResizeTime = time.Now().Add(-time.Second)
+	m.renderGraphBox(newBoxWidth, boxHeight, stats)
+	wantWidth, _ := GetGraphAreaDimensions(newBoxWidth, newBoxWidth < MinGraphStatsWidth)
+	if m.graphRenderer.lastWidth != wantWidth {
+		t.Fatalf("settled graph width = %d, want %d", m.graphRenderer.lastWidth, wantWidth)
 	}
 }

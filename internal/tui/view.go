@@ -455,7 +455,7 @@ func (m RootModel) View() tea.View {
 	var footerContent string
 	rightFooterWidth := lipgloss.Width(rightFooter)
 	if layout.AvailableWidth < 60 {
-		footerContent = rightFooter
+		footerContent = lipgloss.NewStyle().Width(layout.AvailableWidth).Align(lipgloss.Right).Render(rightFooter)
 	} else {
 		leftFooterWidth := layout.AvailableWidth - rightFooterWidth
 		if leftFooterWidth < 0 {
