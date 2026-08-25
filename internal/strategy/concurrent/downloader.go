@@ -678,7 +678,7 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 	// 2. Collect remaining tasks from queue
 	allTasks := append(append(append([]types.Task(nil), activeRemaining...), abandoned...), queue.DrainRemaining()...)
 
-	var remainingTasks []types.Task
+	remainingTasks := make([]types.Task, 0, len(allTasks))
 	var remainingBytes int64
 	for _, task := range allTasks {
 		remainingTasks = append(remainingTasks, task)

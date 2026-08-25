@@ -472,6 +472,10 @@ func (p *Scheduler) Cancel(downloadID string) types.CancelResult {
 	p.mu.Lock()
 	ad, activeExists := p.downloads[downloadID]
 	qCfg, queuedExists := p.queued[downloadID]
+	var queuedCfg types.DownloadRecord
+	if queuedExists {
+		queuedCfg = qCfg.cfg
+	}
 	if activeExists {
 		delete(p.downloads, downloadID)
 	}
@@ -524,8 +528,8 @@ func (p *Scheduler) Cancel(downloadID string) types.CancelResult {
 			progress.CfgProgress(&ad.config).Done.Store(true)
 		}
 	} else if queuedExists {
-		result.Filename = qCfg.cfg.Filename
-		result.DestPath = resolveDestPath(&qCfg.cfg)
+		result.Filename = queuedCfg.Filename
+		result.DestPath = resolveDestPath(&queuedCfg)
 	}
 
 	return result
@@ -688,6 +692,7 @@ func (p *Scheduler) worker() {
 
 			if shouldRetryFailedDownload(p.isShuttingDown, err, qt.retries) {
 				qt.retries++
+				retryDelay := time.Second * time.Duration(qt.retries)
 				qt.inFlight = true // Keep in-flight while sending progress outside lock
 				qt.cfg = localCfg
 				p.queued[localCfg.ID] = qt
@@ -725,7 +730,7 @@ func (p *Scheduler) worker() {
 				p.mu.Unlock()
 				// ponytail: naive backoff blocks worker thread, but naturally limits retry storms
 				select {
-				case <-time.After(time.Second * time.Duration(qt.retries)):
+				case <-time.After(retryDelay):
 				case <-p.progressDone:
 					// Wake up early if shutting down
 				}
@@ -865,10 +870,14 @@ func (p *Scheduler) GetStatus(id string) *types.DownloadStatus {
 	var adRateLimitBps int64
 	var adRateLimitSet bool
 	var adState *progress.DownloadProgress
+	var queuedCfg types.DownloadRecord
 
 	p.mu.RLock()
 	ad, exists := p.downloads[id]
 	qCfg, qExists := p.queued[id]
+	if qExists {
+		queuedCfg = qCfg.cfg
+	}
 	if exists {
 		adURL = ad.config.URL
 		adFilename = ad.config.Filename
@@ -886,14 +895,14 @@ func (p *Scheduler) GetStatus(id string) *types.DownloadStatus {
 	if qExists {
 		return &types.DownloadStatus{
 			ID:           id,
-			URL:          qCfg.cfg.URL,
-			Filename:     qCfg.cfg.Filename,
-			DestPath:     resolveDestPath(&qCfg.cfg),
+			URL:          queuedCfg.URL,
+			Filename:     queuedCfg.Filename,
+			DestPath:     resolveDestPath(&queuedCfg),
 			Status:       "queued",
 			Downloaded:   0,
 			TotalSize:    0, // Metadata not yet fetched
-			RateLimit:    qCfg.cfg.RateLimit,
-			RateLimitSet: qCfg.cfg.RateLimitSet,
+			RateLimit:    queuedCfg.RateLimit,
+			RateLimitSet: queuedCfg.RateLimitSet,
 		}
 	}
 

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -136,28 +135,18 @@ func TestTUI_Startup_LoadsErroredDownloadsIntoDoneTab(t *testing.T) {
 	testID := "tui-error-id"
 	testURL := "http://example.com/error.bin"
 	testDest := filepath.Join(tmpDir, "error.bin")
-	events := make(chan types.DownloadEvent, 1)
-	mgr := orchestrator.NewLifecycleManager(nil, nil, nil)
-	done := make(chan struct{})
-	go func() {
-		mgr.StartEventWorker(events)
-		close(done)
-	}()
-	events <- types.DownloadEvent{
-		Type:       types.EventError,
-		DownloadID: testID,
-		URL:        testURL,
-		DestPath:   testDest,
-		Filename:   filepath.Base(testDest),
-		Err:        errors.New("connection reset by peer"),
-	}
-	close(events)
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("event worker did not stop")
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:       testID,
+		URL:      testURL,
+		DestPath: testDest,
+		Filename: filepath.Base(testDest),
+		Status:   "error",
+		Error:    "connection reset by peer",
+	}); err != nil {
+		t.Fatal(err)
 	}
 
+	mgr := orchestrator.NewLifecycleManager(nil, nil, nil)
 	m := InitialRootModel(1700, "test-version", service.NewLocalDownloadService(mgr), mgr, nil, false)
 
 	var found *DownloadModel
