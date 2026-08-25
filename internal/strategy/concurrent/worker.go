@@ -51,6 +51,13 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			return nil
 		}
 
+		if d.State != nil && d.State.Bytes.VerifiedProgress.Load() >= totalSize {
+			if d.concurrencyGate != nil {
+				d.concurrencyGate.release()
+			}
+			return nil
+		}
+
 		if d.State != nil {
 			d.State.ActiveWorkers.Add(1)
 		}
@@ -66,6 +73,14 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		activeTask.LastActivity.Store(now.UnixNano())
 
 		d.activeMu.Lock()
+		if d.State != nil && d.State.Bytes.VerifiedProgress.Load() >= totalSize {
+			d.activeMu.Unlock()
+			d.State.ActiveWorkers.Add(-1)
+			if d.concurrencyGate != nil {
+				d.concurrencyGate.release()
+			}
+			return nil
+		}
 		d.activeTasks[id] = activeTask
 		d.activeMu.Unlock()
 
@@ -469,11 +484,13 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 
 			now := time.Now()
 			offset += int64(readSoFar)
-
 			newlyWritten := int64(readSoFar)
 
+			offset, newlyWritten = clampWriteToStopAt(offset, newlyWritten, activeTask.StopAt.Load())
 			activeTask.CurrentOffset.Store(offset)
 			activeTask.RangeMu.Unlock()
+
+			offset, newlyWritten = clampWriteToStopAt(offset, newlyWritten, activeTask.StopAt.Load())
 			activeTask.WindowBytes.Add(newlyWritten)
 			activeTask.LastActivity.Store(now.UnixNano())
 
@@ -593,12 +610,32 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	return true
 }
 
+func clampWriteToStopAt(offset, newlyWritten, stopAt int64) (int64, int64) {
+	if offset > stopAt {
+		excess := offset - stopAt
+		offset = stopAt
+		if newlyWritten > excess {
+			newlyWritten -= excess
+		} else {
+			newlyWritten = 0
+		}
+	}
+	return offset, newlyWritten
+}
+
 func resumeOnRetryOffset(task *types.Task, activeTask *ActiveTask) {
 	current := activeTask.CurrentOffset.Load()
-	if current > task.Offset {
-		oldStart := task.Offset
-		task.Offset = current
-		task.Length = oldStart + task.Length - current
-		activeTask.Task = *task
+	origEnd := task.Offset + task.Length
+	stopAt := activeTask.StopAt.Load()
+	effectiveEnd := stopAt
+	if origEnd < effectiveEnd {
+		effectiveEnd = origEnd
 	}
+	length := effectiveEnd - current
+	if length < 0 {
+		length = 0
+	}
+	task.Offset = current
+	task.Length = length
+	activeTask.Task = *task
 }

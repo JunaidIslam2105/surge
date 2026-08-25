@@ -17,7 +17,7 @@ import (
 func TestRunCompletionMonitor_DownloadedCancelsActives(t *testing.T) {
 	const fileSize int64 = 1024
 	queue := NewTaskQueue()
-	state := progress.New("monitor-downloaded-cancel", fileSize)
+	state := progress.New("monitor-downloaded-not-key", fileSize)
 	state.Bytes.Downloaded.Store(fileSize)
 
 	taskCtx1, cancel1 := context.WithCancel(context.Background())
@@ -40,19 +40,26 @@ func TestRunCompletionMonitor_DownloadedCancelsActives(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("completion monitor did not return after Downloaded reached file size")
+		t.Fatal("completion monitor returned on Downloaded without VerifiedProgress")
+	case <-time.After(300 * time.Millisecond):
 	}
 
 	select {
 	case <-taskCtx1.Done():
+		t.Fatal("active task 0 was cancelled on Downloaded-full VP-short")
 	default:
-		t.Fatal("active task 0 was not cancelled")
 	}
 	select {
 	case <-taskCtx2.Done():
+		t.Fatal("active task 1 was cancelled on Downloaded-full VP-short")
 	default:
-		t.Fatal("active task 1 was not cancelled")
+	}
+
+	monCancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("completion monitor did not exit after parent cancel")
 	}
 }
 
@@ -93,16 +100,23 @@ func TestRunCompletionMonitor_IdleCompletionStillCloses(t *testing.T) {
 	}
 }
 
-func TestRunCompletionMonitor_VerifiedProgressIsNotCompletionKey(t *testing.T) {
+func TestRunCompletionMonitor_VerifiedProgressCancelsActivesAndDrains(t *testing.T) {
 	const fileSize int64 = 1024
 	queue := NewTaskQueue()
-	state := progress.New("monitor-vp-not-done", fileSize)
+	queue.Push(types.Task{Offset: 0, Length: 100})
+	queue.Push(types.Task{Offset: 100, Length: 100})
+	state := progress.New("monitor-vp-done", fileSize)
 	state.Bytes.VerifiedProgress.Store(fileSize)
 	state.Bytes.Downloaded.Store(0)
 
+	taskCtx1, cancel1 := context.WithCancel(context.Background())
+	taskCtx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel1()
+	defer cancel2()
+
 	d := &ConcurrentDownloader{
 		State:       state,
-		activeTasks: map[int]*ActiveTask{},
+		activeTasks: map[int]*ActiveTask{0: {Cancel: cancel1}, 1: {Cancel: cancel2}},
 	}
 
 	monCtx, monCancel := context.WithCancel(context.Background())
@@ -110,20 +124,83 @@ func TestRunCompletionMonitor_VerifiedProgressIsNotCompletionKey(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		d.runCompletionMonitor(monCtx, queue, fileSize, 2)
+		d.runCompletionMonitor(monCtx, queue, fileSize, 4)
 	}()
 
 	select {
 	case <-done:
-		t.Fatal("completion monitor returned on VerifiedProgress without Downloaded")
+	case <-time.After(2 * time.Second):
+		t.Fatal("completion monitor did not return after VerifiedProgress reached file size")
+	}
+
+	select {
+	case <-taskCtx1.Done():
+	default:
+		t.Fatal("active task 0 was not cancelled")
+	}
+	select {
+	case <-taskCtx2.Done():
+	default:
+		t.Fatal("active task 1 was not cancelled")
+	}
+	if remaining := queue.DrainRemaining(); len(remaining) != 0 {
+		t.Fatalf("VP path left %d queued tasks: %+v", len(remaining), remaining)
+	}
+	if !d.completing.Load() {
+		t.Fatal("completing was not set on the VP path")
+	}
+}
+
+func TestRunCompletionMonitor_IdleVPShortDoesNotComplete(t *testing.T) {
+	const fileSize int64 = 1024
+	queue := NewTaskQueue()
+	state := progress.New("monitor-idle-vp-short", fileSize)
+
+	d := &ConcurrentDownloader{
+		State:       state,
+		activeTasks: map[int]*ActiveTask{},
+	}
+
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		_, _ = queue.Pop()
+	}()
+	deadline := time.Now().Add(time.Second)
+	for queue.IdleWorkers() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if queue.IdleWorkers() != 1 {
+		t.Fatal("queue worker did not become idle")
+	}
+
+	monCtx, monCancel := context.WithCancel(context.Background())
+	defer monCancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.runCompletionMonitor(monCtx, queue, fileSize, 1)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("completion monitor returned while idle with VP below file size")
 	case <-time.After(300 * time.Millisecond):
 	}
 
 	monCancel()
 	select {
+	case <-workerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("idle waiter did not unblock after parent cancel")
+	}
+	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("completion monitor did not exit after parent cancel")
+	}
+	if d.completing.Load() {
+		t.Fatal("parent cancel must not set completing")
 	}
 }
 
@@ -131,7 +208,7 @@ func TestRunCompletionMonitor_NilCancelDoesNotPanic(t *testing.T) {
 	const fileSize int64 = 1024
 	queue := NewTaskQueue()
 	state := progress.New("monitor-nil-cancel", fileSize)
-	state.Bytes.Downloaded.Store(fileSize)
+	state.Bytes.VerifiedProgress.Store(fileSize)
 
 	taskCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -219,7 +296,7 @@ func TestRunCompletionMonitor_CompletionCancelDoesNotRequeue(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	state.Bytes.Downloaded.Store(fileSize)
+	state.Bytes.VerifiedProgress.Store(fileSize)
 	monDone := make(chan struct{})
 	go func() {
 		defer close(monDone)

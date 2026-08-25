@@ -28,6 +28,7 @@ func TestHandlePause_CompletionBoundary(t *testing.T) {
 
 	queue := NewTaskQueue()
 	// No tasks in queue means remainingBytes == 0
+	state.Bytes.VerifiedProgress.Store(fileSize)
 
 	err := downloader.handlePause(destPath, fileSize, queue, nil)
 	if err != nil {
@@ -288,6 +289,7 @@ func TestHandlePause_CompletionFinalization(t *testing.T) {
 
 	queue := NewTaskQueue()
 	// No tasks left
+	progState.Bytes.VerifiedProgress.Store(fileSize)
 
 	err := downloader.handlePause(destPath, fileSize, queue, nil)
 	if err != nil {
