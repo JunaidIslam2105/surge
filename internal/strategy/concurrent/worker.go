@@ -219,6 +219,13 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				break
 			}
 
+			// Permanent HTTP (404/401/410/416): stop without burning
+			// GetMaxTaskRetries or the single-mirror backoff. 403 stays
+			// errSoftForbidden so confirmation-then-escalate still runs.
+			if types.IsPermanentHTTPError(lastErr) {
+				break
+			}
+
 			genericAttempt++
 			if genericAttempt >= maxRetries {
 				break
