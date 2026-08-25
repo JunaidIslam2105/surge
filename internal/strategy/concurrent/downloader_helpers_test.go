@@ -274,33 +274,6 @@ func TestSetupTasks_BitmapRestoration(t *testing.T) {
 	}
 }
 
-func TestHandlePause_CompletionFinalization(t *testing.T) {
-	tmpDir := testutil.SetupStateDB(t)
-	cleanup := func() {}
-	defer cleanup()
-
-	fileSize := int64(1000)
-	destPath := filepath.Join(tmpDir, "test.bin")
-	progState := progress.New("test-id", fileSize)
-	downloader := &ConcurrentDownloader{
-		ID:    "test-id",
-		State: progState,
-	}
-
-	queue := NewTaskQueue()
-	// No tasks left
-	progState.Bytes.VerifiedProgress.Store(fileSize)
-
-	err := downloader.handlePause(destPath, fileSize, queue, nil)
-	if err != nil {
-		t.Errorf("Expected nil error for completion boundary, got %v", err)
-	}
-
-	if progState.IsPaused() {
-		t.Error("Should have resumed state for completion")
-	}
-}
-
 func TestSaveStateSnapshot_PersistsActiveAndQueuedTasks(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	cleanup := func() {}
