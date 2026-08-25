@@ -511,6 +511,12 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 		}
 	}
 
+	// Clean io.EOF with offset still short of StopAt is a truncated body,
+	// not success. UnexpectedEOF stays on the read-error path above.
+	if offset < activeTask.StopAt.Load() {
+		return fmt.Errorf("early EOF: read up to %d, expected %d", offset, activeTask.StopAt.Load())
+	}
+
 	return nil
 }
 
