@@ -54,6 +54,10 @@ func newAdaptiveConcurrencyGate(workers int, interval time.Duration) *adaptiveCo
 func (g *adaptiveConcurrencyGate) acquire(ctx context.Context) bool {
 	for {
 		g.mu.Lock()
+		if ctx.Err() != nil {
+			g.mu.Unlock()
+			return false
+		}
 		if g.admitted < g.cap {
 			g.admitted++
 			g.mu.Unlock()

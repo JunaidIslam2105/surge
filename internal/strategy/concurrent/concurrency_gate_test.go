@@ -158,6 +158,19 @@ func TestAdaptiveConcurrencyGateParksUntilBelowCapAndCancels(t *testing.T) {
 	g.release()
 }
 
+func TestAdaptiveConcurrencyGateRejectsCanceledContext(t *testing.T) {
+	g := newAdaptiveConcurrencyGate(1, time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if g.acquire(ctx) {
+		t.Fatal("acquire succeeded with canceled context")
+	}
+	if g.admitted != 0 {
+		t.Fatalf("admitted = %d, want 0", g.admitted)
+	}
+}
+
 func TestCompletionMonitorCountsParkedAndQueueIdleWorkers(t *testing.T) {
 	queue := NewTaskQueue()
 	g := newAdaptiveConcurrencyGate(3, 15*time.Second)
