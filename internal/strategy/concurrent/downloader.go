@@ -486,18 +486,22 @@ func (d *ConcurrentDownloader) getEffectiveSizeForWorkers(fileSize int64, savedS
 func (d *ConcurrentDownloader) setupTasks(destPath string, fileSize, chunkSize int64, numConns int, outFile *os.File, savedState *types.DownloadRecord, isResume bool) ([]types.Task, error) {
 	if isResume {
 		if d.State != nil {
-			d.State.Bytes.Downloaded.Store(savedState.Downloaded)
-			d.State.Bytes.VerifiedProgress.Store(savedState.Downloaded)
 			d.State.SetSavedElapsed(time.Duration(savedState.Elapsed))
-			d.State.SyncSessionStart()
 
 			if len(savedState.ChunkBitmap) > 0 && savedState.ActualChunkSize > 0 {
 				d.State.RestoreBitmap(savedState.ChunkBitmap, savedState.ActualChunkSize)
 				d.State.RecalculateProgress(savedState.Tasks)
-				d.State.Bytes.Downloaded.Store(d.State.Bytes.VerifiedProgress.Load())
-				d.State.SyncSessionStart()
+				downloaded := savedState.Downloaded
+				if vp := d.State.Bytes.VerifiedProgress.Load(); downloaded < vp {
+					downloaded = vp
+				}
+				d.State.Bytes.Downloaded.Store(downloaded)
 				utils.Debug("Restored chunk map: size %d", savedState.ActualChunkSize)
+			} else {
+				d.State.Bytes.Downloaded.Store(savedState.Downloaded)
+				d.State.Bytes.VerifiedProgress.Store(savedState.Downloaded)
 			}
+			d.State.SyncSessionStart()
 		}
 		utils.Debug("Resuming from saved state: %d tasks, %d bytes downloaded", len(savedState.Tasks), savedState.Downloaded)
 		return savedState.Tasks, nil
