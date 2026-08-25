@@ -28,6 +28,33 @@ func TestRetryStopAt_ClampedToActiveStopAt(t *testing.T) {
 	}
 }
 
+func TestClampWriteToStopAt(t *testing.T) {
+	tests := []struct {
+		name         string
+		offset       int64
+		newlyWritten int64
+		stopAt       int64
+		wantOffset   int64
+		wantWritten  int64
+	}{
+		{name: "within bound", offset: 40, newlyWritten: 10, stopAt: 50, wantOffset: 40, wantWritten: 10},
+		{name: "exact bound", offset: 50, newlyWritten: 10, stopAt: 50, wantOffset: 50, wantWritten: 10},
+		{name: "overshoot reduces written", offset: 60, newlyWritten: 20, stopAt: 50, wantOffset: 50, wantWritten: 10},
+		{name: "overshoot equals excess", offset: 60, newlyWritten: 10, stopAt: 50, wantOffset: 50, wantWritten: 0},
+		{name: "overshoot zeros written", offset: 60, newlyWritten: 5, stopAt: 50, wantOffset: 50, wantWritten: 0},
+		{name: "zero write overshoot", offset: 70, newlyWritten: 0, stopAt: 50, wantOffset: 50, wantWritten: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotOffset, gotWritten := clampWriteToStopAt(tt.offset, tt.newlyWritten, tt.stopAt)
+			if gotOffset != tt.wantOffset || gotWritten != tt.wantWritten {
+				t.Fatalf("clampWriteToStopAt(%d, %d, %d)=(%d, %d), want (%d, %d)",
+					tt.offset, tt.newlyWritten, tt.stopAt, gotOffset, gotWritten, tt.wantOffset, tt.wantWritten)
+			}
+		})
+	}
+}
+
 func TestResumeOnRetryOffset_NoProgressClampsToStopAt(t *testing.T) {
 	task := types.Task{Offset: 10, Length: 80}
 	active := &ActiveTask{Task: task}

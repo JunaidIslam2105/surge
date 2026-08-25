@@ -14,7 +14,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
-func TestRunCompletionMonitor_DownloadedCancelsActives(t *testing.T) {
+func TestRunCompletionMonitor_DownloadedDoesNotCancelActives(t *testing.T) {
 	const fileSize int64 = 1024
 	queue := NewTaskQueue()
 	state := progress.New("monitor-downloaded-not-key", fileSize)

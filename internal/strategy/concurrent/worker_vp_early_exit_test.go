@@ -38,6 +38,9 @@ func TestWorker_VPEarlyExitReleasesGateWithoutInsert(t *testing.T) {
 	if got := state.ActiveWorkers.Load(); got != 0 {
 		t.Fatalf("ActiveWorkers=%d, want 0", got)
 	}
+	if remaining := queue.DrainRemaining(); len(remaining) != 0 {
+		t.Fatalf("popped task was pushed back: %+v", remaining)
+	}
 
 	acqCtx, acqCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer acqCancel()
