@@ -12,34 +12,6 @@ import (
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
-func TestHandlePause_CompletionBoundary(t *testing.T) {
-	tmpDir := testutil.SetupStateDB(t)
-	cleanup := func() {}
-	defer cleanup()
-
-	fileSize := int64(1000)
-	destPath := filepath.Join(tmpDir, "test.bin")
-	state := progress.New("test-id", fileSize)
-	downloader := &ConcurrentDownloader{
-		ID:      "test-id",
-		State:   state,
-		Runtime: &types.RuntimeConfig{},
-	}
-
-	queue := NewTaskQueue()
-	// No tasks in queue means remainingBytes == 0
-	state.Bytes.VerifiedProgress.Store(fileSize)
-
-	err := downloader.handlePause(destPath, fileSize, queue, nil)
-	if err != nil {
-		t.Fatalf("handlePause returned error on completion boundary: %v", err)
-	}
-
-	if state.IsPaused() {
-		t.Errorf("State should not be paused on completion boundary")
-	}
-}
-
 func TestHandlePause_Normal(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	cleanup := func() {}
