@@ -155,17 +155,22 @@ jobs:
           binary=$(find dist -type f -name surge -path '*linux*amd64*' -perm -111 -print -quit)
           test -n "$binary"
           curl -L --fail --retry 3 --output appimagetool \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl -L --fail --retry 3 --output runtime-x86_64 \
+            https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          printf '%s\n' \
+            'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool' \
+            '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64' \
+            | sha256sum --check --strict
           chmod +x appimagetool
           ./scripts/package-appimage.sh "$binary" AppDir
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run \
+            --runtime-file runtime-x86_64 \
             -u 'gh-releases-zsync|SurgeDM|Surge|latest|Surge_*_linux_x86_64.AppImage.zsync' \
             AppDir "Surge_${GITHUB_REF_NAME#v}_linux_x86_64.AppImage"
 
-      - name: Verify and upload AppImage
+      - name: Verify AppImage
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           appimage="Surge_${GITHUB_REF_NAME#v}_linux_x86_64.AppImage"
@@ -174,4 +179,12 @@ jobs:
           test -x squashfs-root/AppRun
           test -f squashfs-root/surge.desktop
           test -f squashfs-root/surge.png
-          gh release upload "$GITHUB_REF_NAME" "$appimage" "$appimage.zsync"
+
+      - name: Upload AppImage
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          appimage="Surge_${GITHUB_REF_NAME#v}_linux_x86_64.AppImage"
+          gh release upload "$GITHUB_REF_NAME" "$appimage" "$appimage.zsync" --clobber
