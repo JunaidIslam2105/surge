@@ -56,6 +56,57 @@ func TestSettingsFloatResilience(t *testing.T) {
 	}
 }
 
+func TestDurationSettingsDeclareAnEditorUnit(t *testing.T) {
+	settings := config.DefaultSettings()
+	metadata := config.GetSettingsMetadata()
+
+	for category, settingMetadata := range metadata {
+		for _, meta := range settingMetadata {
+			if meta.Type != config.TypeDuration {
+				continue
+			}
+
+			setting := settings.FindSetting(category, meta.Key)
+			if setting == nil {
+				t.Fatalf("duration setting %q is missing from category %q", meta.Key, category)
+			}
+			var want string
+			switch meta.Unit {
+			case config.UnitSeconds:
+				setting.Value, want = 7*time.Second, "7"
+			case config.UnitMinutes:
+				setting.Value, want = 2*time.Minute, "2"
+			default:
+				t.Errorf("duration setting %q has unsupported editor unit %q", meta.Key, meta.Unit)
+				continue
+			}
+			if got := settingUnitSuffix(meta.Unit); got == "" {
+				t.Errorf("duration setting %q has no display suffix", meta.Key)
+			}
+
+			if got := formatSettingValueForEdit(setting.Value, meta.Type, meta.Unit, meta.Key, false); got != want {
+				t.Errorf("duration setting %q edit value = %q, want %q", meta.Key, got, want)
+			}
+		}
+	}
+}
+
+func TestDurationSettingsCanUseMinutesInTheEditor(t *testing.T) {
+	m := &RootModel{Settings: config.DefaultSettings()}
+	setting := m.Settings.Performance.SlowWorkerGracePeriod
+	setting.Unit = config.UnitMinutes
+
+	if got := formatSettingValueForEdit(2*time.Minute, setting.Type, setting.Unit, setting.Key, false); got != "2" {
+		t.Fatalf("minute duration edit value = %q, want %q", got, "2")
+	}
+	if err := m.setSettingValue("Performance", setting.Key, "2"); err != nil {
+		t.Fatalf("setSettingValue failed: %v", err)
+	}
+	if got := config.Resolve[time.Duration](setting); got != 2*time.Minute {
+		t.Errorf("minute duration = %v, want %v", got, 2*time.Minute)
+	}
+}
+
 func TestSetSettingValueConversions(t *testing.T) {
 	m := &RootModel{
 		Settings: config.DefaultSettings(),

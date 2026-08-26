@@ -448,6 +448,7 @@ type SettingMeta struct {
 	Label           string      // Human-readable label
 	Description     string      // Help text displayed in right pane
 	Type            SettingType // "string", "int", "int64", "bool", "duration", "float64", "auth_token", "link"
+	Unit            SettingUnit // Display and input unit used by the UI
 	RequiresRestart bool        // Whether changing this setting requires an application restart
 }
 
@@ -470,6 +471,7 @@ func GetSettingsMetadata() map[string][]SettingMeta {
 					Label:           set.Label,
 					Description:     set.Description,
 					Type:            set.Type,
+					Unit:            set.Unit,
 					RequiresRestart: set.NeedsRestart,
 				})
 			}
@@ -782,6 +784,7 @@ func DefaultSettings() *Settings {
 				Label:        "Min Chunk Size",
 				Description:  "Minimum download chunk size in MiB (e.g., 2).",
 				Type:         TypeInt64,
+				Unit:         UnitMegabytes,
 				DefaultValue: int64(2 * utils.MiB),
 				Value:        int64(2 * utils.MiB),
 				ValidateFunc: func(val any) error {
@@ -801,6 +804,7 @@ func DefaultSettings() *Settings {
 				Label:        "Worker Buffer Size",
 				Description:  "I/O buffer size per worker in KiB (e.g., 512).",
 				Type:         TypeInt,
+				Unit:         UnitKilobytes,
 				DefaultValue: int(512 * utils.KiB),
 				Value:        int(512 * utils.KiB),
 				ValidateFunc: func(val any) error {
@@ -819,6 +823,7 @@ func DefaultSettings() *Settings {
 				Label:        "Dial Hedge Count",
 				Description:  "Number of extra connections to dial pre-emptively; 0 disables connection prewarming (0-16).",
 				Type:         TypeInt,
+				Unit:         UnitConnections,
 				DefaultValue: 4,
 				Value:        4,
 				ValidateFunc: func(val any) error {
@@ -837,6 +842,7 @@ func DefaultSettings() *Settings {
 				Label:        "Global Rate Limit",
 				Description:  "Cap total download bandwidth (e.g., 10MB/s, 80Mbps). Use 0 to disable.",
 				Type:         TypeString,
+				Unit:         UnitMegabytesPerSecond,
 				DefaultValue: "0",
 				Value:        "0",
 				ValidateFunc: func(val any) error {
@@ -849,6 +855,7 @@ func DefaultSettings() *Settings {
 				Label:        "Default Download Rate Limit",
 				Description:  "Default cap per download (e.g., 2MB/s). Use 0 to disable.",
 				Type:         TypeString,
+				Unit:         UnitMegabytesPerSecond,
 				DefaultValue: "0",
 				Value:        "0",
 				ValidateFunc: func(val any) error {
@@ -863,6 +870,7 @@ func DefaultSettings() *Settings {
 				Label:        "Max Task Retries",
 				Description:  "Number of times to retry a failed chunk before giving up.",
 				Type:         TypeInt,
+				Unit:         UnitRetries,
 				DefaultValue: 3,
 				Value:        3,
 				ValidateFunc: func(val any) error {
@@ -881,6 +889,7 @@ func DefaultSettings() *Settings {
 				Label:        "Slow Worker Threshold",
 				Description:  "Restart workers slower than this fraction of mean speed (0.0-1.0, 0 disables relative slow-worker checks).",
 				Type:         TypeFloat64,
+				Unit:         UnitRatio,
 				DefaultValue: 0.3,
 				Value:        0.3,
 				ValidateFunc: func(val any) error {
@@ -906,6 +915,7 @@ func DefaultSettings() *Settings {
 				Label:        "Slow Worker Grace",
 				Description:  "Grace period before checking worker speed (e.g., 5s, 0 checks immediately).",
 				Type:         TypeDuration,
+				Unit:         UnitSeconds,
 				DefaultValue: 5 * time.Second,
 				Value:        5 * time.Second,
 				ValidateFunc: func(val any) error {
@@ -931,6 +941,7 @@ func DefaultSettings() *Settings {
 				Label:        "Stall Timeout",
 				Description:  "Restart workers with no data for this duration (e.g., 5s, 0 disables stall detection).",
 				Type:         TypeDuration,
+				Unit:         UnitSeconds,
 				DefaultValue: 3 * time.Second,
 				Value:        3 * time.Second,
 				ValidateFunc: func(val any) error {
@@ -956,6 +967,7 @@ func DefaultSettings() *Settings {
 				Label:        "Speed EMA Alpha",
 				Description:  "Exponential moving average smoothing factor (0.0-1.0, 0 disables smoothing).",
 				Type:         TypeFloat64,
+				Unit:         UnitRatio,
 				DefaultValue: 0.3,
 				Value:        0.3,
 				ValidateFunc: func(val any) error {
@@ -981,6 +993,7 @@ func DefaultSettings() *Settings {
 				Label:        "Adaptive Concurrency Interval",
 				Description:  "Halve connections when throttled, add one connection per interval, and split small tail ranges among idle workers on healthy hosts; 0 disables adaptation (0s or 1s-60s).",
 				Type:         TypeDuration,
+				Unit:         UnitSeconds,
 				DefaultValue: types.DefaultAdaptiveConcurrencyInterval,
 				Value:        types.DefaultAdaptiveConcurrencyInterval,
 				ValidateFunc: func(val any) error {

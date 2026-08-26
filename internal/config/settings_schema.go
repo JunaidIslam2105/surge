@@ -19,12 +19,29 @@ const (
 	TypeCustomCategoryAdd SettingType = "custom_category_add"
 )
 
+// SettingUnit describes the unit used by the settings UI to display and edit a value.
+// It is independent of SettingType, which describes the value's stored Go type.
+type SettingUnit string
+
+const (
+	UnitNone               SettingUnit = ""
+	UnitSeconds            SettingUnit = "seconds"
+	UnitMinutes            SettingUnit = "minutes"
+	UnitKilobytes          SettingUnit = "kilobytes"
+	UnitMegabytes          SettingUnit = "megabytes"
+	UnitMegabytesPerSecond SettingUnit = "megabytes_per_second"
+	UnitConnections        SettingUnit = "connections"
+	UnitRetries            SettingUnit = "retries"
+	UnitRatio              SettingUnit = "ratio"
+)
+
 type Setting struct {
 	Key          string      `json:"key"`
 	Label        string      `json:"label"`
 	Description  string      `json:"description"`
 	NeedsRestart bool        `json:"needs_restart"`
 	Type         SettingType `json:"type"`
+	Unit         SettingUnit `json:"unit"`
 
 	Value        any `json:"value"`
 	DefaultValue any `json:"default_value"`
