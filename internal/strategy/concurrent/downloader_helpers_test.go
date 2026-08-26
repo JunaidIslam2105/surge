@@ -352,3 +352,53 @@ func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
 		t.Errorf("Expected SharedMaxOffset to be cleared, but it was not nil")
 	}
 }
+
+func TestSaveStateSnapshot_ColdResumeTLS(t *testing.T) {
+	tmpDir := testutil.SetupStateDB(t)
+	cleanup := func() {}
+	defer cleanup()
+
+	fileSize := int64(1000)
+	destPath := filepath.Join(tmpDir, "tls.bin")
+	state := progress.New("tls-id", fileSize)
+	downloader := &ConcurrentDownloader{
+		ID:    "tls-id",
+		State: state,
+		Runtime: &types.RuntimeConfig{
+			TLSCAFile:   "my-ca.pem",
+			TLSInsecure: true,
+		},
+		URL:         "https://example.com/tls.bin",
+		activeTasks: make(map[int]*ActiveTask),
+	}
+
+	if err := store.AddToMasterList(types.DownloadRecord{
+		ID:        "tls-id",
+		URL:       "https://example.com/tls.bin",
+		DestPath:  destPath,
+		Status:    "downloading",
+		TotalSize: fileSize,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	queue := NewTaskQueue()
+	queue.Push(types.Task{Offset: 500, Length: 500})
+
+	err := downloader.saveStateSnapshot(destPath, fileSize, queue, nil, false)
+	if err != nil {
+		t.Fatalf("saveStateSnapshot failed: %v", err)
+	}
+
+	saved, err := store.LoadState(downloader.URL, destPath)
+	if err != nil {
+		t.Fatalf("failed to load saved state: %v", err)
+	}
+
+	if saved.TLSCAFile != "my-ca.pem" {
+		t.Errorf("Expected TLSCAFile to be 'my-ca.pem', got %q", saved.TLSCAFile)
+	}
+	if !saved.TLSInsecure {
+		t.Errorf("Expected TLSInsecure to be true")
+	}
+}

@@ -309,7 +309,11 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 		d.State.SetCancelFunc(cancel)
 	}
 
-	client, httpTransport := d.setupNetwork()
+	client, httpTransport, err := d.setupNetwork()
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to setup network: %w", err)
+	}
 	// Release transport back to the pool ONLY after all helpers and workers are joined (LIFO: runs last)
 	defer transport.DefaultNetworkPool.ReleaseTransport(httpTransport)
 
@@ -432,17 +436,23 @@ func (d *ConcurrentDownloader) initMirrorStatus(rawurl string, candidateMirrors 
 	d.State.SetMirrors(statuses)
 }
 
-func (d *ConcurrentDownloader) setupNetwork() (*http.Client, *http.Transport) {
-	var proxyURL, customDNS string
+func (d *ConcurrentDownloader) setupNetwork() (*http.Client, *http.Transport, error) {
+	var proxyURL, customDNS, tlsCAFile string
+	var tlsInsecure bool
 	if d.Runtime != nil {
 		proxyURL = d.Runtime.ProxyURL
 		customDNS = d.Runtime.CustomDNS
+		tlsCAFile = d.Runtime.TLSCAFile
+		tlsInsecure = d.Runtime.TLSInsecure
 	}
 
-	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, types.PoolMaxConnsPerHost)
+	httpTransport, err := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, types.PoolMaxConnsPerHost, tlsCAFile, tlsInsecure)
+	if err != nil {
+		return nil, nil, err
+	}
 	client := &http.Client{Transport: httpTransport}
 	d.applyClientSettings(client)
-	return client, httpTransport
+	return client, httpTransport, nil
 }
 
 func (d *ConcurrentDownloader) getWorkerMirrors(activeMirrors []string) []string {
@@ -708,6 +718,8 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		RateLimitSet:    rateLimitSet,
 		Workers:         d.Runtime.Workers,
 		MinChunkSize:    d.Runtime.MinChunkSize,
+		TLSCAFile:       d.Runtime.TLSCAFile,
+		TLSInsecure:     d.Runtime.TLSInsecure,
 	}
 
 	if emitPauseEvent {

@@ -416,6 +416,8 @@ func enqueueDownloadRequest(r *http.Request, service service.DownloadService, re
 			SkipApproval:       req.SkipApproval,
 			Workers:            req.Workers,
 			MinChunkSize:       req.MinChunkSize,
+			TLSCAFile:          globalTLSCAFile,
+			TLSInsecure:        globalInsecureTLS,
 		}
 		// Use the application-level enqueue context instead of r.Context().
 		// The HTTP request context is cancelled when the handler returns or
@@ -511,6 +513,8 @@ func processDownloads(urls []string, outputDir string, port int) int {
 			Path:               outPath,
 			Mirrors:            mirrors,
 			IsExplicitCategory: isExplicit,
+			TLSCAFile:          globalTLSCAFile,
+			TLSInsecure:        globalInsecureTLS,
 		})
 		if err != nil {
 			recordPreflightDownloadError(url, outPath, err)

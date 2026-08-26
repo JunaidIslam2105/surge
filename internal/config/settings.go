@@ -64,6 +64,10 @@ type NetworkSettings struct {
 	DialHedgeCount            *Setting `json:"dial_hedge_count"`
 	GlobalRateLimit           *Setting `json:"global_rate_limit"`
 	DefaultDownloadRateLimit  *Setting `json:"default_download_rate_limit"`
+
+	// These are runtime-only overrides injected from CLI flags, not persisted in JSON
+	TLSCAFile   string `json:"-"`
+	TLSInsecure bool   `json:"-"`
 }
 
 type PerformanceSettings struct {
@@ -1294,6 +1298,8 @@ func (s *Settings) ToRuntimeConfig() *types.RuntimeConfig {
 		SlowWorkerGracePeriod:       Resolve[time.Duration](s.Performance.SlowWorkerGracePeriod),
 		StallTimeout:                Resolve[time.Duration](s.Performance.StallTimeout),
 		SpeedEmaAlpha:               Resolve[float64](s.Performance.SpeedEmaAlpha),
+		TLSCAFile:                   s.Network.TLSCAFile,
+		TLSInsecure:                 s.Network.TLSInsecure,
 	}
 }
 

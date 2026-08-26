@@ -58,10 +58,13 @@ The `service` command allows you to manage Surge as a background daemon that sta
 
 These are persistent flags and can be used with all commands.
 
-| Flag                 | Description                            |
-| :------------------- | :------------------------------------- |
-| `--host <host:port>` | Target server for TUI and CLI actions. |
-| `--token <token>`    | Bearer token used for API requests.    |
+| Flag                      | Description                                                                    |
+| :------------------------ | :----------------------------------------------------------------------------- |
+| `--host <host:port>`      | Target server for TUI and CLI actions.                                         |
+| `--token <token>`         | Bearer token used for API requests.                                            |
+| `--insecure-http`         | Allow plain HTTP for non-loopback remote targets.                              |
+| `--insecure-tls`          | Skip TLS certificate verification for all connections (downloads + API).      |
+| `--tls-ca-file <path>`    | PEM bundle to append to the system CA store for all connections (downloads + API). |
 
 ## Environment Variables
 
@@ -77,3 +80,54 @@ emulator. Install the bundled font and set your terminal to
 `JetBrainsMono Nerd Font Mono`.
 
 See [FONTS.md](FONTS.md) for install steps and licensing details.
+
+## TLS / Certificate Troubleshooting
+
+Surge uses the operating-system CA trust store for all TLS connections
+(probing, downloading, and the remote API). No CA certificates are bundled.
+
+### Missing root certificate (e.g. Alpine Linux + Microsoft CDN)
+
+Some CDNs use root certificates that are not yet included in every OS trust
+store. A common example is `download.microsoft.com`, which chains to
+`Microsoft TLS RSA Root G2` — a root absent from Alpine Linux's default
+`ca-certificates` package.
+
+**Preferred fix — supply the missing root:**
+
+```sh
+# 1. Obtain the PEM for the missing root (example: Microsoft TLS RSA Root G2)
+curl -sO https://www.microsoft.com/pkiops/certs/Microsoft%20TLS%20RSA%20Root%20G2.crt
+openssl x509 -inform DER -out ms-root.pem -in 'Microsoft TLS RSA Root G2.crt'
+
+# 2. Pass it to Surge
+surge --tls-ca-file ms-root.pem add <url>
+```
+
+The flag appends the supplied PEM to the system pool, so all other hosts
+continue to be verified normally.
+
+**Alternative — skip verification (not recommended for production):**
+
+```sh
+surge --insecure-tls add <url>
+```
+
+> [!WARNING]
+> `--insecure-tls` disables certificate verification entirely and exposes
+> the connection to man-in-the-middle attacks. Use only for local testing
+> or when the risk is explicitly accepted.
+
+### Docker / Alpine images
+
+The official Surge container image installs Alpine's `ca-certificates` package.
+If you need to trust an additional root inside a container, mount the PEM and
+pass the flag:
+
+```sh
+docker run --rm \
+  -v /path/to/ms-root.pem:/certs/ms-root.pem:ro \
+  -v /downloads:/downloads \
+  surgedm/surge \
+  surge --tls-ca-file /certs/ms-root.pem add <url>
+```

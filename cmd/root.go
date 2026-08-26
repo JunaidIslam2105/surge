@@ -480,6 +480,8 @@ var rootCmd = &cobra.Command{
 
 		GlobalProgressCh = make(chan types.DownloadEvent, 100)
 		globalSettings = getSettings()
+		globalSettings.Network.TLSCAFile = globalTLSCAFile
+		globalSettings.Network.TLSInsecure = globalInsecureTLS
 		GlobalPool = scheduler.New(GlobalProgressCh, config.Resolve[int](globalSettings.Network.MaxConcurrentDownloads))
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {

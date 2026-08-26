@@ -69,6 +69,8 @@ type DownloadRecord struct {
 	RateLimitSet bool     `json:"rate_limit_set,omitempty"`
 	Workers      int      `json:"workers,omitempty"`
 	MinChunkSize int64    `json:"min_chunk_size,omitempty"`
+	TLSCAFile    string   `json:"tls_ca_file,omitempty"`
+	TLSInsecure  bool     `json:"tls_insecure,omitempty"`
 
 	// Runtime / Transient Configuration (Not persisted)
 	IsResume           bool                 `json:"-" gob:"-"`

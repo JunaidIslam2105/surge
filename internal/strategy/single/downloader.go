@@ -66,7 +66,10 @@ func (d *SingleDownloader) applyClientSettings(client *http.Client) {
 // This is used for servers that don't support Range requests.
 // If interrupted, the download cannot be resumed and must restart from the beginning.
 func (d *SingleDownloader) Download(ctx context.Context, rawurl, destPath string, fileSize int64, filename string) (err error) {
-	httpTransport := transport.DefaultNetworkPool.AcquireTransport(d.Runtime.ProxyURL, d.Runtime.CustomDNS, types.PoolMaxConnsPerHost)
+	httpTransport, err := transport.DefaultNetworkPool.AcquireTransport(d.Runtime.ProxyURL, d.Runtime.CustomDNS, types.PoolMaxConnsPerHost, d.Runtime.TLSCAFile, d.Runtime.TLSInsecure)
+	if err != nil {
+		return fmt.Errorf("failed to acquire transport: %w", err)
+	}
 	defer transport.DefaultNetworkPool.ReleaseTransport(httpTransport)
 
 	client := &http.Client{Transport: httpTransport}

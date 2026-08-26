@@ -2,13 +2,11 @@ package service
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"time"
+
+	"github.com/SurgeDM/Surge/internal/utils"
 )
 
 type HTTPClientOptions struct {
@@ -60,35 +58,5 @@ func NewHTTPTransport(opts HTTPClientOptions) (*http.Transport, error) {
 }
 
 func newTLSConfig(opts HTTPClientOptions) (*tls.Config, error) {
-	caFile := strings.TrimSpace(opts.CAFile)
-	if !opts.InsecureSkipVerify && caFile == "" {
-		return nil, nil
-	}
-
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: opts.InsecureSkipVerify,
-	}
-
-	if caFile == "" {
-		return tlsConfig, nil
-	}
-
-	pool, err := x509.SystemCertPool()
-	if err != nil {
-		return nil, fmt.Errorf("load system cert pool: %w", err)
-	}
-	if pool == nil {
-		pool = x509.NewCertPool()
-	}
-
-	pemData, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("read CA file %q: %w", caFile, err)
-	}
-	if ok := pool.AppendCertsFromPEM(pemData); !ok {
-		return nil, fmt.Errorf("read CA file %q: no certificates found", caFile)
-	}
-
-	tlsConfig.RootCAs = pool
-	return tlsConfig, nil
+	return utils.BuildTLSConfig(opts.CAFile, opts.InsecureSkipVerify)
 }

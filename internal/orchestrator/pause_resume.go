@@ -354,7 +354,17 @@ func buildResumeConfig(id, outputPath string, entry *types.DownloadRecord, saved
 		rateLimitSet = savedState.RateLimitSet
 	}
 
-	runtime := settings.ToRuntimeConfig()
+	var tlsCAFile string
+	var tlsInsecure bool
+	if savedState != nil && (savedState.TLSCAFile != "" || savedState.TLSInsecure) {
+		tlsCAFile = savedState.TLSCAFile
+		tlsInsecure = savedState.TLSInsecure
+	} else if entry != nil {
+		tlsCAFile = entry.TLSCAFile
+		tlsInsecure = entry.TLSInsecure
+	}
+
+	runtime := settings.ToRuntimeConfig().WithTLS(tlsCAFile, tlsInsecure)
 	if !rateLimitSet {
 		rateLimit = runtime.DefaultDownloadRateLimitBps
 	}
@@ -426,5 +436,7 @@ func buildResumeConfig(id, outputPath string, entry *types.DownloadRecord, saved
 		Tasks:           tasks,
 		ChunkBitmap:     chunkBitmap,
 		ActualChunkSize: actualChunkSize,
+		TLSCAFile:       tlsCAFile,
+		TLSInsecure:     tlsInsecure,
 	}
 }

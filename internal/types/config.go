@@ -75,6 +75,8 @@ type RuntimeConfig struct {
 	PrecheckSafetyBuffer        int64
 	GlobalRateLimitBps          int64
 	DefaultDownloadRateLimitBps int64
+	TLSCAFile                   string
+	TLSInsecure                 bool
 
 	WorkerBufferSize      int
 	MaxTaskRetries        int
@@ -86,6 +88,22 @@ type RuntimeConfig struct {
 }
 
 const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// WithTLS returns r with TLSCAFile and TLSInsecure overlaid.
+// Called at the point where CLI flags are available so the rest of the engine
+// does not need to know about the CLI layer.
+func (r *RuntimeConfig) WithTLS(caFile string, insecure bool) *RuntimeConfig {
+	if r == nil {
+		r = DefaultRuntimeConfig()
+	}
+	if caFile != "" {
+		r.TLSCAFile = caFile
+	}
+	if insecure {
+		r.TLSInsecure = insecure
+	}
+	return r
+}
 
 func (r *RuntimeConfig) GetUserAgent() string {
 	if r == nil || r.UserAgent == "" {

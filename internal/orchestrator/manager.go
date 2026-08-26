@@ -19,6 +19,7 @@ import (
 	probing "github.com/SurgeDM/Surge/internal/probe"
 	"github.com/SurgeDM/Surge/internal/progress"
 	"github.com/SurgeDM/Surge/internal/store"
+	"github.com/SurgeDM/Surge/internal/transport"
 	"github.com/SurgeDM/Surge/internal/types"
 
 	"github.com/SurgeDM/Surge/internal/scheduler"
@@ -187,6 +188,8 @@ type DownloadRequest struct {
 	SkipApproval       bool
 	Workers            int
 	MinChunkSize       int64
+	TLSCAFile          string
+	TLSInsecure        bool
 }
 
 // Enqueue probes and reserves a stable destination before dispatching to the queue layer.
@@ -296,7 +299,7 @@ func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadReques
 		defer func() { mgr.probeSem <- struct{}{} }()
 	}
 
-	probeResult, probeErr := probing.ProbeServerWithProxy(ctx, req.URL, req.Filename, req.Headers, settings.ToRuntimeConfig())
+	probeResult, probeErr := probing.ProbeServerWithProxy(ctx, req.URL, req.Filename, req.Headers, settings.ToRuntimeConfig().WithTLS(req.TLSCAFile, req.TLSInsecure))
 	if probeErr != nil {
 		// Distinguish between terminal client errors (invalid scheme, etc.) and
 		// server-side rejections or timeouts that we can optimistically ignore.
@@ -307,7 +310,7 @@ func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadReques
 			isTerminal = !errors.As(probeErr, &opErr) && // not a network-layer error
 				strings.Contains(urlErr.Error(), "unsupported protocol scheme")
 		}
-		isTerminal = isTerminal || errors.Is(probeErr, probing.ErrProbeRequestCreation)
+		isTerminal = isTerminal || errors.Is(probeErr, probing.ErrProbeRequestCreation) || errors.Is(probeErr, transport.ErrInvalidTLSConfig)
 
 		if isTerminal {
 			return "", "", probeErr
@@ -404,6 +407,8 @@ func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadReques
 			RateLimitSet: queuedEvent.RateLimitSet,
 			Workers:      queuedEvent.Workers,
 			MinChunkSize: queuedEvent.MinChunkSize,
+			TLSCAFile:    req.TLSCAFile,
+			TLSInsecure:  req.TLSInsecure,
 		}); err != nil {
 			utils.Debug("Lifecycle: Failed to persist queued download synchronously: %v", err)
 		}
@@ -443,7 +448,7 @@ func (mgr *LifecycleManager) buildDownloadRecord(req *DownloadRequest, requestID
 	state := progress.New(id, 0)
 	state.SetDestPath(filepath.Join(finalPath, finalFilename))
 
-	runtime := settings.ToRuntimeConfig()
+	runtime := settings.ToRuntimeConfig().WithTLS(req.TLSCAFile, req.TLSInsecure)
 	if req.Workers > 0 {
 		maxConns := runtime.GetMaxConnectionsPerDownload()
 		if req.Workers > maxConns {
@@ -478,6 +483,8 @@ func (mgr *LifecycleManager) buildDownloadRecord(req *DownloadRequest, requestID
 		SupportsRange:      probeResult.SupportsRange,
 		RateLimit:          rateLimit,
 		RateLimitSet:       rateLimitSet,
+		TLSCAFile:          req.TLSCAFile,
+		TLSInsecure:        req.TLSInsecure,
 	}
 
 	if mgr.eventBus != nil {

@@ -190,8 +190,10 @@ func RunDownload(ctx context.Context, cfg *types.DownloadRecord) error {
 			// Always check primary + mirrors to ensure we are using the best set
 			allToCheck := append([]string{cfg.URL}, mirrors...)
 			runCfg := &types.RuntimeConfig{
-				ProxyURL:  cfg.Runtime.ProxyURL,
-				CustomDNS: cfg.Runtime.CustomDNS,
+				ProxyURL:    cfg.Runtime.ProxyURL,
+				CustomDNS:   cfg.Runtime.CustomDNS,
+				TLSCAFile:   cfg.Runtime.TLSCAFile,
+				TLSInsecure: cfg.Runtime.TLSInsecure,
 			}
 			valid, errs := probe.ProbeMirrorsWithProxy(ctx, allToCheck, runCfg)
 

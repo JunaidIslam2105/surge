@@ -3,9 +3,12 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,10 +16,15 @@ import (
 	"github.com/SurgeDM/Surge/internal/utils"
 )
 
+// ErrInvalidTLSConfig is returned when the provided TLS configuration (e.g. CA file) cannot be parsed or read.
+var ErrInvalidTLSConfig = errors.New("invalid TLS configuration")
+
 type poolKey struct {
-	proxyURL  string
-	customDNS string
-	maxConns  int
+	proxyURL    string
+	customDNS   string
+	maxConns    int
+	tlsCAFile   string
+	tlsInsecure bool
 }
 
 // transportLease tracks a specific transport's usage and cleanup lifecycle.
@@ -41,13 +49,32 @@ var DefaultNetworkPool = &NetworkPool{
 	transportMap: make(map[*http.Transport]*transportLease),
 }
 
-// sharedClientSessionCache is a process-lifetime LRU TLS session cache shared by
-// all NetworkPool transports so new dials can resume across Transport rebuilds
-// and poolKeys. Capacity 256 is host:port keyed. Do not clear on CloseAll.
-var sharedClientSessionCache = tls.NewLRUClientSessionCache(256)
+// sessionCacheMu protects sessionCaches.
+var sessionCacheMu sync.Mutex
+
+// sessionCaches is a process-lifetime LRU TLS session cache partitioned by TLS policy.
+// It ensures that sessions cannot cross trust-policy boundaries.
+var sessionCaches = make(map[tlsPolicyKey]tls.ClientSessionCache)
+
+type tlsPolicyKey struct {
+	caFile   string
+	insecure bool
+}
+
+func getSessionCache(caFile string, insecure bool) tls.ClientSessionCache {
+	sessionCacheMu.Lock()
+	defer sessionCacheMu.Unlock()
+	key := tlsPolicyKey{caFile, insecure}
+	if c, ok := sessionCaches[key]; ok {
+		return c
+	}
+	c := tls.NewLRUClientSessionCache(256)
+	sessionCaches[key] = c
+	return c
+}
 
 // AcquireTransport returns a shared transport for the given configuration.
-func (p *NetworkPool) AcquireTransport(proxyURL, customDNS string, maxConns int) *http.Transport {
+func (p *NetworkPool) AcquireTransport(proxyURL, customDNS string, maxConns int, tlsCAFile string, tlsInsecure bool) (*http.Transport, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -58,11 +85,15 @@ func (p *NetworkPool) AcquireTransport(proxyURL, customDNS string, maxConns int)
 		p.transportMap = make(map[*http.Transport]*transportLease)
 	}
 
-	key := poolKey{proxyURL, customDNS, maxConns}
+	tlsCAFile = strings.TrimSpace(tlsCAFile)
+	key := poolKey{proxyURL, customDNS, maxConns, tlsCAFile, tlsInsecure}
 
 	lease, ok := p.configMap[key]
 	if !ok {
-		t := p.createNewTransport(proxyURL, customDNS, maxConns)
+		t, err := p.createNewTransport(proxyURL, customDNS, maxConns, tlsCAFile, tlsInsecure)
+		if err != nil {
+			return nil, err
+		}
 		lease = &transportLease{
 			transport: t,
 			key:       key,
@@ -80,7 +111,7 @@ func (p *NetworkPool) AcquireTransport(proxyURL, customDNS string, maxConns int)
 	lease.refs++
 	utils.Debug("NetworkPool: AcquireTransport (key=%+v, refs=%d)", key, lease.refs)
 
-	return lease.transport
+	return lease.transport, nil
 }
 
 // ReleaseTransport marks a specific transport lease as returned.
@@ -137,8 +168,17 @@ func (p *NetworkPool) CloseAll() {
 	p.transportMap = make(map[*http.Transport]*transportLease)
 }
 
-func (p *NetworkPool) createNewTransport(proxyURL, customDNS string, maxConns int) *http.Transport {
+func (p *NetworkPool) createNewTransport(proxyURL, customDNS string, maxConns int, tlsCAFile string, tlsInsecure bool) (*http.Transport, error) {
 	utils.Debug("NetworkPool: creating new shared transport (proxy=%s, limit=%d)", proxyURL, maxConns)
+
+	tlsCfg, err := utils.BuildTLSConfig(tlsCAFile, tlsInsecure)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidTLSConfig, err)
+	}
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{}
+	}
+	tlsCfg.ClientSessionCache = getSessionCache(tlsCAFile, tlsInsecure)
 
 	dialer := &net.Dialer{
 		Timeout:   types.DialTimeout,
@@ -177,9 +217,7 @@ func (p *NetworkPool) createNewTransport(proxyURL, customDNS string, maxConns in
 
 		DisableCompression: true,
 		ForceAttemptHTTP2:  false,
+		TLSClientConfig:    tlsCfg,
 		TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
-		TLSClientConfig: &tls.Config{
-			ClientSessionCache: sharedClientSessionCache,
-		},
-	}
+	}, nil
 }
