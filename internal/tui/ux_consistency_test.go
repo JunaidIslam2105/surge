@@ -26,7 +26,7 @@ func TestViewsUseConfiguredKeysInContextualHints(t *testing.T) {
 
 	m.keys.Dashboard.Search = key.NewBinding(key.WithKeys("ctrl+f"), key.WithHelp("ctrl+f", "search"))
 	m.searchQuery = "release"
-	if got := ansiEscapeRE.ReplaceAllString(m.View().Content, ""); !strings.Contains(got, "[ctrl+f] Clear") {
+	if got := ansiEscapeRE.ReplaceAllString(m.View().Content, ""); !strings.Contains(got, "[ctrl+f] Edit") {
 		t.Fatalf("search hint does not use configured key: %q", got)
 	}
 

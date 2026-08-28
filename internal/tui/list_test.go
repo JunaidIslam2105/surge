@@ -11,6 +11,12 @@ import (
 
 var testAnsiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
+func TestNewDownloadListDisablesBuiltInFiltering(t *testing.T) {
+	if NewDownloadList(80, 20).FilteringEnabled() {
+		t.Fatal("download list filtering must remain disabled; dashboard search owns filtering")
+	}
+}
+
 func TestDownloadItem_Description(t *testing.T) {
 	spinnerView := "\u280b"
 

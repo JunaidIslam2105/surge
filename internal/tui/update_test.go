@@ -1294,6 +1294,61 @@ func TestUpdate_DashboardSearchPasteRoutesToSearchInput(t *testing.T) {
 	}
 }
 
+func TestUpdate_DashboardSearchShortcutRefocusesExistingQuery(t *testing.T) {
+	m := InitialRootModel(1701, "test", nil, nil, config.DefaultSettings(), false)
+	m.searchQuery = "ubuntu"
+	m.searchInput.SetValue(m.searchQuery)
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	m2 := unwrapRootModel(t, updated)
+	if !m2.searchActive || !m2.searchInput.Focused() {
+		t.Fatal("search shortcut did not focus the existing query")
+	}
+
+	updated, _ = m2.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m3 := unwrapRootModel(t, updated)
+	if m3.state != DashboardState || m3.searchInput.Value() != "ubuntua" {
+		t.Fatalf("a escaped search: state = %v, search = %q", m3.state, m3.searchInput.Value())
+	}
+}
+
+func TestUpdate_DashboardSlashSearchesInsteadOfFilteringList(t *testing.T) {
+	m := InitialRootModel(1701, "test", nil, nil, config.DefaultSettings(), false)
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	m2 := unwrapRootModel(t, updated)
+	if !m2.searchActive || m2.list.FilteringEnabled() {
+		t.Fatal("slash did not focus dashboard search")
+	}
+
+	updated, _ = m2.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m3 := unwrapRootModel(t, updated)
+	if m3.state != DashboardState || m3.searchInput.Value() != "a" {
+		t.Fatalf("a escaped slash search: state = %v, search = %q", m3.state, m3.searchInput.Value())
+	}
+}
+
+func TestUpdate_DashboardSearchEscapeKeysClearAndExit(t *testing.T) {
+	for _, keyPress := range []tea.KeyPressMsg{
+		{Code: tea.KeyEscape},
+		{Code: 'q', Text: "Q", Mod: tea.ModShift},
+	} {
+		t.Run(keyPress.String(), func(t *testing.T) {
+			m := InitialRootModel(1701, "test", nil, nil, config.DefaultSettings(), false)
+			m.searchActive = true
+			m.searchQuery = "ubuntu"
+			m.searchInput.SetValue(m.searchQuery)
+			m.searchInput.Focus()
+
+			updated, _ := m.Update(keyPress)
+			m2 := unwrapRootModel(t, updated)
+			if m2.searchActive || m2.searchQuery != "" || m2.searchInput.Value() != "" {
+				t.Fatalf("search remained active: active = %t, query = %q", m2.searchActive, m2.searchQuery)
+			}
+		})
+	}
+}
+
 func TestUpdate_URLUpdateStatePasteRoutesToURLInput(t *testing.T) {
 	urlInput := textinput.New()
 	urlInput.Focus()

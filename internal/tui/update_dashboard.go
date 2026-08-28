@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/SurgeDM/Surge/internal/clipboard"
 	"github.com/SurgeDM/Surge/internal/config"
@@ -16,7 +15,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle search input FIRST when active (intercepts ALL keys)
 	if m.searchActive {
 		switch msg.String() {
-		case "esc":
+		case "esc", "Q":
 			// Cancel search and clear query
 			m.searchActive = false
 			m.searchInput.Blur()
@@ -39,18 +38,10 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Toggle search with F
-	if key.Matches(msg, m.keys.Dashboard.Search) {
-		if m.searchQuery != "" {
-			// Clear existing search
-			m.searchQuery = ""
-			m.searchInput.SetValue("")
-			m.UpdateListItems()
-		} else {
-			// Start new search
-			m.searchActive = true
-			m.searchInput.Focus()
-		}
+	// Focus search.
+	if msg.String() == "/" || key.Matches(msg, m.keys.Dashboard.Search) {
+		m.searchActive = true
+		m.searchInput.Focus()
 		return m, nil
 	}
 
@@ -153,9 +144,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Delete download
 	if key.Matches(msg, m.keys.Dashboard.Delete) {
-		if m.list.FilterState() == list.Filtering {
-			// Fall through
-		} else if d := m.GetSelectedDownload(); d != nil {
+		if d := m.GetSelectedDownload(); d != nil {
 			if !d.done || d.err != nil {
 				m.removeTargetID = d.ID
 				m.quitConfirmFocused = 1 // default focus on "Cancel"
@@ -168,9 +157,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Delete download + file from disk (purge)
 	if key.Matches(msg, m.keys.Dashboard.PurgeFile) {
-		if m.list.FilterState() == list.Filtering {
-			// Fall through
-		} else if d := m.GetSelectedDownload(); d != nil {
+		if d := m.GetSelectedDownload(); d != nil {
 			if !d.done || d.err != nil {
 				m.addLogEntry(LogStyleError.Render("\u2716 Purge is only for successfully completed downloads"))
 				return m, nil

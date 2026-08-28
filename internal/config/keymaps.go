@@ -426,8 +426,8 @@ func DefaultKeyMap() *KeyMap {
 				key.WithHelp("b", "batch import"),
 			),
 			Search: key.NewBinding(
-				key.WithKeys("f"),
-				key.WithHelp("f", "search"),
+				key.WithKeys("f", "/"),
+				key.WithHelp("f /", "search"),
 			),
 			Pause: key.NewBinding(
 				key.WithKeys("p"),

@@ -186,7 +186,7 @@ func NewDownloadList(width, height int) list.Model {
 	l := list.New([]list.Item{}, delegate, width, height)
 	l.SetShowTitle(false) // Tab bar already shows the category
 	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
+	l.SetFilteringEnabled(false) // Dashboard search owns filtering and focus.
 	l.SetShowHelp(false)
 	l.SetShowPagination(true)
 
