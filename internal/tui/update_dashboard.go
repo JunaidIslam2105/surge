@@ -295,7 +295,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
 			if m.categoryFilter != "" {
 				m.categoryFilter = ""
-				m.addLogEntry(LogStyleStarted.Render("\U0001F4C2 Filter: All"))
+				m.addLogEntry(LogStyleStarted.Render("Filter: All"))
 				m.UpdateListItems()
 				return m, nil
 			}
@@ -317,7 +317,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if label == "" {
 			label = "All"
 		}
-		m.addLogEntry(LogStyleStarted.Render("\U0001F4C2 Filter: " + label))
+		m.addLogEntry(LogStyleStarted.Render("Filter: " + label))
 		m.UpdateListItems()
 		return m, nil
 	}
