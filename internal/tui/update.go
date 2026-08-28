@@ -261,6 +261,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case SpeedLimitsState:
 			return m.updateSpeedLimits(msg)
 
+		case CategoryPickerState:
+			return m.updateCategoryPicker(msg)
+
 		case SettingsState:
 			return m.updateSettings(msg)
 

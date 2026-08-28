@@ -291,34 +291,13 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(msg, m.keys.Dashboard.CategoryFilter) {
+	if key.Matches(msg, m.keys.Dashboard.CategoryFilter) || msg.String() == "C" {
 		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
-			if m.categoryFilter != "" {
-				m.categoryFilter = ""
-				m.addLogEntry(LogStyleStarted.Render("Filter: All"))
-				m.UpdateListItems()
-				return m, nil
-			}
 			m.addLogEntry(LogStyleError.Render("\u2716 Enable categories in Settings first"))
 			return m, nil
 		}
-		names := config.CategoryNames(m.Settings.Categories.Categories)
-		cycle := append([]string{""}, names...)
-		cycle = append(cycle, "Uncategorized")
-		current := 0
-		for i, n := range cycle {
-			if n == m.categoryFilter {
-				current = i
-				break
-			}
-		}
-		m.categoryFilter = cycle[(current+1)%len(cycle)]
-		label := m.categoryFilter
-		if label == "" {
-			label = "All"
-		}
-		m.addLogEntry(LogStyleStarted.Render("Filter: " + label))
-		m.UpdateListItems()
+		m.categoryPickerCursor = m.categoryFilterPickerCursor()
+		m.state = CategoryPickerState
 		return m, nil
 	}
 

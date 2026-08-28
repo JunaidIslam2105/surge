@@ -64,6 +64,7 @@ const (
 	BugReportSystemDetailsState
 	BugReportLogPathState
 	SpeedLimitsState
+	CategoryPickerState
 	PurgeConfirmState
 	RemoveConfirmState
 )
@@ -209,10 +210,11 @@ type RootModel struct {
 	urlUpdateInput textinput.Model // Text input for updating URL
 
 	// Category manager
-	categoryFilter  string             // Dashboard filter ("" = all)
-	catMgrEditField int                // 0=Name, 1=Description, 2=Pattern, 3=Path
-	catMgrInputs    [4]textinput.Model // Inputs for Name, Description, Pattern, Path
-	catMgrIsNew     bool               // Whether adding a new category
+	categoryFilter       string // Dashboard filter ("" = all)
+	categoryPickerCursor int
+	catMgrEditField      int                // 0=Name, 1=Description, 2=Pattern, 3=Path
+	catMgrInputs         [4]textinput.Model // Inputs for Name, Description, Pattern, Path
+	catMgrIsNew          bool               // Whether adding a new category
 	// Quit confirm button focus (0 = Yep!, 1 = Nope)
 	quitConfirmFocused int
 

@@ -482,8 +482,8 @@ func DefaultKeyMap() *KeyMap {
 				key.WithHelp("ctrl+c", "force quit"),
 			),
 			CategoryFilter: key.NewBinding(
-				key.WithKeys("c"),
-				key.WithHelp("c", "category"),
+				key.WithKeys("C", "shift+c"),
+				key.WithHelp("C", "category"),
 			),
 			PinTab: key.NewBinding(
 				key.WithKeys("t"),

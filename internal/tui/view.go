@@ -165,6 +165,10 @@ func (m RootModel) View() tea.View {
 		return m.wrapView(m.renderModalWithOverlay(m.viewSpeedLimits()))
 	}
 
+	if m.state == CategoryPickerState {
+		return m.wrapView(m.renderModalWithOverlay(m.viewCategoryPicker()))
+	}
+
 	if m.state == DuplicateWarningState {
 		modal := components.ConfirmationModal{
 			Title:       "\u26a0 Duplicate Detected",
