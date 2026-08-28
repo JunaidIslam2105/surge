@@ -1220,7 +1220,7 @@ func TestUpdate_FilePickerUseDirReturnsToAddInput(t *testing.T) {
 		filepicker:       newFilepicker(browseDir),
 		filepickerOrigin: FilePickerOriginAdd,
 	}
-	m.filepicker.CurrentDirectory = browseDir
+	m.filepicker.CurrentDirectory = browseDir + string(filepath.Separator)
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m2 := unwrapRootModel(t, updated)

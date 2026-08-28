@@ -74,6 +74,7 @@ func (m *RootModel) removeDownloadByID(id string) bool {
 }
 
 func (m *RootModel) handleFilePickerSelection(path string) (tea.Model, tea.Cmd) {
+	path = filepath.Clean(path)
 	switch m.filepickerOrigin {
 	case FilePickerOriginTheme:
 		m.Settings.General.ThemePath.Value = path
