@@ -49,7 +49,7 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 	tabBarHeight := lipgloss.Height(tabBar)
 
 	// listContentHeight handles available space for the bubbletea list itself
-	listContentHeight := contentHeight - padTopBottom - tabBarHeight
+	listContentHeight := contentHeight - padTopBottom - tabBarHeight - 1
 	if listContentHeight < 1 {
 		listContentHeight = 1
 	}
@@ -71,7 +71,7 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 	}
 
 	// Build list inner content - No search bar inside
-	listInnerContent := lipgloss.JoinVertical(lipgloss.Left, tabBar, listContent)
+	listInnerContent := lipgloss.JoinVertical(lipgloss.Left, tabBar, "", listContent)
 	innerContent := listPadding.Render(listInnerContent)
 
 	downloadsBorderColor := colors.Pink()
