@@ -348,7 +348,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 	meta := settingsMeta[selectedRow]
 	value := settingsValues[meta.Key]
 	unit := m.getSettingUnit()
-	unitStyle := lipgloss.NewStyle().Foreground(colors.Gray())
+	unitStyle := lipgloss.NewStyle().Foreground(colors.LightGray())
 
 	valueLabel := "Value: "
 	var valueStr string
@@ -369,7 +369,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 		case config.TypeAuthToken:
 			token := GetAuthToken()
 			if token == "" {
-				valueStr = lipgloss.NewStyle().Foreground(colors.Gray()).Render("(Not generated yet)")
+				valueStr = lipgloss.NewStyle().Foreground(colors.LightGray()).Render("(Not generated yet)")
 			} else {
 				if m.ExtensionTokenCopied {
 					valueStr = lipgloss.NewStyle().Foreground(colors.StateDownloading()).Bold(true).Render("Copied!")
@@ -378,7 +378,7 @@ func (m RootModel) renderSettingsDetailBlock(settingsMeta []config.SettingMeta, 
 					if len(token) > 16 {
 						displayToken = token[:8] + "..." + token[len(token)-8:]
 					}
-					valueStr = displayToken + lipgloss.NewStyle().Foreground(colors.Gray()).Render(" ["+m.keys.Settings.Edit.Help().Key+"] Copy")
+					valueStr = displayToken + lipgloss.NewStyle().Foreground(colors.LightGray()).Render(" ["+m.keys.Settings.Edit.Help().Key+"] Copy")
 				}
 			}
 		case config.TypeLink:

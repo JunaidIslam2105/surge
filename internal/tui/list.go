@@ -161,7 +161,7 @@ func (d downloadDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 
 	title := i.Title()
 	if i.category != "" {
-		category := lipgloss.NewStyle().Foreground(colors.Gray()).Render("[" + i.category + "]")
+		category := lipgloss.NewStyle().Foreground(colors.LightGray()).Render("[" + i.category + "]")
 		titleWidth := availableWidth - lipgloss.Width(category) - 1
 		if titleWidth < 1 {
 			titleWidth = 1

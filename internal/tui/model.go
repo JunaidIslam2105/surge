@@ -795,7 +795,7 @@ func applyColorModeForTheme(mode int, themePath string, initialDarkBackground bo
 func (m *RootModel) refreshThemeCaches() {
 	rebuildStyles()
 	m.help.Styles.ShortKey = lipgloss.NewStyle().Foreground(colors.LightGray())
-	m.help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colors.Gray())
+	m.help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colors.LightGray())
 	m.help.Styles.FullKey = lipgloss.NewStyle().Foreground(colors.Pink())
 	m.help.Styles.FullDesc = lipgloss.NewStyle().Foreground(colors.LightGray())
 	applyListTheme(&m.list)
@@ -823,7 +823,7 @@ func applyFilepickerTheme(fp *filepicker.Model) {
 	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(colors.Pink())
 	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(colors.Cyan())
 	fp.Styles.Directory = lipgloss.NewStyle().Foreground(colors.Blue())
-	fp.Styles.File = lipgloss.NewStyle().Foreground(colors.White())
+	fp.Styles.File = lipgloss.NewStyle().Foreground(colors.LightGray())
 	fp.Styles.DisabledFile = lipgloss.NewStyle().Foreground(colors.Gray())
 	fp.Styles.Permission = lipgloss.NewStyle().Foreground(colors.Gray())
 	fp.Styles.Selected = lipgloss.NewStyle().Foreground(colors.Pink()).Bold(true)

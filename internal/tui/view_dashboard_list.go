@@ -29,11 +29,11 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 		var searchDisplay string
 		if m.searchActive {
 			searchDisplay = m.searchInput.View() +
-				lipgloss.NewStyle().Foreground(colors.Gray()).Render(" [esc] Exit")
+				lipgloss.NewStyle().Foreground(colors.LightGray()).Render(" [esc] Exit")
 		} else {
 			// Show query with an edit hint.
 			searchDisplay = lipgloss.NewStyle().Foreground(colors.Pink()).Render(m.searchQuery) +
-				lipgloss.NewStyle().Foreground(colors.Gray()).Render(" ["+m.keys.Dashboard.Search.Help().Key+"] Edit")
+				lipgloss.NewStyle().Foreground(colors.LightGray()).Render(" ["+m.keys.Dashboard.Search.Help().Key+"] Edit")
 		}
 		// Pad the search bar to look like a title block
 		leftTitle = " " + lipgloss.JoinHorizontal(lipgloss.Left, searchIcon, searchDisplay) + " "

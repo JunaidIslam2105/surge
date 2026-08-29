@@ -29,10 +29,13 @@ type ListInputModal struct {
 	Help          help.Model
 	HelpKeys      help.KeyMap
 	BorderColor   color.Color
-	Width         int
-	Height        int
-	Compact       bool
-	Error         string
+	// InactiveLabelColor overrides the color used for labels that are not selected.
+	// When omitted, the standard muted gray is used.
+	InactiveLabelColor color.Color
+	Width              int
+	Height             int
+	Compact            bool
+	Error              string
 }
 
 // viewContent renders the list items (without box wrapper or help text).
@@ -50,8 +53,12 @@ func (m ListInputModal) viewContent() string {
 			valueStyle = lipgloss.NewStyle().Foreground(colors.LightGray())
 		} else {
 			prefix = "  "
-			labelStyle = lipgloss.NewStyle().Foreground(colors.Gray())
-			valueStyle = lipgloss.NewStyle().Foreground(colors.Gray())
+			inactiveColor := m.InactiveLabelColor
+			if inactiveColor == nil {
+				inactiveColor = colors.Gray()
+			}
+			labelStyle = lipgloss.NewStyle().Foreground(inactiveColor)
+			valueStyle = lipgloss.NewStyle().Foreground(colors.LightGray())
 		}
 
 		labelRow := lipgloss.JoinHorizontal(lipgloss.Left, prefix, labelStyle.Render(item.Label))
@@ -61,7 +68,7 @@ func (m ListInputModal) viewContent() string {
 			// Show the text input, aligned under the label
 			valueStr = "  " + m.Input.View()
 			if item.InputSuffix != "" {
-				valueStr += " " + lipgloss.NewStyle().Foreground(colors.Gray()).Render(item.InputSuffix)
+				valueStr += " " + lipgloss.NewStyle().Foreground(colors.LightGray()).Render(item.InputSuffix)
 			}
 		} else {
 			// Show the text value, aligned under the label
@@ -95,7 +102,7 @@ func (m ListInputModal) RenderWithBtopBox(
 
 	// Style help text
 	helpStyle := lipgloss.NewStyle().
-		Foreground(colors.Gray()).
+		Foreground(colors.LightGray()).
 		Width(innerWidth) // Left aligned by default, which fits the design better
 
 	var helpText string

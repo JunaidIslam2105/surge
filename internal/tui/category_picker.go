@@ -102,14 +102,15 @@ func (m RootModel) viewCategoryPicker() string {
 		title = "Assign Category"
 	}
 	return components.ListInputModal{
-		Title:         title,
-		Subtitle:      "\u2191/\u2193 navigate   enter select   esc close",
-		PlainSubtitle: true,
-		Items:         items,
-		Cursor:        m.categoryPickerCursor,
-		BorderColor:   colors.Magenta(),
-		Width:         w,
-		Height:        h,
-		Compact:       true,
+		Title:              title,
+		Subtitle:           "\u2191/\u2193 navigate   enter select   esc close",
+		PlainSubtitle:      true,
+		Items:              items,
+		Cursor:             m.categoryPickerCursor,
+		BorderColor:        colors.Magenta(),
+		InactiveLabelColor: colors.LightGray(),
+		Width:              w,
+		Height:             h,
+		Compact:            true,
 	}.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
 }
