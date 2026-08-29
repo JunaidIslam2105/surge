@@ -67,6 +67,20 @@ func TestDownloadItem_Description(t *testing.T) {
 	}
 }
 
+func TestDownloadDelegateReservesRoomForCategory(t *testing.T) {
+	d := newDownloadDelegate()
+	m := list.New([]list.Item{}, d, 42, 10)
+	item := DownloadItem{
+		download: &DownloadModel{Filename: strings.Repeat("very-long-name-", 8) + ".mkv"},
+		category: "Shows",
+	}
+	var buf bytes.Buffer
+	d.Render(&buf, m, 0, item)
+	if got := testAnsiEscapeRE.ReplaceAllString(buf.String(), ""); !strings.Contains(got, "[Shows]") {
+		t.Fatalf("long-title row omitted category: %q", got)
+	}
+}
+
 func BenchmarkDownloadDelegateRender(b *testing.B) {
 	d := newDownloadDelegate()
 	m := list.New([]list.Item{}, d, 100, 100)

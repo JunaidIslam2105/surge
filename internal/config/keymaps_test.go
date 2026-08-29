@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"charm.land/bubbles/v2/key"
 )
 
 func TestDefaultKeyMap(t *testing.T) {
@@ -34,6 +37,44 @@ func TestDefaultKeyMap(t *testing.T) {
 	}
 	if !foundOpenFolder {
 		t.Error("Dashboard.OpenFolder missing from FullHelp")
+	}
+}
+
+func TestShiftedDashboardBindingsUseReadableHelpLabels(t *testing.T) {
+	km := DefaultKeyMap()
+	for name, binding := range map[string]key.Binding{
+		"add from clipboard": km.Dashboard.AddFromClipboard,
+		"purge":              km.Dashboard.PurgeFile,
+		"speed limits":       km.Dashboard.SpeedLimits,
+		"open folder":        km.Dashboard.OpenFolder,
+		"category":           km.Dashboard.CategoryFilter,
+	} {
+		if !strings.HasPrefix(binding.Help().Key, "shift+") {
+			t.Errorf("%s help key = %q; want shift+ form", name, binding.Help().Key)
+		}
+	}
+}
+
+func TestApplyConfigFormatsUppercaseKeysAsShift(t *testing.T) {
+	km := DefaultKeyMap()
+	km.ApplyConfig(&KeyMapConfig{Dashboard: map[string]KeyBindingConfig{
+		"PurgeFile": {Keys: []string{"X", "shift+x"}, Help: "purge"},
+	}})
+	if got := km.Dashboard.PurgeFile.Help().Key; got != "shift+x" {
+		t.Fatalf("loaded uppercase help key = %q, want shift+x", got)
+	}
+}
+
+func TestApplyConfigMigratesLegacyCategoryFilterDefault(t *testing.T) {
+	km := DefaultKeyMap()
+	km.ApplyConfig(&KeyMapConfig{Dashboard: map[string]KeyBindingConfig{
+		"CategoryFilter": {Keys: []string{"c"}, Help: "category"},
+	}})
+	if got := km.Dashboard.CategoryFilter.Help().Key; got != "shift+c" {
+		t.Fatalf("legacy category filter remained %q, want shift+c", got)
+	}
+	if got := km.Dashboard.AssignCategory.Help().Key; got != "c" {
+		t.Fatalf("assign category key = %q, want c", got)
 	}
 }
 

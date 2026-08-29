@@ -291,12 +291,26 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(msg, m.keys.Dashboard.CategoryFilter) || msg.String() == "C" {
+	if key.Matches(msg, m.keys.Dashboard.CategoryFilter) {
+		m.categoryPickerAssign = false
+		m.categoryPickerTarget = ""
 		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
 			m.addLogEntry(LogStyleError.Render("\u2716 Enable categories in Settings first"))
 			return m, nil
 		}
 		m.categoryPickerCursor = m.categoryFilterPickerCursor()
+		m.state = CategoryPickerState
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Dashboard.AssignCategory) && m.GetSelectedDownload() != nil {
+		d := m.GetSelectedDownload()
+		m.categoryPickerAssign = true
+		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
+			m.addLogEntry(LogStyleError.Render("\u2716 Enable categories in Settings first"))
+			return m, nil
+		}
+		m.categoryPickerTarget = d.ID
+		m.categoryPickerCursor = 0
 		m.state = CategoryPickerState
 		return m, nil
 	}

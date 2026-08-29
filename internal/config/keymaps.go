@@ -3,9 +3,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 
 	"strings"
 
@@ -59,6 +61,7 @@ type DashboardKeyMap struct {
 	Quit             key.Binding
 	ForceQuit        key.Binding
 	CategoryFilter   key.Binding
+	AssignCategory   key.Binding
 	PinTab           key.Binding
 	// Navigation
 	Up   key.Binding
@@ -262,6 +265,22 @@ func (k *KeyMap) ApplyConfig(cfg *KeyMapConfig) {
 		return
 	}
 
+	formatHelpKeys := func(keys []string) string {
+		seen := make(map[string]bool, len(keys))
+		formatted := make([]string, 0, len(keys))
+		for _, candidate := range keys {
+			display := candidate
+			if len(candidate) == 1 && candidate[0] >= 'A' && candidate[0] <= 'Z' {
+				display = "shift+" + strings.ToLower(candidate)
+			}
+			if !seen[display] {
+				seen[display] = true
+				formatted = append(formatted, display)
+			}
+		}
+		return strings.Join(formatted, "/")
+	}
+
 	applyToStruct := func(s any, m map[string]KeyBindingConfig) {
 		ciMap := make(map[string]KeyBindingConfig)
 		for k, vCfg := range m {
@@ -280,7 +299,7 @@ func (k *KeyMap) ApplyConfig(cfg *KeyMapConfig) {
 						if helpDesc == "" {
 							helpDesc = field.Interface().(key.Binding).Help().Desc
 						}
-						helpKey := strings.Join(bCfg.Keys, "/")
+						helpKey := formatHelpKeys(bCfg.Keys)
 						newBinding := key.NewBinding(
 							key.WithKeys(bCfg.Keys...),
 							key.WithHelp(helpKey, helpDesc),
@@ -292,7 +311,22 @@ func (k *KeyMap) ApplyConfig(cfg *KeyMapConfig) {
 		}
 	}
 
-	applyToStruct(&k.Dashboard, cfg.Dashboard)
+	dashboardConfig := maps.Clone(cfg.Dashboard)
+	hasAssignCategory := false
+	for name := range dashboardConfig {
+		if strings.EqualFold(name, "AssignCategory") {
+			hasAssignCategory = true
+		}
+	}
+	// Migrate the former default `c` filter binding now used by AssignCategory.
+	if !hasAssignCategory {
+		for name, binding := range dashboardConfig {
+			if strings.EqualFold(name, "CategoryFilter") && slices.Equal(binding.Keys, []string{"c"}) {
+				delete(dashboardConfig, name)
+			}
+		}
+	}
+	applyToStruct(&k.Dashboard, dashboardConfig)
 	applyToStruct(&k.Input, cfg.Input)
 	applyToStruct(&k.FilePicker, cfg.FilePicker)
 	applyToStruct(&k.Duplicate, cfg.Duplicate)
@@ -419,7 +453,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			AddFromClipboard: key.NewBinding(
 				key.WithKeys("A"),
-				key.WithHelp("A", "add from clipboard"),
+				key.WithHelp("shift+a", "add from clipboard"),
 			),
 			BatchImport: key.NewBinding(
 				key.WithKeys("b", "B"),
@@ -443,7 +477,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			PurgeFile: key.NewBinding(
 				key.WithKeys("X", "shift+x"),
-				key.WithHelp("X", "delete+purge"),
+				key.WithHelp("shift+x", "delete+purge"),
 			),
 			Settings: key.NewBinding(
 				key.WithKeys("s"),
@@ -451,7 +485,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			SpeedLimits: key.NewBinding(
 				key.WithKeys("T"),
-				key.WithHelp("T", "speed limits"),
+				key.WithHelp("shift+t", "speed limits"),
 			),
 			Log: key.NewBinding(
 				key.WithKeys("l"),
@@ -471,7 +505,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			OpenFolder: key.NewBinding(
 				key.WithKeys("O"),
-				key.WithHelp("O", "open folder"),
+				key.WithHelp("shift+o", "open folder"),
 			),
 			Quit: key.NewBinding(
 				key.WithKeys("ctrl+c", "ctrl+q"),
@@ -483,7 +517,11 @@ func DefaultKeyMap() *KeyMap {
 			),
 			CategoryFilter: key.NewBinding(
 				key.WithKeys("C", "shift+c"),
-				key.WithHelp("C", "category"),
+				key.WithHelp("shift+c", "category"),
+			),
+			AssignCategory: key.NewBinding(
+				key.WithKeys("c"),
+				key.WithHelp("c", "assign category"),
 			),
 			PinTab: key.NewBinding(
 				key.WithKeys("t"),
@@ -511,7 +549,7 @@ func DefaultKeyMap() *KeyMap {
 			),
 			LogBottom: key.NewBinding(
 				key.WithKeys("G"),
-				key.WithHelp("G", "bottom"),
+				key.WithHelp("shift+g", "bottom"),
 			),
 			LogClose: key.NewBinding(
 				key.WithKeys("esc"),
@@ -768,7 +806,7 @@ func (k DashboardKeyMap) ShortHelp() []key.Binding {
 func (k DashboardKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.TabQueued, k.TabActive, k.TabDone, k.NextTab, k.PrevTab},
-		{k.Add, k.AddFromClipboard, k.BatchImport, k.Search, k.CategoryFilter, k.Pause, k.Refresh, k.Delete, k.PurgeFile, k.Settings, k.SpeedLimits, k.PinTab},
+		{k.Add, k.AddFromClipboard, k.BatchImport, k.Search, k.CategoryFilter, k.AssignCategory, k.Pause, k.Refresh, k.Delete, k.PurgeFile, k.Settings, k.SpeedLimits, k.PinTab},
 		{k.Log, k.OpenFile, k.OpenFolder, k.ToggleHelp, k.ReportBug, k.Quit},
 	}
 }

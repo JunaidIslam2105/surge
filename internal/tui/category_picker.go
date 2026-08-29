@@ -10,7 +10,10 @@ import (
 )
 
 func (m RootModel) categoryPickerOptions() []string {
-	return append(append([]string{""}, config.CategoryNames(m.Settings.Categories.Categories)...), "Uncategorized")
+	if m.categoryPickerAssign {
+		return append([]string{"Uncategorized"}, config.CategoryNames(m.Settings.Categories.Categories)...)
+	}
+	return append([]string{"", "Uncategorized"}, config.CategoryNames(m.Settings.Categories.Categories)...)
 }
 
 func (m RootModel) categoryFilterPickerCursor() int {
@@ -25,6 +28,7 @@ func (m RootModel) categoryFilterPickerCursor() int {
 func (m RootModel) updateCategoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	options := m.categoryPickerOptions()
 	if key.Matches(msg, m.keys.Settings.Close) {
+		m.categoryPickerTarget = ""
 		m.state = DashboardState
 		return m, nil
 	}
@@ -37,7 +41,23 @@ func (m RootModel) updateCategoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Settings.Edit) {
-		m.categoryFilter = options[m.categoryPickerCursor]
+		selected := options[m.categoryPickerCursor]
+		if m.categoryPickerAssign {
+			if d := m.FindDownloadByID(m.categoryPickerTarget); d != nil {
+				category := selected
+				if category == "Uncategorized" {
+					category = ""
+				}
+				d.categoryOverride = &category
+				label := selected
+				m.addLogEntry(LogStyleStarted.Render("Category: " + label))
+				m.UpdateListItems()
+			}
+			m.categoryPickerTarget = ""
+			m.state = DashboardState
+			return m, nil
+		}
+		m.categoryFilter = selected
 		label := m.categoryFilter
 		if label == "" {
 			label = "All"
@@ -52,13 +72,16 @@ func (m RootModel) updateCategoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 func (m RootModel) viewCategoryPicker() string {
 	options := m.categoryPickerOptions()
 	items := make([]components.ListInputItem, len(options))
+	contentRows := len(options)
 	for i, option := range options {
 		label, value := option, ""
 		switch option {
 		case "":
 			label, value = "All Downloads", "Show every download"
 		case "Uncategorized":
-			value = "No matching category"
+			if !m.categoryPickerAssign {
+				value = "No matching category"
+			}
 		default:
 			for _, category := range m.Settings.Categories.Categories {
 				if category.Name == option {
@@ -68,15 +91,25 @@ func (m RootModel) viewCategoryPicker() string {
 			}
 		}
 		items[i] = components.ListInputItem{Label: label, Value: value}
+		if value != "" {
+			contentRows++
+		}
 	}
-	w, h := GetDynamicModalDimensions(m.width, m.height, 40, 10, 65, 22)
+	// Two border rows, two content-padding rows, and a hint plus its margin.
+	w, h := GetDynamicModalDimensions(m.width, m.height, 36, 8, 52, contentRows+6)
+	title := "Filter by Category"
+	if m.categoryPickerAssign {
+		title = "Assign Category"
+	}
 	return components.ListInputModal{
-		Title:       "Filter by Category",
-		Subtitle:    "\u2191/\u2193 choose \u2022 enter apply \u2022 esc cancel",
-		Items:       items,
-		Cursor:      m.categoryPickerCursor,
-		BorderColor: colors.Magenta(),
-		Width:       w,
-		Height:      h,
+		Title:         title,
+		Subtitle:      "\u2191/\u2193 navigate   enter select   esc close",
+		PlainSubtitle: true,
+		Items:         items,
+		Cursor:        m.categoryPickerCursor,
+		BorderColor:   colors.Magenta(),
+		Width:         w,
+		Height:        h,
+		Compact:       true,
 	}.RenderWithBtopBox(renderBtopBox, PaneTitleStyle)
 }
