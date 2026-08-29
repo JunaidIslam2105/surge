@@ -101,9 +101,11 @@ func (m RootModel) viewCategoryPicker() string {
 	if m.categoryPickerAssign {
 		title = "Assign Category"
 	}
+	subtitle := m.keys.Settings.Up.Help().Key + "/" + m.keys.Settings.Down.Help().Key +
+		" navigate   " + m.keys.Settings.Edit.Help().Key + " select   " + m.keys.Settings.Close.Help().Key + " close"
 	return components.ListInputModal{
 		Title:              title,
-		Subtitle:           "\u2191/\u2193 navigate   enter select   esc close",
+		Subtitle:           subtitle,
 		PlainSubtitle:      true,
 		Items:              items,
 		Cursor:             m.categoryPickerCursor,

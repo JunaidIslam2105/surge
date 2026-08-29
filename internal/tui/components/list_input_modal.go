@@ -70,7 +70,7 @@ func (m ListInputModal) viewContent() string {
 			if item.InputSuffix != "" {
 				valueStr += " " + lipgloss.NewStyle().Foreground(colors.LightGray()).Render(item.InputSuffix)
 			}
-		} else {
+		} else if item.Value != "" {
 			// Show the text value, aligned under the label
 			valueStr = valueStyle.Render("  " + item.Value)
 		}

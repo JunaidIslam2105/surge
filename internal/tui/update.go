@@ -137,7 +137,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		listInnerPadding := lipgloss.NewStyle().Padding(1, 2)
 		m.list.SetSize(
 			layout.ListWidth-listInnerPadding.GetHorizontalFrameSize()-BoxStyle.GetHorizontalFrameSize(),
-			layout.ListHeight-layout.TabBarHeight-BoxStyle.GetVerticalFrameSize()-listInnerPadding.GetVerticalFrameSize(),
+			layout.ListHeight-layout.TabBarHeight-BoxStyle.GetVerticalFrameSize()-listInnerPadding.GetVerticalFrameSize()-1,
 		)
 
 		// Update list based on active tab

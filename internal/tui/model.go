@@ -734,7 +734,9 @@ func (m RootModel) categoryLabel(d *DownloadModel) string {
 	filename := strings.TrimSpace(d.Filename)
 	if filename == "" || filename == "Queued" {
 		if d.Destination != "" {
-			filename = strings.TrimSpace(filepath.Base(d.Destination))
+			if destBase := strings.TrimSpace(filepath.Base(d.Destination)); strings.Contains(destBase, ".") {
+				filename = destBase
+			}
 		}
 	}
 	if filename == "" || filename == "Queued" {

@@ -50,7 +50,13 @@ func TestCategoryPickerAssignsSelectedDownload(t *testing.T) {
 	m := RootModel{
 		state: CategoryPickerState, Settings: settings, keys: config.DefaultKeyMap(),
 		list: NewDownloadList(80, 20), downloads: []*DownloadModel{d}, SelectedDownloadID: d.ID,
-		categoryPickerAssign: true, categoryPickerTarget: d.ID, categoryPickerCursor: 1,
+		categoryPickerAssign: true, categoryPickerTarget: d.ID,
+	}
+	for i, option := range m.categoryPickerOptions() {
+		if option == "Videos" {
+			m.categoryPickerCursor = i
+			break
+		}
 	}
 
 	updated, _ := m.updateCategoryPicker(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -77,6 +83,20 @@ func TestCategoryPickerCompactViewHasNoBlankOptionRows(t *testing.T) {
 	}
 }
 
+func TestCategoryPickerUsesConfiguredKeysInSubtitle(t *testing.T) {
+	keys := config.DefaultKeyMap()
+	keys.Settings.Up = key.NewBinding(key.WithKeys("k"), key.WithHelp("k", "up"))
+	keys.Settings.Down = key.NewBinding(key.WithKeys("j"), key.WithHelp("j", "down"))
+	keys.Settings.Edit = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "edit"))
+	keys.Settings.Close = key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "close"))
+	m := RootModel{Settings: config.DefaultSettings(), width: 80, height: 30, keys: keys}
+
+	view := testAnsiEscapeRE.ReplaceAllString(m.viewCategoryPicker(), "")
+	if !strings.Contains(view, "k/j navigate   x select   q close") {
+		t.Fatalf("picker subtitle does not use configured keys:\n%s", view)
+	}
+}
+
 func TestDashboardUsesConfiguredCategoryFilterKey(t *testing.T) {
 	settings := config.DefaultSettings()
 	settings.Categories.CategoryEnabled.Value = true
@@ -97,6 +117,7 @@ func TestCategoryLabelMatchesFilterFallbackAndDisabledState(t *testing.T) {
 	settings.Categories.CategoryEnabled.Value = true
 	settings.Categories.Categories = []config.Category{{Name: "Archives", Pattern: `\.zip$`}}
 	d := NewDownloadModel("id", "https://example.com/releases/file.zip", "Queued", 0)
+	d.Destination = "/downloads/file"
 	m := RootModel{Settings: settings, categoryFilter: "Archives"}
 	if got := m.categoryLabel(d); got != "Archives" || !m.matchesCategoryFilter(d) {
 		t.Fatalf("URL fallback label=%q match=%t", got, m.matchesCategoryFilter(d))
