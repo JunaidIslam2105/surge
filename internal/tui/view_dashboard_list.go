@@ -7,8 +7,37 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
+type listBoxRenderKey struct {
+	width, height                       int
+	version                             uint64
+	activeTab                           int
+	activeCount, queuedCount, doneCount int
+	searchActive                        bool
+	searchQuery, searchView             string
+	logFocused                          bool
+}
+
 // renderDownloadsBox generates the download list box with the top-left corner search bar string.
 func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) string {
+	if width < 1 || height < 1 {
+		return ""
+	}
+	if m.listBoxCache == nil {
+		m.listBoxCache = &renderCache[listBoxRenderKey]{}
+	}
+	searchView := ""
+	if m.searchActive {
+		searchView = m.searchInput.View()
+	}
+	key := listBoxRenderKey{
+		width: width, height: height, version: m.listRenderVersion, activeTab: m.activeTab,
+		activeCount: stats.ActiveCount, queuedCount: stats.QueuedCount, doneCount: stats.DownloadedCount,
+		searchActive: m.searchActive, searchQuery: m.searchQuery, searchView: searchView, logFocused: m.logFocused,
+	}
+	if render, ok := m.listBoxCache.Get(key); ok {
+		return render
+	}
+
 	contentWidth := width - components.BorderFrameWidth
 	contentHeight := height - components.BorderFrameHeight
 
@@ -81,5 +110,6 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 
 	rightTitle := PaneTitleStyle.Render(" Downloads ")
 
-	return renderBtopBox(leftTitle, rightTitle, innerContent, width, height, downloadsBorderColor)
+	render := renderBtopBox(leftTitle, rightTitle, innerContent, width, height, downloadsBorderColor)
+	return m.listBoxCache.Set(key, render)
 }

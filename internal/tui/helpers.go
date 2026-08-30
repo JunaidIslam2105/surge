@@ -59,6 +59,7 @@ func (m *RootModel) refreshLogViewportContent() {
 	}
 
 	m.logViewport.SetContent(strings.Join(wrappedEntries, "\n"))
+	m.logRenderVersion++
 }
 
 // removeDownloadByID removes a download from the in-memory list.

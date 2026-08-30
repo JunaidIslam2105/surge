@@ -49,7 +49,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME#ext-v}
           echo "Setting version to $VERSION"
-          npm version $VERSION --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version
       - name: Build and Package
         run: |
           npm run zip -- -b ${{ matrix.browser }}

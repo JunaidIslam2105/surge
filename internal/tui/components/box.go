@@ -152,5 +152,7 @@ func RenderBtopBox(leftTitle, rightTitle string, content string, width, height i
 		wrappedLines = append(wrappedLines, borderStyler.Render(vertical)+line+borderStyler.Render(vertical))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, topBorder, strings.Join(wrappedLines, "\n"), bottomBorder)
+	// Every component line is already padded to the exact box width above, so
+	// joining directly avoids Lipgloss remeasuring and repadding each line.
+	return strings.Join([]string{topBorder, strings.Join(wrappedLines, "\n"), bottomBorder}, "\n")
 }

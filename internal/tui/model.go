@@ -167,7 +167,17 @@ type RootModel struct {
 	lastSpeedHistoryUpdate time.Time // Last time SpeedHistory was updated (for 0.5s sampling)
 	cachedTotalSpeed       int64     // Cached total speed (bytes/s), updated once per progress batch
 	graphRenderer          *GraphRenderer
-	lastResizeTime         time.Time
+	// Dashboard render caches are pointers because View() has a value receiver:
+	// an inline value would be copied and the write discarded every frame.
+	chunkMapCache     *renderCache[chunkMapRenderKey]
+	graphBoxCache     *graphBoxCache
+	headerBoxCache    *renderCache[headerBoxRenderKey]
+	logBoxCache       *renderCache[logBoxRenderKey]
+	listBoxCache      *renderCache[listBoxRenderKey]
+	detailsPaneCache  *renderCache[detailsPaneRenderKey]
+	listRenderVersion uint64
+	logRenderVersion  uint64
+	lastResizeTime    time.Time
 
 	// Notification log system
 	logViewport viewport.Model // Scrollable log viewport
@@ -536,6 +546,12 @@ func InitialRootModel(serverPort int, currentVersion string, service service.Dow
 		SettingsFocusedPane:   1,
 		SpeedHistory:          make([]float64, GraphHistoryPoints), // 60 points of history (60s at 1s interval)
 		graphRenderer:         NewGraphRenderer(),
+		chunkMapCache:         &renderCache[chunkMapRenderKey]{},
+		graphBoxCache:         &graphBoxCache{},
+		headerBoxCache:        &renderCache[headerBoxRenderKey]{},
+		logBoxCache:           &renderCache[logBoxRenderKey]{},
+		listBoxCache:          &renderCache[listBoxRenderKey]{},
+		detailsPaneCache:      &renderCache[detailsPaneRenderKey]{},
 		logViewport:           viewport.New(viewport.WithWidth(40), viewport.WithHeight(5)), // Default size, will be resized
 		logEntries:            make([]string, 0),
 		SettingsInput:         settingsInput,
@@ -803,6 +819,24 @@ func (m *RootModel) refreshThemeCaches() {
 	applyListTheme(&m.list)
 	applyFilepickerTheme(&m.filepicker)
 	m.logoCache = ""
+	if m.headerBoxCache != nil {
+		m.headerBoxCache.Invalidate()
+	}
+	if m.logBoxCache != nil {
+		m.logBoxCache.Invalidate()
+	}
+	if m.listBoxCache != nil {
+		m.listBoxCache.Invalidate()
+	}
+	if m.graphBoxCache != nil {
+		m.graphBoxCache.Invalidate()
+	}
+	if m.chunkMapCache != nil {
+		m.chunkMapCache.Invalidate()
+	}
+	if m.detailsPaneCache != nil {
+		m.detailsPaneCache.Invalidate()
+	}
 	if m.graphRenderer != nil {
 		m.graphRenderer.InvalidateCache()
 	}

@@ -251,6 +251,7 @@ func (m *RootModel) UpdateListItems() {
 		m.list.SetItems(items)
 		// Reset cursor to top when manually switching tabs (standard behavior)
 		m.list.Select(0)
+		m.listRenderVersion++
 		return
 	}
 
@@ -326,6 +327,7 @@ func (m *RootModel) UpdateListItems() {
 
 	// Reset forced selection
 	m.SelectedDownloadID = ""
+	m.listRenderVersion++
 }
 
 // GetSelectedDownload returns the currently selected download from the list

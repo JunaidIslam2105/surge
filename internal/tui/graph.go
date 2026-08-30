@@ -33,6 +33,14 @@ type GraphRenderer struct {
 	styleBuf [][]bool // false = grid style, true = block style (row color)
 
 	lastRender string
+
+	// Fingerprint of the inputs that produced lastRender, so a no-op frame
+	// (graph data only updates every GraphUpdateInterval) skips the whole
+	// rebuild + RLE pass instead of re-rendering identical output.
+	lastData   []float64
+	lastWidth  int
+	lastHeight int
+	lastMax    float64
 }
 
 func NewGraphRenderer() *GraphRenderer {
@@ -44,6 +52,7 @@ func NewGraphRenderer() *GraphRenderer {
 func (g *GraphRenderer) InvalidateCache() {
 	g.baseGrid = nil
 	g.lastRender = ""
+	g.lastData = nil
 	g.gridStyle = lipgloss.NewStyle().Foreground(colors.Gray())
 }
 
@@ -121,6 +130,19 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 		return g.lastRender
 	}
 
+	effectiveMaxVal := maxVal
+	if len(data) > 0 && effectiveMaxVal <= 0 {
+		effectiveMaxVal = 1
+	}
+
+	// Fast path: input fingerprint unchanged since the last render. The
+	// speed history only advances every GraphUpdateInterval, but View() is
+	// called far more often (spinner ticks), so this skips the per-block
+	// buffer work and RLE pass on every no-change frame.
+	if g.lastRender != "" && g.lastWidth == width && g.lastHeight == height && g.lastMax == effectiveMaxVal && sameFloat64s(g.lastData, data) {
+		return g.lastRender
+	}
+
 	g.resize(width, height)
 
 	// 1. Deep copy pristine grid and zero style buffer
@@ -134,11 +156,6 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 
 	// 2. Map data
 	if len(data) > 0 {
-		// Bug fix: maxVal <= 0 causes NaN
-		if maxVal <= 0 {
-			maxVal = 1
-		}
-
 		// Bug fix: Downsample if data > width to prevent column loss
 		var plotData []float64
 		if len(data) > width {
@@ -171,7 +188,7 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 			if val < 0 {
 				val = 0
 			}
-			pct := val / maxVal
+			pct := val / effectiveMaxVal
 			if pct > 1.0 {
 				pct = 1.0
 			}
@@ -249,5 +266,24 @@ func (g *GraphRenderer) Render(data []float64, width, height int, maxVal float64
 	}
 
 	g.lastRender = graphBuilder.String()
+
+	// Record the fingerprint for the next frame's fast-path check.
+	g.lastData = append(g.lastData[:0], data...)
+	g.lastWidth = width
+	g.lastHeight = height
+	g.lastMax = effectiveMaxVal
 	return g.lastRender
+}
+
+// sameFloat64s reports whether a and b have equal length and values.
+func sameFloat64s(a, b []float64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

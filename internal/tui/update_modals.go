@@ -178,7 +178,11 @@ func (m RootModel) updateDuplicateWarning(msg tea.KeyPressMsg) (tea.Model, tea.C
 		// Focus existing download - find it and select in list
 		for i, d := range m.getFilteredDownloads() {
 			if d.URL == m.pendingURL {
+				oldIndex := m.list.Index()
 				m.list.Select(i)
+				if m.list.Index() != oldIndex {
+					m.listRenderVersion++
+				}
 				break
 			}
 		}

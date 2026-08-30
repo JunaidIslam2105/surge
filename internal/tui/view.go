@@ -413,7 +413,7 @@ func (m RootModel) View() tea.View {
 	} else {
 		speedVal = lipgloss.NewStyle().Foreground(colors.LightGray()).Render(utils.FormatSpeed(float64(speedBps)))
 	}
-	speedChunk := lipgloss.JoinHorizontal(lipgloss.Center, speedGlyph, " ", speedVal)
+	speedChunk := speedGlyph + " " + speedVal
 
 	// Global rate limit indicator
 	limitGlyph := lipgloss.NewStyle().Foreground(colors.Pink()).Render("\u26A1")
@@ -425,9 +425,9 @@ func (m RootModel) View() tea.View {
 	}
 	var limitChunk string
 	if limitVal != "" {
-		limitChunk = lipgloss.JoinHorizontal(lipgloss.Center, limitGlyph, " ", limitVal)
+		limitChunk = limitGlyph + " " + limitVal
 	} else {
-		limitChunk = lipgloss.JoinHorizontal(lipgloss.Center, limitGlyph, " ", lipgloss.NewStyle().Foreground(colors.Gray()).Render("\u221E"))
+		limitChunk = limitGlyph + " " + lipgloss.NewStyle().Foreground(colors.Gray()).Render("\u221E")
 	}
 
 	// Auto-shutdown indicator
@@ -445,7 +445,7 @@ func (m RootModel) View() tea.View {
 	versionBlue := colors.ThemeColor("#005cc5", "#58a6ff")
 	versionChunk := lipgloss.NewStyle().Foreground(versionBlue).Render(fmt.Sprintf("v%s", m.CurrentVersion))
 
-	rightFooter := lipgloss.NewStyle().PaddingRight(2).Render(lipgloss.JoinHorizontal(lipgloss.Center,
+	rightFooter := lipgloss.NewStyle().PaddingRight(2).Render(strings.Join([]string{
 		speedChunk,
 		dimSep,
 		limitChunk,
@@ -453,23 +453,19 @@ func (m RootModel) View() tea.View {
 		powerChunk,
 		dimSep,
 		versionChunk,
-	))
+	}, ""))
 
 	// Hide help text at very narrow widths - right footer is more important
 	var footerContent string
 	rightFooterWidth := lipgloss.Width(rightFooter)
 	if layout.AvailableWidth < 60 {
-		footerContent = rightFooter
+		footerContent = lipgloss.NewStyle().Width(layout.AvailableWidth).Align(lipgloss.Right).Render(rightFooter)
 	} else {
 		leftFooterWidth := layout.AvailableWidth - rightFooterWidth
 		if leftFooterWidth < 0 {
 			leftFooterWidth = 0
 		}
-		footerContent = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			lipgloss.NewStyle().Width(leftFooterWidth).Render(helpText),
-			rightFooter,
-		)
+		footerContent = lipgloss.NewStyle().Width(leftFooterWidth).Render(helpText) + rightFooter
 	}
 	footer := footerContent
 
@@ -481,7 +477,12 @@ func (m RootModel) View() tea.View {
 	var bitmapWidth int
 	var totalSize, chunkSize int64
 	var chunkProgress []int64
+	var bitmapVersion uint64
 	if layout.ShowChunkMap && !layout.HideRightColumn && selected != nil && !selected.done && selected.state != nil {
+		// Read the version before the bitmap so a mutation between the two
+		// calls can never pair a stale bitmap with a newer version that a
+		// later frame would treat as cache-valid.
+		bitmapVersion = selected.state.GetBitmapVersion()
 		bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress = selected.state.GetBitmap()
 	}
 
@@ -492,7 +493,7 @@ func (m RootModel) View() tea.View {
 		detailWidth = layout.LeftWidth
 	}
 	if selected != nil {
-		detailContent = renderFocusedDetails(selected, detailWidth-components.BorderFrameWidth, m.spinner.View())
+		detailContent = m.renderDetailsContentCached(selected, detailWidth-components.BorderFrameWidth, m.spinner.View())
 	} else {
 		detailContent = renderEmptyMessage(detailWidth-components.BorderFrameWidth, layout.DetailHeight-components.BorderFrameHeight, "No download selected")
 	}
@@ -500,7 +501,7 @@ func (m RootModel) View() tea.View {
 	// Render Components
 	logoColumn := m.renderHeaderBox(layout.LogoWidth, layout.HeaderHeight)
 	logBox := m.renderLogBox(layout.LogWidth, layout.HeaderHeight)
-	headerBox := lipgloss.JoinHorizontal(lipgloss.Top, logoColumn, logBox)
+	headerBox := joinHorizontalFixed(logoColumn, logBox)
 
 	listBox := m.renderDownloadsBox(layout.LeftWidth, layout.ListHeight, stats)
 
@@ -551,10 +552,10 @@ func (m RootModel) View() tea.View {
 		rightParts = append(rightParts, detailBox)
 
 		if showActualChunkMap {
-			chunkBox := m.renderChunkMapBox(layout.RightWidth, layout.ChunkMapHeight, selected, bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress)
+			chunkBox := m.renderChunkMapBox(layout.RightWidth, layout.ChunkMapHeight, selected, bitmapVersion, bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress)
 			rightParts = append(rightParts, chunkBox)
 		}
-		rightColumn = lipgloss.JoinVertical(lipgloss.Left, rightParts...)
+		rightColumn = joinVerticalFixed(rightParts...)
 	}
 
 	// Assembly
@@ -562,23 +563,30 @@ func (m RootModel) View() tea.View {
 	if layout.HideRightColumn {
 		if layout.VerticalLayout {
 			detailBox := renderBtopBox("", PaneTitleStyle.Render(" File Details "), detailContent, layout.LeftWidth, layout.DetailHeight, colors.Gray())
-			body = lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox, detailBox)
+			body = joinVerticalFixed(headerBox, listBox, detailBox)
 		} else {
-			body = lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox)
+			body = joinVerticalFixed(headerBox, listBox)
 		}
 	} else {
-		leftColumn := lipgloss.JoinVertical(lipgloss.Left, headerBox, listBox)
-		body = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
+		leftColumn := joinVerticalFixed(headerBox, listBox)
+		body = joinHorizontalFixed(leftColumn, rightColumn)
 	}
 
-	body = lipgloss.NewStyle().
-		Width(layout.AvailableWidth).
-		Height(layout.AvailableHeight).
-		MaxWidth(layout.AvailableWidth).
-		MaxHeight(layout.AvailableHeight).
-		Render(body)
+	// The body is already laid out at exactly AvailableWidth × AvailableHeight:
+	// every pane is rendered at its exact box size (renderBtopBox pads each
+	// line to innerWidth) and the joins pad lines to the widest element, and
+	// the layout sums panes to AvailableHeight. The previous full
+	// Style.Render with Width/MaxWidth re-wrapped and re-measured every ANSI
+	// line each frame (the single largest per-frame cost in the profile) to
+	// produce the same dimensions the joins already guarantee. Only vertical
+	// pad/truncate can change anything, and that only needs line counting.
+	if h := strings.Count(body, "\n") + 1; h < layout.AvailableHeight {
+		body += strings.Repeat("\n", layout.AvailableHeight-h)
+	} else if h > layout.AvailableHeight {
+		body = strings.Join(strings.Split(body, "\n")[:layout.AvailableHeight], "\n")
+	}
 
-	fullView := lipgloss.JoinVertical(lipgloss.Left, body, footer)
+	fullView := joinVerticalFixed(body, footer)
 	// Place content into available space, then wrap with WindowStyle margins
 	return m.wrapView(lipgloss.Place(layout.AvailableWidth, m.height, lipgloss.Center, lipgloss.Top, fullView))
 }

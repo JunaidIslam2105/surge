@@ -382,6 +382,10 @@ func TestLayout_CalculateDashboardLayout_SumInvariants(t *testing.T) {
 					label, l.LeftWidth, l.RightWidth, l.AvailableWidth)
 			}
 		}
+		if l.LogoWidth+l.LogWidth != l.LeftWidth {
+			t.Errorf("[%s] LogoWidth(%d)+LogWidth(%d) != LeftWidth(%d)",
+				label, l.LogoWidth, l.LogWidth, l.LeftWidth)
+		}
 
 		// ListHeight should not exceed AvailableHeight
 		if l.ListHeight > l.AvailableHeight {

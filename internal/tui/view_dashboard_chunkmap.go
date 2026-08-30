@@ -6,8 +6,38 @@ import (
 	"github.com/SurgeDM/Surge/internal/tui/components"
 )
 
+// chunkMapRenderKey identifies a rendered chunk map box so the per-block
+// recompute (visual chunk downsample + lipgloss.Render per block) only runs
+// when the underlying bitmap actually changed, mirroring GraphRenderer.
+type chunkMapRenderKey struct {
+	selectedID string
+	version    uint64
+	paused     bool
+	totalSize  int64
+	width      int
+	height     int
+}
+
 // renderChunkMapBox returns the visual chunk map layout inside a btop box.
-func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel, bitmap []byte, bitmapWidth int, totalSize, chunkSize int64, chunkProgress []int64) string {
+func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel, bitmapVersion uint64, bitmap []byte, bitmapWidth int, totalSize, chunkSize int64, chunkProgress []int64) string {
+	// Lazy-allocate: View() has a value receiver so inline fields would be
+	// discarded each frame; the cache must live behind a pointer like
+	// graphRenderer to survive between View() calls.
+	if m.chunkMapCache == nil {
+		m.chunkMapCache = &renderCache[chunkMapRenderKey]{}
+	}
+	key := chunkMapRenderKey{
+		selectedID: selected.ID,
+		version:    bitmapVersion,
+		paused:     selected.paused,
+		totalSize:  totalSize,
+		width:      width,
+		height:     height,
+	}
+	if render, ok := m.chunkMapCache.Get(key); ok {
+		return render
+	}
+
 	contentWidth := width - components.BorderFrameWidth
 	contentHeight := height - components.BorderFrameHeight
 
@@ -47,5 +77,6 @@ func (m *RootModel) renderChunkMapBox(width, height int, selected *DownloadModel
 		innerContent = lipgloss.Place(contentWidth, contentHeight, lipgloss.Center, lipgloss.Top, chunkContentWrapper)
 	}
 
-	return renderBtopBox("", PaneTitleStyle.Render(" Chunk Map "), innerContent, width, height, colors.Gray())
+	render := renderBtopBox("", PaneTitleStyle.Render(" Chunk Map "), innerContent, width, height, colors.Gray())
+	return m.chunkMapCache.Set(key, render)
 }

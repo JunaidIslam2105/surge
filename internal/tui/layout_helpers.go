@@ -202,7 +202,7 @@ func CalculateDashboardLayout(termW, termH int) DashboardLayout {
 	if l.LogoWidth < 4 {
 		l.LogoWidth = 4
 	}
-	l.LogWidth = l.LeftWidth - l.LogoWidth - BoxStyle.GetHorizontalFrameSize()
+	l.LogWidth = l.LeftWidth - l.LogoWidth
 	if l.LogWidth < 4 {
 		l.LogWidth = 4
 	}

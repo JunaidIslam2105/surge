@@ -186,12 +186,25 @@ func BenchmarkCPU_FullView_Old(b *testing.B) {
 func BenchmarkCPU_FullView_New(b *testing.B) {
 	m := fullBenchModel(8)
 	m.cachedTotalSpeed = m.calcTotalSpeedBps()
-	// Pre-warm graph cache (as would happen after first render)
+	// Pre-warm dashboard pane caches (header, log, list, details, graph).
 	_ = m.View()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// NEW: no list rebuild, speed cached, graph cached
+		// Stable spinner frames should reuse all unchanged pane output.
+		_ = m.View()
+	}
+}
+
+// BenchmarkCPU_DashboardPanes_Cached is a focused regression benchmark for
+// spinner-driven redraws. It intentionally renders a stable model so a future
+// change that bypasses one of the pane caches shows up in allocations/time.
+func BenchmarkCPU_DashboardPanes_Cached(b *testing.B) {
+	m := fullBenchModel(8)
+	_ = m.View()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		_ = m.View()
 	}
 }

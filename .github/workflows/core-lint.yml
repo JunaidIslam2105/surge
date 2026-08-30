@@ -34,3 +34,12 @@ jobs:
           flakylint ./...
       - name: unicode lint
         run: go test ./internal/lint/...
+      - name: TUI performance comparison tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y shellcheck
+      - name: ShellCheck scripts
+        shell: bash
+        run: find scripts -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
+      - name: GitHub Actions lint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7

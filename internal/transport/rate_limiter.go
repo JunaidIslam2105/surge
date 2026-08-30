@@ -174,11 +174,18 @@ func (r *RateLimiter) SetRate(rate int64, bucketSize int64) {
 		}
 	}
 
+	oldRate := r.rate
 	r.rate = rate
 	r.bucketSize = bucketSize
 
-	if rate == 0 {
+	if rate <= 0 {
 		r.tokens = 0
+	} else if oldRate <= 0 {
+		// Disabling a limiter intentionally drains its bucket. Re-seed the
+		// bucket when it is enabled again; otherwise the first read after
+		// removing a throttle waits for a full refill despite having a fresh
+		// burst budget.
+		r.tokens = bucketSize
 	} else if r.tokens > bucketSize {
 		r.tokens = bucketSize
 	}

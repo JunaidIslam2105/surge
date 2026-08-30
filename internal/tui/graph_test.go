@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -68,6 +69,24 @@ func TestGraphRenderer_GradientOutput(t *testing.T) {
 	}
 }
 
+func TestGraphRenderer_NormalizesNonPositiveMaxForCache(t *testing.T) {
+	g := NewGraphRenderer()
+	data := []float64{1, 2, 3}
+
+	first := g.Render(data, 10, 5, 0, false)
+	if g.lastMax != 1 {
+		t.Fatalf("effective max = %v, want 1", g.lastMax)
+	}
+
+	second := g.Render(data, 10, 5, 1, false)
+	if first != second {
+		t.Fatal("equivalent renders with fallback and effective max differ")
+	}
+	if g.lastMax != 1 {
+		t.Fatalf("cached max = %v, want 1", g.lastMax)
+	}
+}
+
 func TestGraphRenderer_Downsampling(t *testing.T) {
 	g := NewGraphRenderer()
 
@@ -94,5 +113,28 @@ func TestGraphRenderer_ResizeCache(t *testing.T) {
 
 	if out1 != out2 {
 		t.Errorf("Cached render output during resize does not match initial render!")
+	}
+}
+
+func TestGraphBoxCacheExpiresWhenResizeSettles(t *testing.T) {
+	m := fullBenchModel(1)
+	stats := m.ComputeViewStats()
+	const oldBoxWidth, newBoxWidth, boxHeight = 80, 100, 12
+
+	m.lastResizeTime = time.Time{}
+	m.renderGraphBox(oldBoxWidth, boxHeight, stats)
+	oldWidth := m.graphRenderer.lastWidth
+
+	m.lastResizeTime = time.Now()
+	m.renderGraphBox(newBoxWidth, boxHeight, stats)
+	if m.graphRenderer.lastWidth != oldWidth {
+		t.Fatal("graph renderer did not reuse its previous render during resize")
+	}
+
+	m.lastResizeTime = time.Now().Add(-time.Second)
+	m.renderGraphBox(newBoxWidth, boxHeight, stats)
+	wantWidth, _ := GetGraphAreaDimensions(newBoxWidth, newBoxWidth < MinGraphStatsWidth)
+	if m.graphRenderer.lastWidth != wantWidth {
+		t.Fatalf("settled graph width = %d, want %d", m.graphRenderer.lastWidth, wantWidth)
 	}
 }
