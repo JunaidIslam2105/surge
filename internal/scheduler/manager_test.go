@@ -733,3 +733,100 @@ func TestSendPausedFallbackWaitsForFullChannel(t *testing.T) {
 	default:
 	}
 }
+
+func TestRunDownload_ChunkedSingleEmitsFinalWrittenSize(t *testing.T) {
+	tmpDir := t.TempDir()
+	body := []byte("streamed chunked dynamic archive content for manager test")
+	split := len(body) / 2
+
+	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("httptest writer does not implement http.Flusher")
+		}
+		flusher.Flush()
+		_, _ = w.Write(body[:split])
+		flusher.Flush()
+		_, _ = w.Write(body[split:])
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	destPath := filepath.Join(tmpDir, "chunked.bin")
+	if f, err := os.Create(destPath + types.IncompleteSuffix); err == nil {
+		_ = f.Close()
+	} else {
+		t.Fatal(err)
+	}
+
+	progressCh := make(chan types.DownloadEvent, 16)
+	progState := progress.New("chunked-single-manager-test", 0)
+
+	cfg := types.DownloadRecord{
+		URL:           server.URL,
+		OutputPath:    tmpDir,
+		Filename:      "chunked.bin",
+		ID:            "chunked-single-manager-test",
+		ProgressCh:    progressCh,
+		ProgressState: progState,
+		Runtime:       &types.RuntimeConfig{},
+		TotalSize:     0,
+		SupportsRange: false,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := RunDownload(ctx, &cfg)
+	if err != nil {
+		t.Fatalf("RunDownload failed: %v", err)
+	}
+
+	wantBytes := int64(len(body))
+
+	// Verify state
+	if progState.Bytes.TotalSize.Load() != wantBytes {
+		t.Errorf("progState.Bytes.TotalSize = %d, want %d", progState.Bytes.TotalSize.Load(), wantBytes)
+	}
+	if progState.Bytes.Downloaded.Load() != wantBytes {
+		t.Errorf("progState.Bytes.Downloaded = %d, want %d", progState.Bytes.Downloaded.Load(), wantBytes)
+	}
+	if progState.Bytes.VerifiedProgress.Load() != wantBytes {
+		t.Errorf("progState.Bytes.VerifiedProgress = %d, want %d", progState.Bytes.VerifiedProgress.Load(), wantBytes)
+	}
+
+	// Drain progress channel and check EventComplete
+	close(progressCh)
+	var completeEvents []*types.DownloadEvent
+	for msg := range progressCh {
+		if msg.Type == types.EventError {
+			t.Fatalf("unexpected EventError: %+v", msg)
+		}
+		if msg.Type == types.EventComplete {
+			copy := msg
+			completeEvents = append(completeEvents, &copy)
+		}
+	}
+
+	if len(completeEvents) != 1 {
+		t.Fatalf("expected exactly 1 EventComplete, got %d", len(completeEvents))
+	}
+	completeEvent := completeEvents[0]
+	if completeEvent.Total != wantBytes {
+		t.Errorf("EventComplete.Total = %d, want %d", completeEvent.Total, wantBytes)
+	}
+	if completeEvent.AvgSpeed <= 0 {
+		t.Errorf("EventComplete.AvgSpeed = %f, want > 0", completeEvent.AvgSpeed)
+	}
+
+	// Verify on-disk file content
+	workingPath := destPath + types.IncompleteSuffix
+	downloadedData, err := os.ReadFile(workingPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) failed: %v", workingPath, err)
+	}
+	if string(downloadedData) != string(body) {
+		t.Errorf("downloaded file content mismatch: got %q, want %q", string(downloadedData), string(body))
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -853,5 +854,94 @@ func TestThrottledReader_UsesLimiterErrorForCleanRead(t *testing.T) {
 	}
 	if !errors.Is(err, waitErr) {
 		t.Fatalf("Read error = %v, want %v", err, waitErr)
+	}
+}
+
+func TestSingleDownloader_Download_UnknownLength(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     []byte
+		wantSize int64
+	}{
+		{
+			name:     "chunked stream with content",
+			body:     []byte("hello chunked world from surge single stream downloader test"),
+			wantSize: int64(len("hello chunked world from surge single stream downloader test")),
+		},
+		{
+			name:     "empty stream",
+			body:     nil,
+			wantSize: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir, cleanup, err := testutil.TempDir("surge-chunked-single")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				if flusher, ok := w.(http.Flusher); ok {
+					flusher.Flush()
+					if len(tt.body) > 0 {
+						split := len(tt.body) / 2
+						_, _ = w.Write(tt.body[:split])
+						flusher.Flush()
+						_, _ = w.Write(tt.body[split:])
+						flusher.Flush()
+					}
+				}
+			}))
+			defer server.Close()
+
+			destPath := filepath.Join(tmpDir, "output.bin")
+			if f, err := os.Create(destPath + types.IncompleteSuffix); err == nil {
+				_ = f.Close()
+			} else {
+				t.Fatal(err)
+			}
+
+			state := progress.New("unknown-single-test", 0)
+			initialStartTime := state.Session.StartTime()
+			downloader := NewSingleDownloader("unknown-single-id", nil, state, &types.RuntimeConfig{})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := downloader.Download(ctx, server.URL, destPath, 0, "output.bin"); err != nil {
+				t.Fatalf("Download failed: %v", err)
+			}
+
+			if downloader.TotalSize != tt.wantSize {
+				t.Errorf("downloader.TotalSize = %d, want %d", downloader.TotalSize, tt.wantSize)
+			}
+			if state.Bytes.TotalSize.Load() != tt.wantSize {
+				t.Errorf("state.Bytes.TotalSize = %d, want %d", state.Bytes.TotalSize.Load(), tt.wantSize)
+			}
+			if state.Bytes.Downloaded.Load() != tt.wantSize {
+				t.Errorf("state.Bytes.Downloaded = %d, want %d", state.Bytes.Downloaded.Load(), tt.wantSize)
+			}
+			if state.Bytes.VerifiedProgress.Load() != tt.wantSize {
+				t.Errorf("state.Bytes.VerifiedProgress = %d, want %d", state.Bytes.VerifiedProgress.Load(), tt.wantSize)
+			}
+			if !state.Session.StartTime().Equal(initialStartTime) {
+				t.Errorf("state.Session.StartTime() was reset")
+			}
+
+			if len(tt.body) > 0 {
+				workingPath := destPath + types.IncompleteSuffix
+				data, err := os.ReadFile(workingPath)
+				if err != nil {
+					t.Fatalf("ReadFile(%s) failed: %v", workingPath, err)
+				}
+				if string(data) != string(tt.body) {
+					t.Errorf("file content mismatch: got %q, want %q", string(data), string(tt.body))
+				}
+			}
+		})
 	}
 }
