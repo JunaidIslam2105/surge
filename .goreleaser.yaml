@@ -59,7 +59,6 @@ chocolateys:
     title: Surge
     project_url: https://github.com/SurgeDM/Surge
     url_template: "https://github.com/SurgeDM/Surge/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    icon_url: https://raw.githubusercontent.com/SurgeDM/Surge/main/assets/logo.png
     copyright: 2025 Junaid Islam
     license_url: https://github.com/SurgeDM/Surge/blob/main/LICENSE
     require_license_acceptance: false
