@@ -1,8 +1,10 @@
 # Inspect and manage downloads
 
-These commands operate on the queue in a running Surge server. Use `surge ls`
-first to find a download ID; an unambiguous ID prefix is accepted where an ID is
-required.
+`surge ls` can inspect the local download database when Surge is not running,
+though a running server is needed for live progress. Commands that change the
+queue (`pause`, `resume`, `refresh`, `limit`, and `rm`) require a running server.
+Use `surge ls` first to find a download ID; an unambiguous ID prefix is accepted
+where an ID is required.
 
 ## `surge ls`
 
@@ -114,7 +116,7 @@ surge rm --clean-failed
 Prefix any command with the target server and token:
 
 ```bash
-surge --host 192.168.1.10:1700 --token "$SURGE_TOKEN" pause ab12
+surge --host https://192.168.1.10:1700 --token "$SURGE_TOKEN" pause ab12
 ```
 
 See [remote connections](../../guides/connect-to-a-remote-server.md) for TLS

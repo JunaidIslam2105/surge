@@ -32,3 +32,4 @@ build/
 # Nix binaries
 result
 result-*
+.kilo

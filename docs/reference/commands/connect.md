@@ -19,11 +19,13 @@ Start `surge` or `surge server` first if no local server is detected.
 ## Connect to a private-network server
 
 ```bash
-surge connect 192.168.1.10:1700 --token "$SURGE_TOKEN"
+surge connect https://192.168.1.10:1700 --token "$SURGE_TOKEN"
 ```
 
 For loopback and private IP addresses, Surge uses HTTP automatically unless a
-URL specifies another scheme.
+URL specifies another scheme. Do not use that automatic HTTP mode for a remote
+connection: it sends the resolved bearer token without transport confidentiality.
+Use HTTPS for remote connections, including private-network servers.
 
 ## Connect to a public hostname
 
@@ -45,13 +47,15 @@ an untrusted connection. See [remote connection security](../../guides/connect-t
 
 ## Avoid repeating credentials
 
-Set defaults for a trusted server in your shell environment:
+Set the server address, then securely prompt for its token in your shell:
 
 ```bash
-export SURGE_HOST=192.168.1.10:1700
-export SURGE_TOKEN=your-token
+export SURGE_HOST=https://192.168.1.10:1700
+read -rsp 'Surge token: ' SURGE_TOKEN; echo
+export SURGE_TOKEN
 surge connect
 ```
 
 The same values are used by `surge add`, `surge ls`, and other remote control
-commands.
+commands. If the HTTPS endpoint uses a private or self-signed CA, add
+`--tls-ca-file ./surge-ca.pem` to the command.

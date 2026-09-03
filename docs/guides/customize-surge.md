@@ -9,8 +9,8 @@ Open the settings interface in the TUI, or use the `config` command:
 
 ```bash
 surge config
-surge config General.Auto_Resume true
-surge config Performance.Stall_Timeout default
+surge config general.auto_resume true
+surge config performance.stall_timeout default
 ```
 
 `surge config open` opens the settings file in your configured editor. See the

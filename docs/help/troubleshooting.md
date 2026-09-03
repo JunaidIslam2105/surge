@@ -7,8 +7,10 @@ download URLs.
 
 ## A command cannot reach Surge
 
-Commands such as `surge add` and `surge ls` control a running local or remote
-server. Start one first:
+Commands that change the queue, such as `surge add`, need a running local or
+remote server. `surge ls` can inspect the local database when no server is
+running, but it cannot show live progress in that case. Start a server when you
+need live control:
 
 ```bash
 surge
@@ -20,8 +22,13 @@ If you started the TUI with `--no-server`, restart it without that option.
 For remote use, verify the address, port, and token:
 
 ```bash
-surge --host 192.168.1.10:1700 --token "$SURGE_TOKEN" ls
+surge --host https://192.168.1.10:1700 --token "$SURGE_TOKEN" \
+  --tls-ca-file ./surge-ca.pem ls
 ```
+
+Use `--tls-ca-file` only when the remote HTTPS endpoint uses a private or
+self-signed CA; otherwise use the system trust store. Do not send a token to an
+HTTP remote endpoint.
 
 ## A remote connection returns an authentication error
 
@@ -59,10 +66,12 @@ surge resume <id>
 
 ## Settings do not take effect
 
-Check the setting path and value with `surge config`. When configuration files
-contain invalid values, Surge validates them and can fall back to a safe default
-on startup. Review [Configuration validation](../SETTINGS.md#configuration-validation)
-and the configuration-file path for your operating system.
+Check the setting path and value with `surge config`. Individual invalid values
+are validated and reset to their safe defaults. If `settings.toml` is corrupt or
+cannot be parsed, Surge starts with `config.DefaultSettings()` for every setting
+and records a startup warning about the full fallback. Review [Configuration
+validation](../SETTINGS.md#configuration-validation) and the configuration-file
+path for your operating system.
 
 ## The TUI glyphs look wrong
 

@@ -20,10 +20,11 @@ surge config timeout
 
 ## Read one setting
 
-Use its case-sensitive path:
+Setting paths are case-insensitive. The examples use lowercase category and key
+names:
 
 ```bash
-surge config Network.Max_Concurrent_Downloads
+surge config network.max_concurrent_downloads
 ```
 
 The command prints the current value. Find valid paths in the configuration
@@ -34,8 +35,8 @@ output or in the [configuration reference](../../SETTINGS.md).
 Provide a path and value:
 
 ```bash
-surge config Network.Max_Concurrent_Downloads 4
-surge config General.Auto_Resume true
+surge config network.max_concurrent_downloads 4
+surge config general.auto_resume true
 ```
 
 Surge validates values before saving. Use the TUI or the settings reference to
@@ -46,7 +47,7 @@ understand the unit and safe range for the setting you are changing.
 Replace the value with `default`:
 
 ```bash
-surge config Performance.Stall_Timeout default
+surge config performance.stall_timeout default
 ```
 
 ## Open the configuration file

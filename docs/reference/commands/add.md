@@ -79,11 +79,12 @@ surge add --batch urls.txt --confirm
 Supply the remote host and its token before the command:
 
 ```bash
-surge --host 192.168.1.10:1700 --token "$SURGE_TOKEN" add \
+surge --host https://192.168.1.10:1700 --token "$SURGE_TOKEN" add \
   https://example.com/releases/surge.tar.gz
 ```
 
-Set `SURGE_HOST` and `SURGE_TOKEN` when you use the same server regularly. See
+Remote connections that send a token should use HTTPS. Set `SURGE_HOST` and
+`SURGE_TOKEN` when you use the same server regularly. See
 [Connect to a remote server](../../guides/connect-to-a-remote-server.md) for
 connection and security guidance.
 

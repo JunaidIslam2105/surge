@@ -40,11 +40,15 @@ When no address is supplied, it looks for a local server. For a remote server,
 provide the address and token:
 
 ```bash
-surge connect 192.168.1.10:1700 --token "$SURGE_TOKEN"
+surge connect https://192.168.1.10:1700 --token "$SURGE_TOKEN"
 ```
 
-Surge uses HTTP automatically for loopback and private IP addresses, and HTTPS
-for public addresses and hostnames. Do not use `--insecure-http` or
-`--insecure-tls` unless you understand the network you are connecting through.
+Use HTTPS for every remote connection that sends a bearer token. Surge currently
+selects HTTP automatically for loopback and private IP addresses, but that sends
+the resolved token without transport confidentiality. Use plain HTTP only for a
+local loopback connection. Put a remote Surge server behind a trusted HTTPS
+endpoint; use `--tls-ca-file` when that endpoint uses a private CA. Do not send
+tokens to HTTP endpoints or through redirects, and do not use `--insecure-http`
+or `--insecure-tls` outside a controlled test environment.
 
 For setup and security notes, see [Connect to a remote server](../guides/connect-to-a-remote-server.md).

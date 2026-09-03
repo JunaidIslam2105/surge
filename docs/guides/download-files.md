@@ -94,8 +94,9 @@ surge rm --clean-failed
 Add `--host` and an authentication token to any control command:
 
 ```bash
-surge --host 192.168.1.10:1700 --token "$SURGE_TOKEN" ls
+surge --host https://192.168.1.10:1700 --token "$SURGE_TOKEN" ls
 ```
 
-For repeated use, set `SURGE_HOST` and `SURGE_TOKEN` in your environment. See
+Use HTTPS for a remote token-authenticated connection. For repeated use, set
+`SURGE_HOST` and `SURGE_TOKEN` in your environment. See
 [Connect to a remote server](connect-to-a-remote-server.md).

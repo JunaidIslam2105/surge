@@ -83,7 +83,7 @@ Add `--no-resume` when you do not want paused downloads restored on startup.
 Use a remote TUI:
 
 ```bash
-surge connect 192.168.1.10:1700 --token "$SURGE_TOKEN"
+surge connect https://192.168.1.10:1700 --token "$SURGE_TOKEN"
 ```
 
 Read [Connect to a remote server](../../guides/connect-to-a-remote-server.md)
