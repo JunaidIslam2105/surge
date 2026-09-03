@@ -1,3 +1,8 @@
+# Legacy usage guide
+
+The task-oriented documentation has moved to the [documentation index](README.md).
+For the current command list and flags, see the [CLI reference](reference/cli.md).
+
 # Usage Guide
 
 Surge has both a robust CLI and a fast Interactive TUI. For configuration options, see [SETTINGS.md](SETTINGS.md).
