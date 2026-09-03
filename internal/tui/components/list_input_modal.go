@@ -20,17 +20,22 @@ type ListInputItem struct {
 
 // ListInputModal renders a list of items where the active item can be edited inline.
 type ListInputModal struct {
-	Title       string
-	Subtitle    string
-	Items       []ListInputItem
-	Cursor      int
-	Input       textinput.Model
-	Help        help.Model
-	HelpKeys    help.KeyMap
-	BorderColor color.Color
-	Width       int
-	Height      int
-	Error       string
+	Title         string
+	Subtitle      string
+	PlainSubtitle bool
+	Items         []ListInputItem
+	Cursor        int
+	Input         textinput.Model
+	Help          help.Model
+	HelpKeys      help.KeyMap
+	BorderColor   color.Color
+	// InactiveLabelColor overrides the color used for labels that are not selected.
+	// When omitted, the standard muted gray is used.
+	InactiveLabelColor color.Color
+	Width              int
+	Height             int
+	Compact            bool
+	Error              string
 }
 
 // viewContent renders the list items (without box wrapper or help text).
@@ -48,8 +53,12 @@ func (m ListInputModal) viewContent() string {
 			valueStyle = lipgloss.NewStyle().Foreground(colors.LightGray())
 		} else {
 			prefix = "  "
-			labelStyle = lipgloss.NewStyle().Foreground(colors.Gray())
-			valueStyle = lipgloss.NewStyle().Foreground(colors.Gray())
+			inactiveColor := m.InactiveLabelColor
+			if inactiveColor == nil {
+				inactiveColor = colors.Gray()
+			}
+			labelStyle = lipgloss.NewStyle().Foreground(inactiveColor)
+			valueStyle = lipgloss.NewStyle().Foreground(colors.LightGray())
 		}
 
 		labelRow := lipgloss.JoinHorizontal(lipgloss.Left, prefix, labelStyle.Render(item.Label))
@@ -59,14 +68,20 @@ func (m ListInputModal) viewContent() string {
 			// Show the text input, aligned under the label
 			valueStr = "  " + m.Input.View()
 			if item.InputSuffix != "" {
-				valueStr += " " + lipgloss.NewStyle().Foreground(colors.Gray()).Render(item.InputSuffix)
+				valueStr += " " + lipgloss.NewStyle().Foreground(colors.LightGray()).Render(item.InputSuffix)
 			}
-		} else {
+		} else if item.Value != "" {
 			// Show the text value, aligned under the label
 			valueStr = valueStyle.Render("  " + item.Value)
 		}
 
-		rows = append(rows, labelRow, valueStr, "")
+		rows = append(rows, labelRow)
+		if valueStr != "" {
+			rows = append(rows, valueStr)
+		}
+		if !m.Compact && (item.Value != "" || item.IsEditing) {
+			rows = append(rows, "")
+		}
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
@@ -87,7 +102,7 @@ func (m ListInputModal) RenderWithBtopBox(
 
 	// Style help text
 	helpStyle := lipgloss.NewStyle().
-		Foreground(colors.Gray()).
+		Foreground(colors.LightGray()).
 		Width(innerWidth) // Left aligned by default, which fits the design better
 
 	var helpText string
@@ -115,14 +130,17 @@ func (m ListInputModal) RenderWithBtopBox(
 	var subtitleLine string
 	var subtitleHeight int
 	if m.Subtitle != "" {
-		subtitleLine = lipgloss.NewStyle().
+		subtitleStyle := lipgloss.NewStyle().
 			Foreground(colors.LightGray()).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colors.Magenta()).
-			Padding(0, 1).
 			MarginLeft(2).
-			MarginBottom(1).
-			Render(m.Subtitle)
+			MarginBottom(1)
+		if !m.PlainSubtitle {
+			subtitleStyle = subtitleStyle.
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colors.Magenta()).
+				Padding(0, 1)
+		}
+		subtitleLine = subtitleStyle.Render(m.Subtitle)
 		subtitleHeight = lipgloss.Height(subtitleLine)
 	}
 

@@ -472,6 +472,10 @@ func (p *Scheduler) Cancel(downloadID string) types.CancelResult {
 	p.mu.Lock()
 	ad, activeExists := p.downloads[downloadID]
 	qCfg, queuedExists := p.queued[downloadID]
+	var queuedCfg types.DownloadRecord
+	if queuedExists {
+		queuedCfg = qCfg.cfg
+	}
 	if activeExists {
 		delete(p.downloads, downloadID)
 	}
@@ -524,8 +528,8 @@ func (p *Scheduler) Cancel(downloadID string) types.CancelResult {
 			progress.CfgProgress(&ad.config).Done.Store(true)
 		}
 	} else if queuedExists {
-		result.Filename = qCfg.cfg.Filename
-		result.DestPath = resolveDestPath(&qCfg.cfg)
+		result.Filename = queuedCfg.Filename
+		result.DestPath = resolveDestPath(&queuedCfg)
 	}
 
 	return result
@@ -681,40 +685,14 @@ func (p *Scheduler) worker() {
 
 		if isPaused {
 			utils.Debug("Scheduler: Download %s paused cleanly", localCfg.ID)
-			// The concurrent downloader sends DownloadPausedMsg itself via handlePause()
-			// (which causes RunDownload to return nil). When a single-threaded download is
-			// paused, RunDownload returns a non-nil error, and the pool must fill the gap.
-			if err != nil && localCfg.ProgressCh != nil {
-				var downloaded int64
-				var rateLimit int64
-				var rateLimitSet bool
-				var workers int
-				var minChunkSize int64
-				if localCfg.ProgressState != nil {
-					downloaded = progress.CfgProgress(&localCfg).Bytes.Downloaded.Load()
-				}
-				if localCfg.Runtime != nil {
-					workers = localCfg.Runtime.Workers
-					minChunkSize = localCfg.Runtime.MinChunkSize
-				}
-				rateLimit, rateLimitSet = localCfg.RateLimit, localCfg.RateLimitSet
-				safeSendProgress(localCfg.ProgressCh, types.DownloadEvent{
-					Type:         types.EventPaused,
-					DownloadID:   localCfg.ID,
-					Filename:     localCfg.Filename,
-					Downloaded:   downloaded,
-					RateLimit:    rateLimit,
-					RateLimitSet: rateLimitSet,
-					Workers:      workers,
-					MinChunkSize: minChunkSize,
-				}, p.progressDone)
-			}
+			sendPausedFallback(localCfg.ProgressCh, &localCfg, err, p.progressDone)
 		} else if err != nil {
 			p.mu.Lock()
 			delete(p.downloads, localCfg.ID)
 
 			if shouldRetryFailedDownload(p.isShuttingDown, err, qt.retries) {
 				qt.retries++
+				retryDelay := time.Second * time.Duration(qt.retries)
 				qt.inFlight = true // Keep in-flight while sending progress outside lock
 				qt.cfg = localCfg
 				p.queued[localCfg.ID] = qt
@@ -752,7 +730,7 @@ func (p *Scheduler) worker() {
 				p.mu.Unlock()
 				// ponytail: naive backoff blocks worker thread, but naturally limits retry storms
 				select {
-				case <-time.After(time.Second * time.Duration(qt.retries)):
+				case <-time.After(retryDelay):
 				case <-p.progressDone:
 					// Wake up early if shutting down
 				}
@@ -824,6 +802,49 @@ func (p *Scheduler) worker() {
 	}
 }
 
+func sendPausedFallback(ch chan<- types.DownloadEvent, cfg *types.DownloadRecord, runErr error, doneCh <-chan struct{}) {
+	if ch == nil || cfg == nil {
+		return
+	}
+
+	var pending *types.DownloadRecord
+	var downloaded int64
+	rateLimit, rateLimitSet := cfg.RateLimit, cfg.RateLimitSet
+	if cfg.ProgressState != nil {
+		state := progress.CfgProgress(cfg)
+		pending = state.TakePendingResumeState()
+		downloaded = state.Bytes.Downloaded.Load()
+		rateLimit, rateLimitSet = state.GetRateLimit()
+	}
+	// A nil error and no pending snapshot means the concurrent downloader
+	// already queued EventPaused and consumed the delivery handshake.
+	if runErr == nil && pending == nil {
+		return
+	}
+
+	event := types.DownloadEvent{
+		Type:         types.EventPaused,
+		DownloadID:   cfg.ID,
+		Filename:     cfg.Filename,
+		Downloaded:   downloaded,
+		State:        pending,
+		RateLimit:    rateLimit,
+		RateLimitSet: rateLimitSet,
+	}
+	if cfg.Runtime != nil {
+		event.Workers = cfg.Runtime.GetWorkers()
+		event.MinChunkSize = cfg.Runtime.GetMinChunkSize()
+	}
+	if pending != nil {
+		event.Downloaded = pending.Downloaded
+		event.DestPath = pending.DestPath
+		if pending.Filename != "" {
+			event.Filename = pending.Filename
+		}
+	}
+	safeSendProgress(ch, event, doneCh)
+}
+
 // shouldRetryFailedDownload reports whether a failed download should be
 // requeued for another attempt. Cancel, deadline, permanent HTTP, and
 // disk-full errors are excluded — retrying them is pointless.
@@ -849,10 +870,14 @@ func (p *Scheduler) GetStatus(id string) *types.DownloadStatus {
 	var adRateLimitBps int64
 	var adRateLimitSet bool
 	var adState *progress.DownloadProgress
+	var queuedCfg types.DownloadRecord
 
 	p.mu.RLock()
 	ad, exists := p.downloads[id]
 	qCfg, qExists := p.queued[id]
+	if qExists {
+		queuedCfg = qCfg.cfg
+	}
 	if exists {
 		adURL = ad.config.URL
 		adFilename = ad.config.Filename
@@ -870,14 +895,14 @@ func (p *Scheduler) GetStatus(id string) *types.DownloadStatus {
 	if qExists {
 		return &types.DownloadStatus{
 			ID:           id,
-			URL:          qCfg.cfg.URL,
-			Filename:     qCfg.cfg.Filename,
-			DestPath:     resolveDestPath(&qCfg.cfg),
+			URL:          queuedCfg.URL,
+			Filename:     queuedCfg.Filename,
+			DestPath:     resolveDestPath(&queuedCfg),
 			Status:       "queued",
 			Downloaded:   0,
 			TotalSize:    0, // Metadata not yet fetched
-			RateLimit:    qCfg.cfg.RateLimit,
-			RateLimitSet: qCfg.cfg.RateLimitSet,
+			RateLimit:    queuedCfg.RateLimit,
+			RateLimitSet: queuedCfg.RateLimitSet,
 		}
 	}
 

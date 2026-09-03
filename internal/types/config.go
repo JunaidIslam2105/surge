@@ -19,7 +19,7 @@ const (
 	WorkerBatchSize     = 1 * utils.MiB
 	WorkerBatchInterval = 200 * time.Millisecond
 
-	PerDownloadMax = 32
+	PerDownloadMax = 16
 	DialHedgeCount = 4
 
 	DefaultMaxIdleConns          = 100
@@ -52,6 +52,8 @@ const (
 	RateLimitJitterFraction = 0.2
 	RateLimitPenaltyDecay   = 60 * time.Second
 	RateLimitMaxRetries     = 6
+
+	DefaultAdaptiveConcurrencyInterval = 0 * time.Second
 )
 
 // ByteLimiter abstracts byte-based throttling for downloads.
@@ -83,6 +85,8 @@ type RuntimeConfig struct {
 	SlowWorkerGracePeriod time.Duration
 	StallTimeout          time.Duration
 	SpeedEmaAlpha         float64
+
+	AdaptiveConcurrencyInterval time.Duration
 }
 
 const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -134,12 +138,13 @@ func (r *RuntimeConfig) GetWorkerBufferSize() int {
 }
 
 func (r *RuntimeConfig) GetMaxTaskRetries() int {
-	if r == nil || r.MaxTaskRetries <= 0 {
+	if r == nil || r.MaxTaskRetries < 0 {
 		return MaxTaskRetries
 	}
 	return r.MaxTaskRetries
 }
 
+// GetDialHedgeCount returns the extra prewarmed connection count. Zero disables prewarming.
 func (r *RuntimeConfig) GetDialHedgeCount() int {
 	if r == nil || r.DialHedgeCount < 0 {
 		return DialHedgeCount
@@ -175,6 +180,17 @@ func (r *RuntimeConfig) GetSpeedEmaAlpha() float64 {
 	return r.SpeedEmaAlpha
 }
 
+func (r *RuntimeConfig) IsAdaptiveConcurrencyEnabled() bool {
+	return r.GetAdaptiveConcurrencyInterval() > 0
+}
+
+func (r *RuntimeConfig) GetAdaptiveConcurrencyInterval() time.Duration {
+	if r == nil || r.AdaptiveConcurrencyInterval < 0 {
+		return DefaultAdaptiveConcurrencyInterval
+	}
+	return r.AdaptiveConcurrencyInterval
+}
+
 // DefaultRuntimeConfig returns a fully-populated runtime config for callers
 // that want engine defaults rather than relying on zero-value semantics.
 func DefaultRuntimeConfig() *RuntimeConfig {
@@ -196,5 +212,6 @@ func DefaultRuntimeConfig() *RuntimeConfig {
 		SlowWorkerGracePeriod:       SlowWorkerGrace,
 		StallTimeout:                StallTimeout,
 		SpeedEmaAlpha:               SpeedEMAAlpha,
+		AdaptiveConcurrencyInterval: DefaultAdaptiveConcurrencyInterval,
 	}
 }

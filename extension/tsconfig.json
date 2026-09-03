@@ -4,6 +4,7 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "strict": true,
+    "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
     "target": "ES2020",

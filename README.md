@@ -27,7 +27,7 @@ Surge is designed for power users who prefer a keyboard-driven workflow. It feat
 
 ## Why use Surge?
 
-Most browsers open a single connection for a download. Surge opens multiple (up to 32), splits the file, and downloads chunks in parallel. But we take it a step further:
+Most browsers open a single connection for a download. Surge opens multiple (up to 16 by default), splits the file, and downloads chunks in parallel. But we take it a step further:
 
 - **Blazing Fast:** Designed to maximize your bandwidth utilization and download files as quickly as possible.
 - **Multiple Mirrors:** Download from multiple sources simultaneously. Surge distributes workers across all available mirrors and automatically handles failover.
@@ -62,6 +62,7 @@ Surge is available on multiple platforms. Choose the method that works best for 
 | Platform / Method                  | Command / Instructions                                                           | Notes                                        |
 | :--------------------------------- | :------------------------------------------------------------------------------- | :------------------------------------------- |
 | **Prebuilt Binary**          | [Download from Releases](https://github.com/SurgeDM/Surge/releases/latest) | Easiest method. Just download and run.       |
+| **Linux AppImage**           | [Download from Releases](https://github.com/SurgeDM/Surge/releases/latest) | Run `chmod +x Surge_..._linux_x86_64.AppImage`, then `./Surge_..._linux_x86_64.AppImage`. Supports delta updates. |
 | **Arch Linux (AUR)**         | `yay -S surge`                                                                 | Managed via AUR.                             |
 | **macOS / Linux (Homebrew)** | `brew install SurgeDM/tap/surge`                                      | Recommended for Mac/Linux users.             |
 | **Nix / NixOS**              | `nix run github:SurgeDM/Surge`                                        | Via Nix flake. NixOS config: `inputs.surge.packages.${pkgs.system}.default` |
@@ -236,6 +237,16 @@ We tested Surge against standard tools. Because of our connection optimization l
 
 We would love to see you benchmark Surge on your system!
 
+To compare fixed and adaptive concurrency under deterministic throttling, run:
+
+```bash
+go test ./internal/strategy/concurrent -run '^$' -bench BenchmarkThrottle -benchtime=1x -count=5
+```
+
+The native Go benchmark runs persistent-overload and burst-recovery workloads
+with both policies and reports elapsed time, request amplification, throttled
+requests, and peak accepted concurrency.
+
 ---
 
 ## Browser Extension
@@ -293,11 +304,11 @@ Distributed under the MIT License. See [LICENSE](https://github.com/SurgeDM/Surg
 ---
 
 <div align="center">
-<a href="https://star-history.com/#SurgeDM/Surge&Date">
+<a href="https://star-history.dera.page/#SurgeDM/Surge&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=SurgeDM/Surge&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=SurgeDM/Surge&type=Date" />
  </picture>
 </a>
 

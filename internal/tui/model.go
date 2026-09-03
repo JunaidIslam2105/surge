@@ -64,6 +64,7 @@ const (
 	BugReportSystemDetailsState
 	BugReportLogPathState
 	SpeedLimitsState
+	CategoryPickerState
 	PurgeConfirmState
 	RemoveConfirmState
 )
@@ -86,17 +87,18 @@ const (
 )
 
 type DownloadModel struct {
-	ID            string
-	URL           string
-	Filename      string
-	FilenameLower string
-	Destination   string // Full path to the destination file
-	Total         int64
-	Downloaded    int64
-	Speed         float64
-	Connections   int
-	RateLimit     int64 // Speed limit in bytes/sec
-	RateLimitSet  bool  // Whether RateLimit is an explicit per-download override
+	ID               string
+	URL              string
+	Filename         string
+	FilenameLower    string
+	Destination      string  // Full path to the destination file
+	categoryOverride *string // Explicit dashboard category; empty means Uncategorized.
+	Total            int64
+	Downloaded       int64
+	Speed            float64
+	Connections      int
+	RateLimit        int64 // Speed limit in bytes/sec
+	RateLimitSet     bool  // Whether RateLimit is an explicit per-download override
 
 	StartTime   time.Time
 	Elapsed     time.Duration
@@ -209,10 +211,13 @@ type RootModel struct {
 	urlUpdateInput textinput.Model // Text input for updating URL
 
 	// Category manager
-	categoryFilter  string             // Dashboard filter ("" = all)
-	catMgrEditField int                // 0=Name, 1=Description, 2=Pattern, 3=Path
-	catMgrInputs    [4]textinput.Model // Inputs for Name, Description, Pattern, Path
-	catMgrIsNew     bool               // Whether adding a new category
+	categoryFilter       string // Dashboard filter ("" = all)
+	categoryPickerCursor int
+	categoryPickerAssign bool
+	categoryPickerTarget string
+	catMgrEditField      int                // 0=Name, 1=Description, 2=Pattern, 3=Path
+	catMgrInputs         [4]textinput.Model // Inputs for Name, Description, Pattern, Path
+	catMgrIsNew          bool               // Whether adding a new category
 	// Quit confirm button focus (0 = Yep!, 1 = Nope)
 	quitConfirmFocused int
 
@@ -692,6 +697,13 @@ func (m RootModel) matchesCategoryFilter(d *DownloadModel) bool {
 		return true
 	}
 
+	if d.categoryOverride != nil {
+		if filter == "Uncategorized" {
+			return *d.categoryOverride == ""
+		}
+		return *d.categoryOverride == filter
+	}
+
 	filename := strings.TrimSpace(d.Filename)
 	if filename == "" || filename == "Queued" {
 		if d.Destination != "" {
@@ -710,6 +722,31 @@ func (m RootModel) matchesCategoryFilter(d *DownloadModel) bool {
 	}
 
 	return err == nil && cat != nil && cat.Name == filter
+}
+
+func (m RootModel) categoryLabel(d *DownloadModel) string {
+	if m.Settings == nil || !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) {
+		return ""
+	}
+	if d.categoryOverride != nil {
+		return *d.categoryOverride
+	}
+	filename := strings.TrimSpace(d.Filename)
+	if filename == "" || filename == "Queued" {
+		if d.Destination != "" {
+			if destBase := strings.TrimSpace(filepath.Base(d.Destination)); strings.Contains(destBase, ".") {
+				filename = destBase
+			}
+		}
+	}
+	if filename == "" || filename == "Queued" {
+		filename = orchestrator.InferFilenameFromURL(d.URL)
+	}
+	cat, err := config.GetCategoryForFile(filename, m.Settings.Categories.Categories)
+	if err != nil || cat == nil {
+		return ""
+	}
+	return cat.Name
 }
 
 // newFilepicker creates a fresh filepicker instance with consistent settings.
@@ -760,7 +797,7 @@ func applyColorModeForTheme(mode int, themePath string, initialDarkBackground bo
 func (m *RootModel) refreshThemeCaches() {
 	rebuildStyles()
 	m.help.Styles.ShortKey = lipgloss.NewStyle().Foreground(colors.LightGray())
-	m.help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colors.Gray())
+	m.help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colors.LightGray())
 	m.help.Styles.FullKey = lipgloss.NewStyle().Foreground(colors.Pink())
 	m.help.Styles.FullDesc = lipgloss.NewStyle().Foreground(colors.LightGray())
 	applyListTheme(&m.list)
@@ -788,7 +825,7 @@ func applyFilepickerTheme(fp *filepicker.Model) {
 	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(colors.Pink())
 	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(colors.Cyan())
 	fp.Styles.Directory = lipgloss.NewStyle().Foreground(colors.Blue())
-	fp.Styles.File = lipgloss.NewStyle().Foreground(colors.White())
+	fp.Styles.File = lipgloss.NewStyle().Foreground(colors.LightGray())
 	fp.Styles.DisabledFile = lipgloss.NewStyle().Foreground(colors.Gray())
 	fp.Styles.Permission = lipgloss.NewStyle().Foreground(colors.Gray())
 	fp.Styles.Selected = lipgloss.NewStyle().Foreground(colors.Pink()).Bold(true)

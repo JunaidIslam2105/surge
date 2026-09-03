@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/SurgeDM/Surge/internal/clipboard"
 	"github.com/SurgeDM/Surge/internal/config"
@@ -16,7 +15,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle search input FIRST when active (intercepts ALL keys)
 	if m.searchActive {
 		switch msg.String() {
-		case "esc":
+		case "esc", "Q":
 			// Cancel search and clear query
 			m.searchActive = false
 			m.searchInput.Blur()
@@ -39,25 +38,17 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Toggle search with F
-	if key.Matches(msg, m.keys.Dashboard.Search) {
-		if m.searchQuery != "" {
-			// Clear existing search
-			m.searchQuery = ""
-			m.searchInput.SetValue("")
-			m.UpdateListItems()
-		} else {
-			// Start new search
-			m.searchActive = true
-			m.searchInput.Focus()
-		}
+	// Focus search.
+	if msg.String() == "/" || key.Matches(msg, m.keys.Dashboard.Search) {
+		m.searchActive = true
+		m.searchInput.Focus()
 		return m, nil
 	}
 
 	// Tab switching
 	pinnedGuard := func() bool {
 		if m.pinnedTab != -1 {
-			m.addLogEntry(LogStyleError.Render("\u25c6 Tab is pinned \u2014 press t to unpin"))
+			m.addLogEntry(LogStyleError.Render("\u25c6 Tab is pinned \u2014 press " + m.keys.Dashboard.PinTab.Help().Key + " to unpin"))
 			return true
 		}
 		return false
@@ -153,9 +144,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Delete download
 	if key.Matches(msg, m.keys.Dashboard.Delete) {
-		if m.list.FilterState() == list.Filtering {
-			// Fall through
-		} else if d := m.GetSelectedDownload(); d != nil {
+		if d := m.GetSelectedDownload(); d != nil {
 			if !d.done || d.err != nil {
 				m.removeTargetID = d.ID
 				m.quitConfirmFocused = 1 // default focus on "Cancel"
@@ -168,9 +157,7 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Delete download + file from disk (purge)
 	if key.Matches(msg, m.keys.Dashboard.PurgeFile) {
-		if m.list.FilterState() == list.Filtering {
-			// Fall through
-		} else if d := m.GetSelectedDownload(); d != nil {
+		if d := m.GetSelectedDownload(); d != nil {
 			if !d.done || d.err != nil {
 				m.addLogEntry(LogStyleError.Render("\u2716 Purge is only for successfully completed downloads"))
 				return m, nil
@@ -305,33 +292,26 @@ func (m RootModel) updateDashboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(msg, m.keys.Dashboard.CategoryFilter) {
+		m.categoryPickerAssign = false
+		m.categoryPickerTarget = ""
 		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
-			if m.categoryFilter != "" {
-				m.categoryFilter = ""
-				m.addLogEntry(LogStyleStarted.Render("\U0001F4C2 Filter: All"))
-				m.UpdateListItems()
-				return m, nil
-			}
 			m.addLogEntry(LogStyleError.Render("\u2716 Enable categories in Settings first"))
 			return m, nil
 		}
-		names := config.CategoryNames(m.Settings.Categories.Categories)
-		cycle := append([]string{""}, names...)
-		cycle = append(cycle, "Uncategorized")
-		current := 0
-		for i, n := range cycle {
-			if n == m.categoryFilter {
-				current = i
-				break
-			}
+		m.categoryPickerCursor = m.categoryFilterPickerCursor()
+		m.state = CategoryPickerState
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Dashboard.AssignCategory) && m.GetSelectedDownload() != nil {
+		d := m.GetSelectedDownload()
+		m.categoryPickerAssign = true
+		if !config.Resolve[bool](m.Settings.Categories.CategoryEnabled) || len(m.Settings.Categories.Categories) == 0 {
+			m.addLogEntry(LogStyleError.Render("\u2716 Enable categories in Settings first"))
+			return m, nil
 		}
-		m.categoryFilter = cycle[(current+1)%len(cycle)]
-		label := m.categoryFilter
-		if label == "" {
-			label = "All"
-		}
-		m.addLogEntry(LogStyleStarted.Render("\U0001F4C2 Filter: " + label))
-		m.UpdateListItems()
+		m.categoryPickerTarget = d.ID
+		m.categoryPickerCursor = 0
+		m.state = CategoryPickerState
 		return m, nil
 	}
 

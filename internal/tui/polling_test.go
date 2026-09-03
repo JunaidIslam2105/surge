@@ -21,7 +21,7 @@ func TestStateSync(t *testing.T) {
 	// Initialize model with progress channel and service
 	bus := orchestrator.NewEventBus()
 	mgr := orchestrator.NewLifecycleManager(nil, bus, nil)
-	m := InitialRootModel(1700, "test-version", service.NewLocalDownloadService(mgr), mgr, nil, false)
+	m := InitialRootModel(1700, "dev", service.NewLocalDownloadService(mgr), mgr, nil, false)
 
 	downloadID := "external-id"
 	// Create the "worker" state - this is the source of truth

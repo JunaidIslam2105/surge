@@ -140,7 +140,10 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, m.keys.Settings.Close) {
 		requiresRestart := m.checkRestartRequirement()
 		// Save settings and exit
-		_ = m.persistSettings()
+		if err := m.persistSettings(); err != nil {
+			m.settingsError = "Failed to save settings: " + err.Error()
+			return m, nil
+		}
 		if requiresRestart {
 			m.state = RestartConfirmState
 			m.quitConfirmFocused = 0
@@ -152,7 +155,10 @@ func (m RootModel) updateSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if key.Matches(msg, m.keys.Settings.ReportBug) {
 		// Save settings and exit before going to bug report
-		_ = m.persistSettings()
+		if err := m.persistSettings(); err != nil {
+			m.settingsError = "Failed to save settings: " + err.Error()
+			return m, nil
+		}
 		m.SettingsBaseline = nil
 
 		m.quitConfirmFocused = 0

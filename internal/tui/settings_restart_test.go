@@ -72,6 +72,10 @@ func TestDefensiveSnapshotting(t *testing.T) {
 }
 
 func TestBaselineCleanup(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("APPDATA", configHome)
+
 	m := RootModel{
 		Settings:         config.DefaultSettings(),
 		SettingsBaseline: config.DefaultSettings(),

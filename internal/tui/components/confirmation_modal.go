@@ -2,6 +2,7 @@ package components
 
 import (
 	"image/color"
+	"strings"
 
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/utils"
@@ -49,10 +50,13 @@ func (m ConfirmationModal) renderBody(width int) string {
 
 	content := msg
 	if det != "" {
+		if !strings.Contains(det, "\x1b") {
+			det = getDetailStyle().Render(det)
+		}
 		content = lipgloss.JoinVertical(lipgloss.Center,
 			content,
 			"",
-			getDetailStyle().Render(det),
+			det,
 		)
 	}
 

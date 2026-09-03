@@ -67,11 +67,12 @@ type NetworkSettings struct {
 }
 
 type PerformanceSettings struct {
-	MaxTaskRetries        *Setting `json:"max_task_retries"`
-	SlowWorkerThreshold   *Setting `json:"slow_worker_threshold"`
-	SlowWorkerGracePeriod *Setting `json:"slow_worker_grace_period"`
-	StallTimeout          *Setting `json:"stall_timeout"`
-	SpeedEmaAlpha         *Setting `json:"speed_ema_alpha"`
+	MaxTaskRetries              *Setting `json:"max_task_retries"`
+	SlowWorkerThreshold         *Setting `json:"slow_worker_threshold"`
+	SlowWorkerGracePeriod       *Setting `json:"slow_worker_grace_period"`
+	StallTimeout                *Setting `json:"stall_timeout"`
+	SpeedEmaAlpha               *Setting `json:"speed_ema_alpha"`
+	AdaptiveConcurrencyInterval *Setting `json:"adaptive_concurrency_interval"`
 }
 
 type CategorySettings struct {
@@ -295,6 +296,7 @@ func (s *Settings) initializeCategoriesList() {
 				s.Performance.SlowWorkerGracePeriod,
 				s.Performance.StallTimeout,
 				s.Performance.SpeedEmaAlpha,
+				s.Performance.AdaptiveConcurrencyInterval,
 			},
 		},
 		{
@@ -672,8 +674,8 @@ func DefaultSettings() *Settings {
 				Label:        "Max Connections/Download",
 				Description:  "Maximum concurrent connections per download (1-64).",
 				Type:         TypeInt,
-				DefaultValue: 32,
-				Value:        32,
+				DefaultValue: types.PerDownloadMax,
+				Value:        types.PerDownloadMax,
 				ValidateFunc: func(val any) error {
 					v, err := parseAnyInt(val)
 					if err != nil {
@@ -815,7 +817,7 @@ func DefaultSettings() *Settings {
 			DialHedgeCount: &Setting{
 				Key:          "dial_hedge_count",
 				Label:        "Dial Hedge Count",
-				Description:  "Number of extra connections to dial pre-emptively to avoid slow connects (0-16).",
+				Description:  "Number of extra connections to dial pre-emptively; 0 disables connection prewarming (0-16).",
 				Type:         TypeInt,
 				DefaultValue: 4,
 				Value:        4,
@@ -970,6 +972,31 @@ func DefaultSettings() *Settings {
 					}
 					if v < 0.0 || v > 1.0 {
 						return fmt.Errorf("must be between 0.0 and 1.0")
+					}
+					return nil
+				},
+			},
+			AdaptiveConcurrencyInterval: &Setting{
+				Key:          "adaptive_concurrency_interval",
+				Label:        "Adaptive Concurrency Interval",
+				Description:  "Halve connections when throttled, add one connection per interval, and split small tail ranges among idle workers on healthy hosts; 0 disables adaptation (0s or 1s-60s).",
+				Type:         TypeDuration,
+				DefaultValue: types.DefaultAdaptiveConcurrencyInterval,
+				Value:        types.DefaultAdaptiveConcurrencyInterval,
+				ValidateFunc: func(val any) error {
+					var v time.Duration
+					switch actual := val.(type) {
+					case time.Duration:
+						v = actual
+					case float64:
+						v = time.Duration(actual)
+					case int64:
+						v = time.Duration(actual)
+					default:
+						return fmt.Errorf("invalid type")
+					}
+					if v < 0 || v > time.Minute || v > 0 && v < time.Second {
+						return fmt.Errorf("must be 0 or between 1s and 60s")
 					}
 					return nil
 				},
@@ -1294,6 +1321,7 @@ func (s *Settings) ToRuntimeConfig() *types.RuntimeConfig {
 		SlowWorkerGracePeriod:       Resolve[time.Duration](s.Performance.SlowWorkerGracePeriod),
 		StallTimeout:                Resolve[time.Duration](s.Performance.StallTimeout),
 		SpeedEmaAlpha:               Resolve[float64](s.Performance.SpeedEmaAlpha),
+		AdaptiveConcurrencyInterval: Resolve[time.Duration](s.Performance.AdaptiveConcurrencyInterval),
 	}
 }
 

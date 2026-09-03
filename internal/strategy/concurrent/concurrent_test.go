@@ -76,7 +76,7 @@ func TestConcurrentDownloader_WithLatency(t *testing.T) {
 
 	destPath := filepath.Join(tmpDir, "latency_test.bin")
 	state := progress.New("latency-test", fileSize)
-	runtime := &types.RuntimeConfig{MaxConnectionsPerDownload: 2}
+	runtime := &types.RuntimeConfig{MaxConnectionsPerDownload: 2, DialHedgeCount: 1}
 
 	downloader := NewConcurrentDownloader("latency-id", nil, state, runtime)
 
@@ -360,10 +360,12 @@ func TestConcurrentDownloader_Cancellation(t *testing.T) {
 	defer cleanup()
 
 	fileSize := int64(10 * utils.MiB)
+	requestStarted := make(chan struct{}, 1)
 	server := testutil.NewMockServerT(t,
 		testutil.WithFileSize(fileSize),
 		testutil.WithRangeSupport(true),
 		testutil.WithByteLatency(100*time.Microsecond),
+		testutil.WithRequestStarted(requestStarted),
 	)
 	defer server.Close()
 
@@ -385,7 +387,11 @@ func TestConcurrentDownloader_Cancellation(t *testing.T) {
 		done <- downloader.Download(ctx, server.URL(), nil, nil, destPath, fileSize)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case <-requestStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Request did not start in time")
+	}
 	cancel()
 
 	select {
@@ -628,6 +634,9 @@ func TestConcurrentDownloader_ResumePartialDownload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resume download failed: %v", err)
 	}
+	if got := server.Stats().RangeRequests; got != 1 {
+		t.Fatalf("resume issued %d range requests, want only the remaining task without prewarming", got)
+	}
 }
 
 // =============================================================================
@@ -866,9 +875,8 @@ func TestConcurrentDownloader_PauseDuringRetryBackoff(t *testing.T) {
 			break
 		}
 	}
-
 	if pausedEvent == nil {
-		t.Fatalf("Expected EventPaused on progress channel")
+		t.Fatal("Expected EventPaused on progress channel")
 	}
 
 	savedState := pausedEvent.State

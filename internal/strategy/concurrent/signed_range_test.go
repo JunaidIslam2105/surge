@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/SurgeDM/Surge/internal/testutil"
 	"github.com/SurgeDM/Surge/internal/types"
@@ -108,6 +109,75 @@ func TestInitialRangesStayWithinWorkerRequestBudget(t *testing.T) {
 		if finalEnd != fileSize-1 {
 			t.Errorf("final range ends at %d, want %d", finalEnd, fileSize-1)
 		}
+	}
+}
+
+func TestDownloadTask_CompletesExactRangeWithoutFIN(t *testing.T) {
+	const rangeSize = int64(32 * 1024)
+
+	delivered := make(chan struct{})
+	handlerDone := make(chan struct{})
+	server := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		if got := r.Header.Get("Range"); got != "bytes=0-32767" {
+			http.Error(w, "unexpected range: "+got, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Range", "bytes 0-32767/32768")
+		w.WriteHeader(http.StatusPartialContent)
+		if _, err := w.Write(make([]byte, rangeSize)); err != nil {
+			return
+		}
+		w.(http.Flusher).Flush()
+		close(delivered)
+
+		// Keep the response open. The downloader must finish from its requested
+		// byte count instead of waiting for EOF or a connection FIN.
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	outFile, err := os.CreateTemp(t.TempDir(), "exact-range-*.surge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = outFile.Close() }()
+
+	task := types.Task{Offset: 0, Length: rangeSize}
+	active := &ActiveTask{Task: task}
+	active.CurrentOffset.Store(task.Offset)
+	active.StopAt.Store(task.Offset + task.Length)
+	downloader := NewConcurrentDownloader("exact-range-no-fin", nil, nil, &types.RuntimeConfig{
+		WorkerBufferSize: int(rangeSize),
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- downloader.downloadTask(ctx, server.URL, outFile, active, make([]byte, rangeSize), server.Client(), rangeSize)
+	}()
+
+	select {
+	case <-delivered:
+	case <-ctx.Done():
+		t.Fatal("server did not deliver the advertised range")
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("downloadTask failed: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("downloadTask waited for FIN after receiving the exact range")
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("response body close did not release the open server handler")
+	}
+	if got := active.CurrentOffset.Load(); got != rangeSize {
+		t.Fatalf("current offset = %d, want %d", got, rangeSize)
 	}
 }
 

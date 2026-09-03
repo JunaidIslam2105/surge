@@ -16,7 +16,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/types"
 )
 
-func setupTestService(t *testing.T) (*LocalDownloadService, *httptest.Server, string) {
+func setupTestService(t *testing.T) (*LocalDownloadService, *httptest.Server, string, <-chan string) {
 	testutil.SetupStateDB(t)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,20 +40,22 @@ func setupTestService(t *testing.T) (*LocalDownloadService, *httptest.Server, st
 
 	// Mock event worker to handle EventRemoved
 	ch, cleanup := eb.Subscribe()
+	removed := make(chan string, 10)
 	go func() {
 		for e := range ch {
 			if e.Type == types.EventRemoved {
 				_ = store.DeleteState(e.DownloadID)
+				removed <- e.DownloadID
 			}
 		}
 	}()
 	t.Cleanup(cleanup)
 
-	return svc, ts, tmpDir
+	return svc, ts, tmpDir, removed
 }
 
 func TestLocalDownloadService_AddWithID_UsesProvidedID(t *testing.T) {
-	svc, globalTs, tmpDir := setupTestService(t)
+	svc, globalTs, tmpDir, _ := setupTestService(t)
 	defer globalTs.Close()
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
@@ -94,7 +96,7 @@ func TestLocalDownloadService_AddWithID_UsesProvidedID(t *testing.T) {
 }
 
 func TestLocalDownloadService_StreamEvents(t *testing.T) {
-	svc, ts, tmpDir := setupTestService(t)
+	svc, ts, tmpDir, _ := setupTestService(t)
 	defer ts.Close()
 
 	ch, cleanup, err := svc.StreamEvents(context.Background())
@@ -134,7 +136,7 @@ func TestLocalDownloadService_StreamEvents(t *testing.T) {
 }
 
 func TestLocalDownloadService_RateLimits(t *testing.T) {
-	svc, ts, tmpDir := setupTestService(t)
+	svc, ts, tmpDir, _ := setupTestService(t)
 	defer ts.Close()
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
@@ -192,9 +194,6 @@ func TestLocalDownloadService_RateLimits(t *testing.T) {
 	// Add a download and set its specific rate limit
 	id, _ := svc.Add(rateTs.URL, tmpDir, "rate.txt", nil, nil, false, 1, 0)
 
-	// Wait briefly for the download to be picked up by the scheduler
-	time.Sleep(100 * time.Millisecond)
-
 	err = svc.SetRateLimit(id, 2000)
 	if err != nil {
 		t.Errorf("SetRateLimit failed: %v", err)
@@ -218,7 +217,7 @@ func TestLocalDownloadService_RateLimits(t *testing.T) {
 }
 
 func TestLocalDownloadService_Purge(t *testing.T) {
-	svc, ts, tmpDir := setupTestService(t)
+	svc, ts, tmpDir, _ := setupTestService(t)
 	defer ts.Close()
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
@@ -241,9 +240,6 @@ func TestLocalDownloadService_Purge(t *testing.T) {
 
 	id, _ := svc.AddWithID(purgeTs.URL, tmpDir, "purge.txt", nil, nil, "purge-id", false, 1, 0)
 
-	// Wait a tiny bit for the file to be created
-	time.Sleep(100 * time.Millisecond)
-
 	status, err := svc.GetStatus(id)
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
@@ -255,9 +251,6 @@ func TestLocalDownloadService_Purge(t *testing.T) {
 		t.Errorf("Purge failed: %v", err)
 	}
 
-	// Wait a tiny bit to ensure worker exited and no re-creation happened
-	time.Sleep(100 * time.Millisecond)
-
 	// Check that the file was deleted
 	if _, err := os.Stat(filepath.Join(tmpDir, "purge.txt")); !os.IsNotExist(err) {
 		t.Errorf("file purge.txt was not deleted")
@@ -268,7 +261,7 @@ func TestLocalDownloadService_Purge(t *testing.T) {
 }
 
 func TestLocalDownloadService_HistoryAndList(t *testing.T) {
-	svc, ts, tmpDir := setupTestService(t)
+	svc, ts, tmpDir, _ := setupTestService(t)
 	defer ts.Close()
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
@@ -361,7 +354,7 @@ func TestLocalDownloadService_HistoryAndList(t *testing.T) {
 }
 
 func TestLocalDownloadService_Delete(t *testing.T) {
-	svc, ts, tmpDir := setupTestService(t)
+	svc, ts, tmpDir, removed := setupTestService(t)
 	defer ts.Close()
 	t.Cleanup(func() { _ = svc.Shutdown() })
 
@@ -372,7 +365,14 @@ func TestLocalDownloadService_Delete(t *testing.T) {
 		t.Errorf("Delete failed: %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case removedID := <-removed:
+		if removedID != id {
+			t.Fatalf("removed download ID = %q, want %q", removedID, id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for removal event to be processed")
+	}
 
 	// Check if it's gone
 	_, err = svc.GetStatus(id)

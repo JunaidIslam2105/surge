@@ -4,7 +4,7 @@ Surge has both a robust CLI and a fast Interactive TUI. For configuration option
 
 ## TUI Usage
 
-In the interactive TUI (launched simply via `surge`), you can manage your downloads through keyboard shortcuts. You can view all shortcuts in-app by pressing `?` (Help) or `Shift+?`.
+In the interactive TUI (launched simply via `surge`), you can manage your downloads through keyboard shortcuts. Press `h` to open or close the keyboard-shortcuts overlay. Press `?` to report a bug.
 
 ### Adding Downloads from Clipboard
 

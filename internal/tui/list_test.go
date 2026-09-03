@@ -11,6 +11,12 @@ import (
 
 var testAnsiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
+func TestNewDownloadListDisablesBuiltInFiltering(t *testing.T) {
+	if NewDownloadList(80, 20).FilteringEnabled() {
+		t.Fatal("download list filtering must remain disabled; dashboard search owns filtering")
+	}
+}
+
 func TestDownloadItem_Description(t *testing.T) {
 	spinnerView := "\u280b"
 
@@ -58,6 +64,20 @@ func TestDownloadItem_Description(t *testing.T) {
 				t.Errorf("Description() = %q, want it to contain %q", plainDesc, tt.expected)
 			}
 		})
+	}
+}
+
+func TestDownloadDelegateReservesRoomForCategory(t *testing.T) {
+	d := newDownloadDelegate()
+	m := list.New([]list.Item{}, d, 42, 10)
+	item := DownloadItem{
+		download: &DownloadModel{Filename: strings.Repeat("very-long-name-", 8) + ".mkv"},
+		category: "Shows",
+	}
+	var buf bytes.Buffer
+	d.Render(&buf, m, 0, item)
+	if got := testAnsiEscapeRE.ReplaceAllString(buf.String(), ""); !strings.Contains(got, "[Shows]") {
+		t.Fatalf("long-title row omitted category: %q", got)
 	}
 }
 

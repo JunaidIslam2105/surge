@@ -18,7 +18,7 @@ const (
 	MaxSettingsWidth      = 130
 	DefaultSettingsHeight = 26
 
-	MinRightColumnWidth = 50 // Hide right column if narrow
+	MinRightColumnWidth = 48 // Keep details visible at the common 120-column width
 	MinGraphStatsWidth  = 50 // Show inline graph stats whenever right column is visible
 	MinLogoWidth        = 40 // Hide ASCII logo if narrow
 
@@ -37,7 +37,7 @@ const (
 	DefaultPaddingY        = 0
 	PopupPaddingX          = 2
 	PopupPaddingY          = 1
-	PopupWidth             = 70 // Consistent width for small popup dialogs
+	PopupWidth             = 96 // Fits the complete three-column shortcut list on standard terminals
 	HeaderWidthOffset      = 2
 	ProgressBarWidthOffset = 4
 

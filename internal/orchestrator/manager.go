@@ -8,6 +8,7 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,19 @@ type LifecycleManager struct {
 	// large batch of downloads does not flood the network with HEAD requests.
 	probeSem     chan struct{}
 	shutdownOnce sync.Once
+	inflightMu   sync.Mutex
+	inflight     map[string]*inflightEnqueue
+	// Test hooks make concurrent enqueue tests deterministic without affecting
+	// production behavior.
+	inflightJoinHook  func()
+	inflightStartHook func()
+}
+
+type inflightEnqueue struct {
+	done     chan struct{}
+	id       string
+	filename string
+	err      error
 }
 
 const (
@@ -112,6 +126,7 @@ func NewLifecycleManager(pool *scheduler.Scheduler, eventBus *EventBus, settings
 		aggregator:          aggregator,
 		isNameActive:        activeCheck,
 		probeSem:            sem,
+		inflight:            make(map[string]*inflightEnqueue),
 	}
 }
 
@@ -201,7 +216,72 @@ func (mgr *LifecycleManager) enqueueResolved(ctx context.Context, req *DownloadR
 	if req.Path == "" {
 		return "", "", types.ErrDestRequired
 	}
+	if requestID != "" {
+		return mgr.enqueueNew(ctx, req, requestID)
+	}
 
+	key := enqueueCoalescingKey(req)
+	mgr.inflightMu.Lock()
+	if existing := mgr.inflight[key]; existing != nil {
+		mgr.inflightMu.Unlock()
+		if mgr.inflightJoinHook != nil {
+			mgr.inflightJoinHook()
+		}
+		select {
+		case <-existing.done:
+			return existing.id, existing.filename, existing.err
+		case <-ctx.Done():
+			return "", "", fmt.Errorf("enqueue aborted while waiting for matching request: %w", ctx.Err())
+		}
+	}
+	entry := &inflightEnqueue{done: make(chan struct{})}
+	mgr.inflight[key] = entry
+	mgr.inflightMu.Unlock()
+	if mgr.inflightStartHook != nil {
+		mgr.inflightStartHook()
+	}
+
+	entry.id, entry.filename, entry.err = mgr.enqueueNew(ctx, req, requestID)
+	mgr.inflightMu.Lock()
+	delete(mgr.inflight, key)
+	close(entry.done)
+	mgr.inflightMu.Unlock()
+	return entry.id, entry.filename, entry.err
+}
+
+// enqueueCoalescingKey includes every request field that can affect the queued
+// download. Requests that merely share a URL and destination may still have a
+// different filename, authentication headers, or scheduling options and must
+// therefore be enqueued independently.
+func enqueueCoalescingKey(req *DownloadRequest) string {
+	var key strings.Builder
+	writeString := func(value string) {
+		fmt.Fprintf(&key, "%d:%s", len(value), value)
+	}
+	writeString(req.URL)
+	writeString(req.Filename)
+	writeString(req.Path)
+	fmt.Fprintf(&key, "%d:", len(req.Mirrors))
+	for _, mirror := range req.Mirrors {
+		writeString(mirror)
+	}
+
+	headerNames := make([]string, 0, len(req.Headers))
+	for name := range req.Headers {
+		headerNames = append(headerNames, name)
+	}
+	sort.Strings(headerNames)
+	fmt.Fprintf(&key, "%d:", len(headerNames))
+	for _, name := range headerNames {
+		writeString(name)
+		writeString(req.Headers[name])
+	}
+
+	fmt.Fprintf(&key, "%t:%t:%d:%d", req.IsExplicitCategory, req.SkipApproval, req.Workers, req.MinChunkSize)
+	return key.String()
+}
+
+func (mgr *LifecycleManager) enqueueNew(ctx context.Context, req *DownloadRequest, requestID string) (string, string, error) {
 	settings := mgr.GetSettings()
 
 	// Throttle concurrent probes — acquire a semaphore slot before probing.

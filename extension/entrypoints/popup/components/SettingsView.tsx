@@ -11,6 +11,7 @@ import {
   authValid, setAuthValid,
   interceptEnabled, setInterceptEnabled,
   notificationsEnabled, setNotificationsEnabled,
+  fallbackToBrowser, setFallbackToBrowser,
   minFileSize, setMinFileSize,
 } from '../store';
 import {
@@ -126,6 +127,10 @@ export default function SettingsView() {
     setNotificationsEnabled(checked);
     await browser.storage.local.set({ [STORAGE_KEYS.NOTIFICATIONS]: checked });
   };
+  const handleFallbackToggle = async (checked: boolean) => {
+    setFallbackToBrowser(checked);
+    await browser.storage.local.set({ [STORAGE_KEYS.FALLBACK_TO_BROWSER]: checked });
+  };
   const handleMinFileSizeChange = async (value: string) => {
     const num = parseFloat(value);
     if (!isNaN(num) && num >= 0) {
@@ -158,6 +163,17 @@ export default function SettingsView() {
               type="checkbox"
               checked={notificationsEnabled()}
               onChange={(e) => { void handleNotificationsToggle((e.target as HTMLInputElement).checked); }}
+            />
+            <span class="toggle-slider" />
+          </div>
+        </label>
+        <label class="toggle-row">
+          <span>Retry failed downloads in browser</span>
+          <div class="toggle">
+            <input
+              type="checkbox"
+              checked={fallbackToBrowser()}
+              onChange={(e) => { void handleFallbackToggle((e.target as HTMLInputElement).checked); }}
             />
             <span class="toggle-slider" />
           </div>
