@@ -106,6 +106,25 @@ func TestUpdateDashboard_DeleteSuccess(t *testing.T) {
 	}
 }
 
+func TestUpdateListItems_SelectsNewLastItemAfterSelectedLastIsRemoved(t *testing.T) {
+	first := &DownloadModel{ID: "first-id", Filename: "first.zip", done: true}
+	last := &DownloadModel{ID: "last-id", Filename: "last.zip", done: true}
+	m := RootModel{
+		activeTab: TabDone,
+		downloads: []*DownloadModel{first, last},
+		list:      NewDownloadList(80, 20),
+	}
+	m.UpdateListItems()
+	m.list.Select(1)
+
+	m.removeDownloadByID(last.ID)
+	m.UpdateListItems()
+
+	if got := m.list.Index(); got != 0 {
+		t.Fatalf("list index after removing selected last item = %d, want 0", got)
+	}
+}
+
 func TestUpdateDashboard_DeleteOtherError(t *testing.T) {
 	dm := &DownloadModel{ID: "error-id", Filename: "error.zip", done: true}
 	svc := &mockService{deleteErr: errors.New("some other error")}

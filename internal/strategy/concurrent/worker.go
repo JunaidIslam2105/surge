@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/transport"
@@ -19,6 +18,10 @@ import (
 var writeAtFn = func(f *os.File, b []byte, off int64) (int, error) {
 	return f.WriteAt(b, off)
 }
+
+var errSoftForbidden = errors.New("unexpected status: 403")
+
+const soft403RetryDelay = 500 * time.Millisecond
 
 // worker downloads tasks from the queue
 func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []string, file *os.File, queue *TaskQueue, totalSize int64, client *http.Client) error {
@@ -37,8 +40,14 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 	}
 
 	for {
+		if d.concurrencyGate != nil && !d.concurrencyGate.acquire(ctx) {
+			return ctx.Err()
+		}
 		task, ok := queue.Pop()
 		if !ok {
+			if d.concurrencyGate != nil {
+				d.concurrencyGate.release()
+			}
 			return nil
 		}
 
@@ -52,10 +61,6 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			StartTime:   now,
 			WindowStart: now,
 		}
-		if task.SharedMaxOffset != nil {
-			activeTask.SharedMaxOffset = task.SharedMaxOffset
-			activeTask.Hedged.Store(1)
-		}
 		activeTask.CurrentOffset.Store(task.Offset)
 		activeTask.StopAt.Store(task.Offset + task.Length)
 		activeTask.LastActivity.Store(now.UnixNano())
@@ -65,9 +70,9 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 		d.activeMu.Unlock()
 
 		var lastErr error
+		var throttledRequeue *types.Task
 		maxRetries := d.Runtime.GetMaxTaskRetries()
 		genericAttempt := 0
-		rlRetries := 0
 
 		for {
 			idx, wait := d.hostLimiter.PickMirror(mirrorHosts, currentMirrorIdx, time.Now())
@@ -78,6 +83,9 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 					activeTask.WaitingOnLimiter.Store(false)
 					if d.State != nil {
 						d.State.ActiveWorkers.Add(-1)
+					}
+					if d.concurrencyGate != nil {
+						d.concurrencyGate.release()
 					}
 					return ctx.Err()
 				}
@@ -118,7 +126,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			// still persist the unfinished range after peers are cancelled.
 			if types.IsInsufficientDiskSpace(lastErr) {
 				var stash *types.Task
-				if remaining := activeTask.RemainingTask(); remaining != nil {
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil {
 					originalEnd := task.Offset + task.Length
 					if remaining.Offset+remaining.Length > originalEnd {
 						remaining.Length = originalEnd - remaining.Offset
@@ -127,14 +135,16 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 						stash = remaining
 					}
 				}
-				d.activeMu.Lock()
 				if stash != nil {
+					d.activeMu.Lock()
 					d.abandonedRemaining = append(d.abandonedRemaining, *stash)
+					d.activeMu.Unlock()
 				}
-				delete(d.activeTasks, id)
-				d.activeMu.Unlock()
 				if d.State != nil {
 					d.State.ActiveWorkers.Add(-1)
+				}
+				if d.concurrencyGate != nil {
+					d.concurrencyGate.release()
 				}
 				return lastErr
 			}
@@ -143,6 +153,9 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				if d.State != nil {
 					d.State.ActiveWorkers.Add(-1)
 				}
+				if d.concurrencyGate != nil {
+					d.concurrencyGate.release()
+				}
 				return ctx.Err()
 			}
 
@@ -150,7 +163,7 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
 				utils.Debug("Worker %d: Health check cancelled task, rotating from mirror %s to %s", id, mirrors[(currentMirrorIdx+len(mirrors)-1)%len(mirrors)], mirrors[currentMirrorIdx])
 
-				if remaining := activeTask.RemainingTask(); remaining != nil {
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil {
 					originalEnd := task.Offset + task.Length
 					if remaining.Offset+remaining.Length > originalEnd {
 						remaining.Length = originalEnd - remaining.Offset
@@ -177,15 +190,33 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 
 			var rlErr *rateLimitError
 			if errors.As(lastErr, &rlErr) {
-				d.hostLimiter.Penalize(mirrorHosts[currentMirrorIdx], rlErr.retryAfter, rlErr.explicit, time.Now())
-				d.ReportMirrorError(currentURL)
-				rlRetries++
-				if rlRetries > types.RateLimitMaxRetries {
-					break
+				host := mirrorHosts[currentMirrorIdx]
+				now := time.Now()
+				until := d.hostLimiter.Penalize(host, rlErr.retryAfter, rlErr.explicit, now)
+				if d.concurrencyGate != nil {
+					oldCap, newCap, _ := d.concurrencyGate.throttle(now, until)
+					if newCap < oldCap {
+						utils.Debug("Adaptive concurrency: reduced cap from %d to %d after throttle", oldCap, newCap)
+					}
 				}
+				if d.State == nil || !d.State.RateLimited.Swap(true) {
+					wait := time.Until(until).Round(time.Second)
+					message := fmt.Sprintf("Rate limited by %s; cooling down for %s", host, wait)
+					utils.Debug("%s", message)
+					if d.ProgressChan != nil {
+						select {
+						case d.ProgressChan <- types.DownloadEvent{Type: types.EventSystem, DownloadID: d.ID, Message: message}:
+						default:
+						}
+					}
+				}
+				d.ReportMirrorError(currentURL)
 				currentMirrorIdx = (currentMirrorIdx + 1) % len(mirrors)
-				resumeOnRetryOffset(&task, activeTask)
-				continue
+				if remaining := d.detachRemainingTask(id, activeTask); remaining != nil && remaining.Length > 0 {
+					throttledRequeue = remaining
+				}
+				lastErr = nil
+				break
 			}
 
 			genericAttempt++
@@ -206,24 +237,56 @@ func (d *ConcurrentDownloader) worker(ctx context.Context, id int, mirrors []str
 			d.State.ActiveWorkers.Add(-1)
 		}
 
-		if lastErr != nil {
-			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
-
-			if remain := activeTask.RemainingTask(); remain != nil {
-				queue.Push(*remain)
-			}
-
-			d.activeMu.Lock()
-			delete(d.activeTasks, id)
-			d.activeMu.Unlock()
-
-			return lastErr
-		}
-
 		d.activeMu.Lock()
 		delete(d.activeTasks, id)
 		d.activeMu.Unlock()
+		if d.concurrencyGate != nil {
+			d.concurrencyGate.release()
+		}
+
+		if throttledRequeue != nil {
+			queue.Push(*throttledRequeue)
+			utils.Debug("Worker %d: throttled task requeued (remaining: %d bytes from offset %d)",
+				id, throttledRequeue.Length, throttledRequeue.Offset)
+			continue
+		}
+
+		if lastErr != nil {
+			utils.Debug("Worker %d: task at offset %d failed after %d retries: %v", id, task.Offset, maxRetries, lastErr)
+
+			remain := activeTask.RemainingTask()
+
+			if errors.Is(lastErr, errSoftForbidden) {
+				if !d.shouldEscalate403(time.Now()) {
+					if !interruptibleSleep(ctx, soft403RetryDelay) {
+						if remain != nil {
+							queue.Push(*remain)
+						}
+						return ctx.Err()
+					}
+					if remain != nil {
+						queue.Push(*remain)
+					}
+					continue
+				}
+				lastErr = fmt.Errorf("%v: %w", lastErr, types.ErrPermanentHTTP)
+			}
+			if remain != nil {
+				queue.Push(*remain)
+			}
+
+			return lastErr
+		}
 	}
+}
+
+// detachRemainingTask removes an active task from the steal set and snapshots
+// its remaining range under the documented activeMu -> RangeMu lock order.
+func (d *ConcurrentDownloader) detachRemainingTask(id int, active *ActiveTask) *types.Task {
+	d.activeMu.Lock()
+	defer d.activeMu.Unlock()
+	delete(d.activeTasks, id)
+	return active.RemainingTask()
 }
 
 // downloadTask downloads a single byte range and writes to file at offset
@@ -275,6 +338,9 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 			return fmt.Errorf("server indicated success (200) but ignored range request (expected 206)")
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
+		if resp.StatusCode == http.StatusForbidden {
+			return errSoftForbidden
+		}
 		if types.IsPermanentHTTPStatus(resp.StatusCode) {
 			return fmt.Errorf("unexpected status: %d: %w", resp.StatusCode, types.ErrPermanentHTTP)
 		}
@@ -353,16 +419,6 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 		}
 
 		if readSoFar > 0 {
-			// check stopAt again before writing
-			// truncate readSoFar
-			currentStopAt := activeTask.StopAt.Load()
-			if offset+int64(readSoFar) > currentStopAt {
-				readSoFar = int(currentStopAt - offset)
-				if readSoFar <= 0 {
-					return nil // stolen completely
-				}
-			}
-
 			if d.Limiter != nil {
 				// Reset stall clock before the wait so the health monitor measures
 				// time from when throttling begins, not from the last network read.
@@ -378,48 +434,31 @@ func (d *ConcurrentDownloader) downloadTask(ctx context.Context, rawurl string, 
 				activeTask.LastActivity.Store(time.Now().UnixNano())
 			}
 
+			activeTask.RangeMu.Lock()
+			// Recheck the boundary while excluding StealWork. Without this lock,
+			// stealing between the check and WriteAt could overlap the new task.
+			currentStopAt := activeTask.StopAt.Load()
+			if offset+int64(readSoFar) > currentStopAt {
+				readSoFar = int(currentStopAt - offset)
+				if readSoFar <= 0 {
+					activeTask.RangeMu.Unlock()
+					return nil // stolen completely
+				}
+			}
+
 			_, writeErr := writeAtFn(file, buf[:readSoFar], offset)
 			if writeErr != nil {
+				activeTask.RangeMu.Unlock()
 				return fmt.Errorf("write error: %w", writeErr)
 			}
 
 			now := time.Now()
-			rangeStart := offset // Start of this write
 			offset += int64(readSoFar)
 
-			// Compute newly written bytes deduplicated across racing workers
-			var newlyWritten int64
-			// Read pointer under RLock to avoid racing with hedger initialization
-			activeTask.SharedMaxOffsetMu.RLock()
-			ptr := activeTask.SharedMaxOffset
-			activeTask.SharedMaxOffsetMu.RUnlock()
-			if ptr != nil {
-				for {
-					maxOff := ptr.Load()
-					if offset <= maxOff {
-						// This exact byte range was already reported by the racing worker!
-						newlyWritten = 0
-						break
-					}
-					if rangeStart >= maxOff {
-						// Entirely new progress
-						if ptr.CompareAndSwap(maxOff, offset) {
-							newlyWritten = int64(readSoFar)
-							break
-						}
-					} else {
-						// Partially new progress
-						if ptr.CompareAndSwap(maxOff, offset) {
-							newlyWritten = offset - maxOff
-							break
-						}
-					}
-				}
-			} else {
-				newlyWritten = int64(readSoFar)
-			}
+			newlyWritten := int64(readSoFar)
 
 			activeTask.CurrentOffset.Store(offset)
+			activeTask.RangeMu.Unlock()
 			activeTask.WindowBytes.Add(newlyWritten)
 			activeTask.LastActivity.Store(now.UnixNano())
 
@@ -474,6 +513,12 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	d.activeMu.Lock()
 	defer d.activeMu.Unlock()
 
+	splitFloor := d.Runtime.GetMinChunkSize()
+	if d.Runtime.IsAdaptiveConcurrencyEnabled() &&
+		(d.concurrencyGate == nil || !d.concurrencyGate.sawThrottle()) {
+		splitFloor = types.AlignSize
+	}
+
 	bestID := -1
 	var maxRemaining int64 = 0
 	var bestActive *ActiveTask
@@ -481,7 +526,7 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	// Find the worker with the MOST remaining work
 	for id, active := range d.activeTasks {
 		remaining := active.RemainingBytes()
-		if remaining > types.MinChunk && remaining > maxRemaining {
+		if remaining > splitFloor && remaining > maxRemaining {
 			maxRemaining = remaining
 			bestID = id
 			bestActive = active
@@ -493,116 +538,35 @@ func (d *ConcurrentDownloader) StealWork(queue *TaskQueue) bool {
 	}
 
 	// Found the best candidate, now try to steal
-	remaining := maxRemaining
 	active := bestActive
+	active.RangeMu.Lock()
+	defer active.RangeMu.Unlock()
+	current := active.CurrentOffset.Load()
+	originalEnd := active.StopAt.Load()
+	remaining := originalEnd - current
+	if remaining <= 0 {
+		return false
+	}
 
 	// Split in half, aligned to AlignSize
-	splitSize := alignedSplitSize(remaining)
+	splitSize := alignedSplitSize(remaining, splitFloor)
 	if splitSize == 0 {
 		return false
 	}
 
-	current := active.CurrentOffset.Load()
 	newStopAt := current + splitSize
 
 	// Update the active task stop point
 	active.StopAt.Store(newStopAt)
 
-	finalCurrent := active.CurrentOffset.Load()
-
-	// The actual start of the stolen chunk must be after where the worker effectively stops.
-	stolenStart := newStopAt
-	if finalCurrent > newStopAt {
-		stolenStart = finalCurrent
-	}
-
-	// Double check: ensure we didn't race and lose the chunk
-	currentStopAt := active.StopAt.Load()
-	if stolenStart >= currentStopAt && currentStopAt != newStopAt {
-		utils.Debug("StealWork race detected: stolenStart >= currentStopAt")
-	}
-
-	originalEnd := current + remaining
-
-	if stolenStart >= originalEnd {
-		return false
-	}
-
 	stolenTask := types.Task{
-		Offset: stolenStart,
-		Length: originalEnd - stolenStart,
+		Offset: newStopAt,
+		Length: originalEnd - newStopAt,
 	}
 
 	queue.Push(stolenTask)
 	utils.Debug("Balancer: stole %s from worker %d (new range: %d-%d)",
 		utils.FormatBytes(stolenTask.Length), bestID, stolenTask.Offset, stolenTask.Offset+stolenTask.Length)
-
-	return true
-}
-
-// HedgeWork creates a duplicate task when stealing isn't possible (chunks too small).
-// An idle worker picks up the duplicate and races the original on a fresh HTTP connection.
-// Both workers write identical data to the same file offsets (WriteAt is idempotent),
-// so the file is always correct. Whichever finishes first wins; the other exits
-// naturally when the queue closes or its next read returns data already counted.
-func (d *ConcurrentDownloader) HedgeWork(queue *TaskQueue) bool {
-	d.activeMu.Lock()
-	defer d.activeMu.Unlock()
-
-	if len(d.activeTasks) == 0 {
-		return false
-	}
-
-	// Find the active task with the most remaining work that hasn't been hedged yet
-	var bestActive *ActiveTask
-	var maxRemaining int64
-
-	for _, active := range d.activeTasks {
-		// Skip tasks already being raced
-		if active.Hedged.Load() != 0 {
-			continue
-		}
-		remaining := active.RemainingBytes()
-		if remaining > 0 && remaining > maxRemaining {
-			maxRemaining = remaining
-			bestActive = active
-		}
-	}
-
-	if bestActive == nil || maxRemaining == 0 {
-		return false
-	}
-
-	// Mark as hedged so we don't create multiple duplicates
-	if !bestActive.Hedged.CompareAndSwap(0, 1) {
-		return false // Another goroutine hedged it first
-	}
-
-	// Create a duplicate task for the remaining byte range
-	current := bestActive.CurrentOffset.Load()
-	stopAt := bestActive.StopAt.Load()
-	if current >= stopAt {
-		return false
-	}
-
-	// Initialize the shared deduplication state for both tasks
-	bestActive.SharedMaxOffsetMu.Lock()
-	if bestActive.SharedMaxOffset == nil {
-		maxOff := &atomic.Int64{}
-		maxOff.Store(current)
-		bestActive.SharedMaxOffset = maxOff
-	}
-	// Create a duplicate task for the remaining byte range
-	hedgedTask := types.Task{
-		Offset:          current,
-		Length:          stopAt - current,
-		SharedMaxOffset: bestActive.SharedMaxOffset,
-	}
-	bestActive.SharedMaxOffsetMu.Unlock()
-
-	queue.Push(hedgedTask)
-	utils.Debug("Balancer: hedged %s (range: %d-%d) - idle worker will race on fresh connection",
-		utils.FormatBytes(hedgedTask.Length), hedgedTask.Offset, hedgedTask.Offset+hedgedTask.Length)
 
 	return true
 }

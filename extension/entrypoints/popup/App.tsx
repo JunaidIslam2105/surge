@@ -17,6 +17,7 @@ import {
   setCurrentView,
   setInterceptEnabled,
   setNotificationsEnabled,
+  setFallbackToBrowser,
   setMinFileSize,
   handleSseEvent,
   setServerUrl,
@@ -74,6 +75,7 @@ export default function App() {
         STORAGE_KEYS.VERIFIED,
         STORAGE_KEYS.INTERCEPT,
         STORAGE_KEYS.NOTIFICATIONS,
+        STORAGE_KEYS.FALLBACK_TO_BROWSER,
         STORAGE_KEYS.MIN_FILE_SIZE,
       ]);
 
@@ -100,6 +102,7 @@ export default function App() {
 
       setInterceptEnabled(readStoredBoolean(storedValues, STORAGE_KEYS.INTERCEPT, true));
       setNotificationsEnabled(readStoredBoolean(storedValues, STORAGE_KEYS.NOTIFICATIONS, true));
+      setFallbackToBrowser(readStoredBoolean(storedValues, STORAGE_KEYS.FALLBACK_TO_BROWSER, true));
       setMinFileSize(readStoredNumber(storedValues, STORAGE_KEYS.MIN_FILE_SIZE, 10));
     } catch { /* ignore */ }
   }

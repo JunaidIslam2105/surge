@@ -29,6 +29,7 @@ describe('download interception naming', () => {
       downloads: {
         cancel: vi.fn().mockResolvedValue(undefined),
         erase: vi.fn().mockResolvedValue(undefined),
+        download: vi.fn().mockResolvedValue(9001),
       },
       action: {
         openPopup: vi.fn().mockResolvedValue(undefined),
@@ -36,6 +37,7 @@ describe('download interception naming', () => {
         setBadgeBackgroundColor: vi.fn(),
       },
       runtime: {
+        id: 'surge-extension-id',
         getURL: vi.fn().mockReturnValue('chrome-extension://id/'),
         sendMessage: vi.fn().mockResolvedValue(undefined),
       },
@@ -131,6 +133,161 @@ describe('download interception naming', () => {
 
     const downloadCall = mockFetch.mock.calls.find(call => call[0].includes('/download'));
     expect(downloadCall).toBeUndefined();
+  });
+
+  it('does not hand off a download that the browser could not cancel', async () => {
+    (browser.downloads.cancel as import('vitest').Mock).mockRejectedValue(new Error('Already complete'));
+    mockFetch.mockResolvedValue({ ok: true });
+
+    await __test__.handleDownloadCreated({
+      id: 790,
+      url: 'https://example.com/already-complete.zip',
+      startTime: new Date().toISOString(),
+    });
+
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(mockFetch.mock.calls.some(call => call[0].includes('/download'))).toBe(false);
+  });
+
+  it('coalesces concurrent interception attempts for the same URL', async () => {
+    let releaseCancel: () => void = () => {};
+    (browser.downloads.cancel as import('vitest').Mock)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        releaseCancel = resolve;
+      }))
+      .mockResolvedValue(undefined);
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/health')) return Promise.resolve({ ok: true });
+      if (url.includes('/list')) return Promise.resolve({ ok: true, json: async () => [] });
+      if (url.includes('/download')) return Promise.resolve({ ok: true, json: async () => ({ filename: 'once.zip' }) });
+      return Promise.resolve({ ok: false });
+    });
+
+    const first = __test__.handleDownloadCreated({
+      id: 791,
+      url: 'https://example.com/once.zip',
+      startTime: new Date().toISOString(),
+    });
+    await vi.waitFor(() => expect(browser.downloads.cancel).toHaveBeenCalledOnce());
+    const second = __test__.handleDownloadCreated({
+      id: 792,
+      url: 'https://example.com/once.zip',
+      startTime: new Date().toISOString(),
+    });
+
+    await second;
+    releaseCancel();
+    await first;
+
+    expect(browser.downloads.cancel).toHaveBeenCalledTimes(2);
+    expect(browser.downloads.cancel).toHaveBeenCalledWith(792);
+    expect(mockFetch.mock.calls.filter(call => call[0].includes('/download'))).toHaveLength(1);
+  });
+
+  describe('browser fallback', () => {
+    const failedItem = {
+      id: 8001,
+      url: 'https://example.com/fallback.zip',
+      filename: '/downloads/fallback.zip',
+      startTime: new Date().toISOString(),
+    };
+
+    beforeEach(() => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/health')) return { ok: true };
+        if (url.includes('/list')) return { ok: true, json: async () => [] };
+        if (url.includes('/download')) return {
+          ok: false,
+          status: 503,
+          text: async () => 'Surge unavailable',
+        };
+        return { ok: false };
+      });
+    });
+
+    it('starts one browser download when the Surge handoff fails by default', async () => {
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.downloads.download).toHaveBeenCalledOnce();
+      expect(browser.downloads.download).toHaveBeenCalledWith({ url: failedItem.url });
+      expect(browser.notifications.create).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'Surge handoff failed; browser retry started: fallback.zip',
+      }));
+    });
+
+    it('forwards allowed captured headers while excluding rejected headers from the browser retry', async () => {
+      __test__.captureHeaders({
+        url: failedItem.url,
+        requestHeaders: [
+          { name: 'X-Download-Token', value: 'token-123' },
+          { name: 'Cookie', value: 'session=secret' },
+          { name: 'User-Agent', value: 'Surge test agent' },
+          { name: 'X-HTTP-Method-Override', value: 'PATCH, TRACE' },
+        ],
+      });
+
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.downloads.download).toHaveBeenCalledWith({
+        url: failedItem.url,
+        headers: [{ name: 'X-Download-Token', value: 'token-123' }],
+      });
+    });
+
+    it('preserves the Surge failure without retrying when fallback is disabled', async () => {
+      (browser.storage.local.get as import('vitest').Mock).mockImplementation((key: string) => {
+        if (key === 'interceptEnabled') return Promise.resolve({ interceptEnabled: true });
+        if (key === 'serverUrl') return Promise.resolve({ serverUrl: 'http://127.0.0.1:1700' });
+        if (key === 'minFileSize') return Promise.resolve({ minFileSize: 10 });
+        if (key === 'fallbackToBrowser') return Promise.resolve({ fallbackToBrowser: false });
+        return Promise.resolve({});
+      });
+
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.downloads.download).not.toHaveBeenCalled();
+      expect(browser.notifications.create).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'Failed to start download: Surge unavailable',
+      }));
+    });
+
+    it('ignores downloads created by this extension so fallback cannot loop', async () => {
+      await __test__.handleDownloadCreated({
+        ...failedItem,
+        id: 8002,
+        byExtensionId: 'surge-extension-id',
+      });
+
+      expect(browser.downloads.cancel).not.toHaveBeenCalled();
+      expect(browser.downloads.download).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('reports both failures when the browser retry is rejected', async () => {
+      (browser.downloads.download as import('vitest').Mock).mockRejectedValue(new Error('Download blocked'));
+
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.notifications.create).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'Surge and browser handling failed: Surge unavailable; browser fallback failed: Download blocked',
+      }));
+    });
+
+    it('does not start a browser retry after a successful Surge handoff', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/health')) return { ok: true };
+        if (url.includes('/list')) return { ok: true, json: async () => [] };
+        if (url.includes('/download')) return {
+          ok: true,
+          json: async () => ({ filename: 'fallback.zip' }),
+        };
+        return { ok: false };
+      });
+
+      await __test__.handleDownloadCreated(failedItem);
+
+      expect(browser.downloads.download).not.toHaveBeenCalled();
+    });
   });
 
   describe('minimum file size guard', () => {

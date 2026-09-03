@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/SurgeDM/Surge/internal/config"
@@ -16,6 +18,29 @@ func newSpeedLimitsTestModel(t *testing.T) RootModel {
 		keys:          config.DefaultKeyMap(),
 		SettingsInput: textinput.New(),
 		state:         SpeedLimitsState,
+	}
+}
+
+func TestSpeedLimitsEditingUsesSettingsEditorKeys(t *testing.T) {
+	m := newSpeedLimitsTestModel(t)
+	m.width, m.height = 100, 30
+	m.speedLimitsIsEditing = true
+	m.SettingsInput.SetValue("1")
+	m.keys.SettingsEditor.Confirm = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "save"))
+	m.keys.SettingsEditor.Cancel = key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("ctrl+x", "cancel"))
+
+	if help := stripANSI.ReplaceAllString(m.viewSpeedLimits(), ""); !strings.Contains(help, "ctrl+s") || !strings.Contains(help, "ctrl+x") {
+		t.Fatalf("editing help does not show editor keys: %q", help)
+	}
+
+	updated, _ := m.updateSpeedLimits(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !updated.(RootModel).speedLimitsIsEditing {
+		t.Fatal("default Enter unexpectedly confirmed a custom-key edit")
+	}
+
+	updated, _ = m.updateSpeedLimits(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	if updated.(RootModel).speedLimitsIsEditing {
+		t.Fatal("configured editor confirm key did not finish editing")
 	}
 }
 

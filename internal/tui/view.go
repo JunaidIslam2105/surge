@@ -123,6 +123,7 @@ func (m RootModel) View() tea.View {
 			Labels:          activeLabels,
 			FocusedInput:    mappedFocus,
 			BrowseHintIndex: browseHint,
+			BrowseHintKey:   m.keys.Input.Tab.Help().Key,
 			Help:            m.help,
 			HelpKeys:        m.keys.Input,
 			BorderColor:     colors.Pink(),
@@ -162,6 +163,10 @@ func (m RootModel) View() tea.View {
 
 	if m.state == SpeedLimitsState {
 		return m.wrapView(m.renderModalWithOverlay(m.viewSpeedLimits()))
+	}
+
+	if m.state == CategoryPickerState {
+		return m.wrapView(m.renderModalWithOverlay(m.viewCategoryPicker()))
 	}
 
 	if m.state == DuplicateWarningState {
@@ -204,6 +209,7 @@ func (m RootModel) View() tea.View {
 			ShowURL:         true,
 			URL:             m.pendingURL,
 			BrowseHintIndex: 0,
+			BrowseHintKey:   m.keys.Extension.Browse.Help().Key,
 			Help:            m.help,
 			HelpKeys:        m.keys.Extension,
 			BorderColor:     colors.Cyan(),
@@ -475,7 +481,7 @@ func (m RootModel) View() tea.View {
 	var bitmapWidth int
 	var totalSize, chunkSize int64
 	var chunkProgress []int64
-	if selected != nil && selected.state != nil {
+	if layout.ShowChunkMap && !layout.HideRightColumn && selected != nil && !selected.done && selected.state != nil {
 		bitmap, bitmapWidth, totalSize, chunkSize, chunkProgress = selected.state.GetBitmap()
 	}
 
@@ -929,10 +935,15 @@ func (m RootModel) viewPurgeConfirm() string {
 		filename = utils.Truncate(filename, 30)
 	}
 
+	filenameStyled := lipgloss.NewStyle().Foreground(colors.White()).Bold(true).Render(filename)
+	detailStyle := lipgloss.NewStyle().Foreground(colors.Magenta()).Bold(true)
+	warnStyle := lipgloss.NewStyle().Foreground(colors.Red()).Bold(true)
+	detailStr := detailStyle.Render("File: ") + filenameStyled + "\n" + warnStyle.Render("This will also remove the downloaded file(s) from disk.")
+
 	modal := components.ConfirmationModal{
 		Title:            "Purge Download",
 		Message:          "Permanently delete this download?",
-		Detail:           fmt.Sprintf("File: %s\nThis will also remove the downloaded file(s) from disk.", filename),
+		Detail:           detailStr,
 		Keys:             m.keys.QuitConfirm, // QuitConfirm works as a general yes/no
 		Help:             m.help,
 		BorderColor:      colors.Red(),
@@ -942,7 +953,7 @@ func (m RootModel) viewPurgeConfirm() string {
 		NoLabel:          "No",
 	}
 
-	w, h := GetDynamicModalDimensions(m.width, m.height, 46, 8, 60, 12)
+	w, h := GetDynamicModalDimensions(m.width, m.height, 46, 8, 70, 12)
 	modal.Width = w
 	modal.Height = h
 
@@ -964,10 +975,15 @@ func (m RootModel) viewRemoveConfirm() string {
 		filename = utils.Truncate(filename, 30)
 	}
 
+	filenameStyled := lipgloss.NewStyle().Foreground(colors.White()).Bold(true).Render(filename)
+	detailStyle := lipgloss.NewStyle().Foreground(colors.Magenta()).Bold(true)
+	warnStyle := lipgloss.NewStyle().Foreground(colors.Red()).Bold(true)
+	detailStr := detailStyle.Render("File: ") + filenameStyled + "\n" + warnStyle.Render("This paused or active download may lose progress data.")
+
 	modal := components.ConfirmationModal{
 		Title:            "Remove Download",
 		Message:          "Remove this download?",
-		Detail:           fmt.Sprintf("File: %s\nThis paused or active download may lose progress data.", filename),
+		Detail:           detailStr,
 		Keys:             m.keys.QuitConfirm, // QuitConfirm works as a general yes/no
 		Help:             m.help,
 		BorderColor:      colors.Orange(),
@@ -978,7 +994,7 @@ func (m RootModel) viewRemoveConfirm() string {
 		NoLabel:          "No",
 	}
 
-	w, h := GetDynamicModalDimensions(m.width, m.height, 46, 8, 60, 12)
+	w, h := GetDynamicModalDimensions(m.width, m.height, 46, 8, 70, 12)
 	modal.Width = w
 	modal.Height = h
 

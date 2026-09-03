@@ -20,7 +20,7 @@ var writeBugReportClipboard = clipboard.Write
 
 func (m RootModel) updateSpeedLimits(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.speedLimitsIsEditing {
-		if key.Matches(msg, m.keys.Input.Enter) {
+		if key.Matches(msg, m.keys.SettingsEditor.Confirm) {
 			// Save
 			value := m.SettingsInput.Value()
 			metaList := m.getSpeedLimitsMetadata()
@@ -59,7 +59,7 @@ func (m RootModel) updateSpeedLimits(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.SettingsInput.Blur()
 			return m, nil
 		}
-		if key.Matches(msg, m.keys.Input.Esc) {
+		if key.Matches(msg, m.keys.SettingsEditor.Cancel) {
 			m.speedLimitsIsEditing = false
 			m.speedLimitsError = ""
 			m.SettingsInput.Blur()
@@ -353,7 +353,6 @@ func (m RootModel) updateUpdateAvailable(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		m.UpdateInfo = nil
 		return m, nil
 	}
-
 	return m, nil
 }
 

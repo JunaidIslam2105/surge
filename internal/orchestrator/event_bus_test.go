@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/types"
@@ -58,66 +59,29 @@ func TestEventBus_MultipleSubscribers(t *testing.T) {
 }
 
 func TestEventBus_ProgressMsgDropBehavior(t *testing.T) {
-	eb := NewEventBus()
-	defer eb.Shutdown()
+	synctest.Test(t, func(t *testing.T) {
+		eb := &EventBus{listeners: []chan types.DownloadEvent{make(chan types.DownloadEvent, 1)}}
+		eb.listeners[0] <- types.DownloadEvent{}
 
-	// Subscriber that doesn't read from the channel (will block quickly)
-	_, cleanup := eb.Subscribe()
-	defer cleanup()
-
-	// Fill the buffer (size 100 for outCh) by publishing 100 items
-	for i := 0; i < 100; i++ {
-		_ = eb.Publish(types.DownloadEvent{})
-	}
-
-	// Give the broadcast loop time to fill the subscriber's channel buffer
-	time.Sleep(100 * time.Millisecond)
-
-	// Publish a progress message. It should be dropped immediately without blocking for 1s.
-	start := time.Now()
-	msg := types.DownloadEvent{
-		Type: types.EventProgress, DownloadID: "test"}
-	_ = eb.Publish(msg)
-
-	// Since it's a progress message and the subscriber channel is full, it should drop it and return quickly.
-	// Wait a little bit to ensure broadcastLoop processed it.
-	time.Sleep(50 * time.Millisecond)
-	elapsed := time.Since(start)
-
-	if elapsed >= 1*time.Second {
-		t.Errorf("publish of ProgressMsg took too long (%v), it should be dropped immediately", elapsed)
-	}
+		start := time.Now()
+		eb.broadcastMsg(types.DownloadEvent{Type: types.EventProgress, DownloadID: "test"})
+		if elapsed := time.Since(start); elapsed != 0 {
+			t.Fatalf("progress event wait = %v, want 0", elapsed)
+		}
+	})
 }
 
 func TestEventBus_CriticalMsgWaitBehavior(t *testing.T) {
-	eb := NewEventBus()
-	defer eb.Shutdown()
+	synctest.Test(t, func(t *testing.T) {
+		eb := &EventBus{listeners: []chan types.DownloadEvent{make(chan types.DownloadEvent, 1)}}
+		eb.listeners[0] <- types.DownloadEvent{}
 
-	// Subscriber that doesn't read
-	_, cleanup := eb.Subscribe()
-	defer cleanup()
-
-	// Fill buffer
-	for i := 0; i < 100; i++ {
-		_ = eb.Publish(types.DownloadEvent{})
-	}
-
-	// Give the broadcast loop time to fill the subscriber's channel buffer
-	time.Sleep(100 * time.Millisecond)
-
-	// Publish a critical message (not progress). It should block for up to 1 second before dropping.
-	start := time.Now()
-	msg := types.DownloadEvent{Message: "critical"}
-	_ = eb.Publish(msg)
-
-	// Wait for processing
-	time.Sleep(1200 * time.Millisecond)
-	elapsed := time.Since(start)
-
-	// broadcastLoop should take at least 1s to try sending to a blocked subscriber
-	if elapsed < 1*time.Second {
-		t.Errorf("broadcast loop did not wait 1s for critical message, elapsed: %v", elapsed)
-	}
+		start := time.Now()
+		eb.broadcastMsg(types.DownloadEvent{Message: "critical"})
+		if elapsed := time.Since(start); elapsed != time.Second {
+			t.Fatalf("critical event wait = %v, want 1s", elapsed)
+		}
+	})
 }
 
 func TestEventBus_ShutdownCleanly(t *testing.T) {

@@ -676,3 +676,60 @@ func TestRunDownload_DoesNotEmitEventErrorOnFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestSendPausedFallbackWaitsForFullChannel(t *testing.T) {
+	progressCh := make(chan types.DownloadEvent, 1)
+	progressCh <- types.DownloadEvent{Type: types.EventStarted}
+	state := progress.New("pause-delivery", 1000)
+	state.SetRateLimit(2048, true)
+	state.SetPendingResumeState(&types.DownloadRecord{
+		ID:         "pause-delivery",
+		Filename:   "pause.bin",
+		DestPath:   "/tmp/pause.bin",
+		Downloaded: 400,
+	})
+	cfg := &types.DownloadRecord{
+		ID:            "pause-delivery",
+		Filename:      "pause.bin",
+		ProgressCh:    progressCh,
+		ProgressState: state,
+		Runtime:       &types.RuntimeConfig{Workers: 3, MinChunkSize: 4096},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		sendPausedFallback(progressCh, cfg, nil, nil)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("sendPausedFallback returned while the lifecycle channel was full")
+	case <-time.After(20 * time.Millisecond):
+	}
+	<-progressCh
+
+	select {
+	case event := <-progressCh:
+		if event.Type != types.EventPaused || event.State == nil {
+			t.Fatalf("pause event = %+v", event)
+		}
+		if event.Downloaded != 400 || event.RateLimit != 2048 || !event.RateLimitSet {
+			t.Fatalf("pause event metadata = %+v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for EventPaused after channel space became available")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("sendPausedFallback did not return after delivery")
+	}
+
+	sendPausedFallback(progressCh, cfg, nil, nil)
+	select {
+	case duplicate := <-progressCh:
+		t.Fatalf("unexpected duplicate pause event: %+v", duplicate)
+	default:
+	}
+}

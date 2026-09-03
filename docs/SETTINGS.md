@@ -19,7 +19,7 @@ default_download_dir = "/path/to/downloads"
 theme = 2
 
 [network]
-max_connections_per_host = 8
+max_connections_per_host = 16
 
 [performance]
 max_task_retries = 5
@@ -123,7 +123,7 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 
 | Key                        | Type   | Description                                                                                           | Default |
 | :------------------------- | :----- | :---------------------------------------------------------------------------------------------------- | :------ |
-| `max_connections_per_host` | int    | Maximum concurrent connections allowed to a single host (1-64). *Note: The default is 8 as it provides a stable baseline for most servers. High values may trigger server rate limits.* | `8`    |
+| `max_connections_per_host` | int    | Maximum concurrent connections per download (1-64). High values may trigger server rate limits. | `16`    |
 | `max_concurrent_downloads` | int    | Maximum number of downloads running simultaneously (requires restart).                                | `3`     |
 | `global_rate_limit`        | string | Global speed limit across all downloads (e.g. `10 MB/s`, `0` or `∞` for unlimited).                   | `0`     |
 | `default_download_rate_limit` | string | Default speed limit applied to new downloads (e.g. `5 MB/s`, `0` or `∞` for unlimited).            | `0`     |
@@ -133,6 +133,7 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 | `sequential_download`      | bool   | Download file pieces in strict order (Streaming Mode). Useful for previewing media but may be slower. | `false` |
 | `min_chunk_size`           | int64  | Minimum size of a download chunk in bytes (e.g., `2097152` for 2MB).                                  | `2MB`   |
 | `worker_buffer_size`       | int    | I/O buffer size per worker in bytes (e.g., `524288` for 512KB).                                       | `512KB` |
+| `dial_hedge_count`         | int    | Extra prewarmed connections (0-16). Set to 0 to disable prewarming. | `4`     |
 
 ### Performance Settings
 
@@ -142,7 +143,8 @@ Surge follows OS conventions for storing its files. Below is a breakdown of ever
 | `slow_worker_threshold`    | float    | Restart workers slower than this fraction of the mean speed (0.0-1.0).       | `0.3`   |
 | `slow_worker_grace_period` | duration | Time to wait before checking a worker's speed (e.g., `5s`).                  | `5s`    |
 | `stall_timeout`            | duration | Restart workers that haven't received data for this duration (e.g., `3s`).   | `3s`    |
-| `speed_ema_alpha`          | float    | Exponential moving average smoothing factor for speed calculation (0.0-1.0). | `0.3`   |
+| `speed_ema_alpha`          | float    | Exponential moving average smoothing factor for speed calculation (0.0-1.0, 0 disables smoothing). | `0.3`   |
+| `adaptive_concurrency_interval` | duration | Halve connections when throttled, add one connection per interval, and split small tail ranges among idle workers on healthy hosts. Set to `0` to disable adaptation. | `0` |
 
 ### Category Settings
 

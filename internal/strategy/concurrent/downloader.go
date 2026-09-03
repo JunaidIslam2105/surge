@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -43,7 +42,19 @@ type ConcurrentDownloader struct {
 	bufPool            sync.Pool
 	Headers            map[string]string // Custom HTTP headers from browser (cookies, auth, etc.)
 	hostLimiter        *transport.HostRateLimiter
+	soft403Mu          sync.Mutex
+	soft403Exhaustions int
+	soft403Progress    int64
+	soft403Since       time.Time
+	concurrencyGate    *adaptiveConcurrencyGate
 }
+
+const (
+	// Each exhaustion already includes the normal per-task retry burn. The
+	// confirmation window gives in-flight workers one final chance to advance.
+	soft403MaxExhaustions = 16
+	soft403ConfirmWindow  = 5 * time.Second
+)
 
 // NewConcurrentDownloader creates a new concurrent downloader with all required parameters
 func NewConcurrentDownloader(id string, progressCh chan<- types.DownloadEvent, progState *progress.DownloadProgress, runtime *types.RuntimeConfig) *ConcurrentDownloader {
@@ -144,6 +155,47 @@ func (d *ConcurrentDownloader) ReportMirrorError(url string) {
 	}
 }
 
+func (d *ConcurrentDownloader) shouldEscalate403(now time.Time) bool {
+	d.soft403Mu.Lock()
+	defer d.soft403Mu.Unlock()
+
+	progress := d.soft403Progress
+	if d.State != nil {
+		progress = d.State.Bytes.VerifiedProgress.Load()
+	}
+	if progress != d.soft403Progress {
+		d.soft403Progress = progress
+		d.soft403Exhaustions = 0
+		d.soft403Since = time.Time{}
+	}
+
+	if d.soft403Exhaustions < soft403MaxExhaustions {
+		d.soft403Exhaustions++
+	}
+	if d.soft403Exhaustions < soft403MaxExhaustions {
+		return false
+	}
+	if d.soft403Since.IsZero() {
+		d.soft403Since = now
+		return false
+	}
+	if now.Before(d.soft403Since.Add(soft403ConfirmWindow)) {
+		return false
+	}
+
+	// Progress can race the decision above; recheck before stopping healthy peers.
+	if d.State != nil {
+		progress = d.State.Bytes.VerifiedProgress.Load()
+	}
+	if progress != d.soft403Progress {
+		d.soft403Progress = progress
+		d.soft403Exhaustions = 1
+		d.soft403Since = time.Time{}
+		return false
+	}
+	return true
+}
+
 // calculateChunkSize determines optimal chunk size
 func (d *ConcurrentDownloader) calculateChunkSize(fileSize int64, numConns int) int64 {
 	// Safety check
@@ -238,6 +290,12 @@ func (d *ConcurrentDownloader) applyClientSettings(client *http.Client) {
 func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, candidateMirrors []string, activeMirrors []string, destPath string, fileSize int64) error {
 	utils.Debug("ConcurrentDownloader.Download: %s -> %s (size: %d, mirrors: %d)", rawurl, destPath, fileSize, len(activeMirrors))
 
+	d.soft403Mu.Lock()
+	d.soft403Exhaustions = 0
+	d.soft403Progress = 0
+	d.soft403Since = time.Time{}
+	d.soft403Mu.Unlock()
+
 	if d.hostLimiter == nil {
 		d.hostLimiter = transport.DefaultHostRateLimiter
 	}
@@ -278,13 +336,19 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	effectiveSizeForWorkers := d.getEffectiveSizeForWorkers(fileSize, savedState, isResume)
 
 	numConns := d.getInitialConnections(effectiveSizeForWorkers)
+	d.concurrencyGate = newAdaptiveConcurrencyGate(numConns, d.Runtime.GetAdaptiveConcurrencyInterval())
+	if d.State != nil {
+		d.State.RateLimited.Store(false)
+	}
 	chunkSize := d.determineChunkSize(fileSize, numConns)
 
 	workerMirrors := d.getWorkerMirrors(activeMirrors)
 
-	// Pre-warm connections if configured
+	// Prewarming helps a fresh transfer discover usable connections. A resumed
+	// transfer may be recovering from a host cooldown, so extra probe requests
+	// only make the rate-limit situation worse.
 	hedgeCount := d.Runtime.GetDialHedgeCount()
-	if hedgeCount > 0 {
+	if hedgeCount > 0 && !isResume {
 		d.prewarmConnections(downloadCtx, client, numConns, hedgeCount, workerMirrors)
 	}
 
@@ -331,7 +395,9 @@ func (d *ConcurrentDownloader) Download(ctx context.Context, rawurl string, cand
 	if downloadErr != nil {
 		// Save state so that retries (like rate limit backoffs) resume from the correct progress
 		if d.State != nil && !errors.Is(downloadErr, context.Canceled) && !errors.Is(downloadErr, context.DeadlineExceeded) {
-			_ = d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false)
+			if saveErr := d.saveStateSnapshot(destPath, fileSize, queue, candidateMirrors, false); saveErr != nil {
+				return errors.Join(downloadErr, fmt.Errorf("save resume state: %w", saveErr))
+			}
 		}
 		return downloadErr
 	}
@@ -381,7 +447,10 @@ func (d *ConcurrentDownloader) setupNetwork() (*http.Client, *http.Transport) {
 		customDNS = d.Runtime.CustomDNS
 	}
 
-	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, types.PoolMaxConnsPerHost)
+	// The worker pool enforces the per-download request budget. Keep the shared
+	// transport ceiling process-wide so downloads with identical settings do not
+	// accidentally share one per-download MaxConnsPerHost allowance.
+	httpTransport := transport.DefaultNetworkPool.AcquireTransport(proxyURL, customDNS, 0)
 	client := &http.Client{Transport: httpTransport}
 	d.applyClientSettings(client)
 	return client, httpTransport
@@ -443,6 +512,21 @@ func (d *ConcurrentDownloader) setupTasks(destPath string, fileSize, chunkSize i
 }
 
 func (d *ConcurrentDownloader) startHelpers(ctx context.Context, wg *sync.WaitGroup, queue *TaskQueue, fileSize int64, numConns int) {
+	if d.concurrencyGate != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.concurrencyGate.runRecovery(ctx, func(oldCap, newCap int, recovered bool) {
+				if newCap > oldCap {
+					utils.Debug("Adaptive concurrency: increased cap from %d to %d after healthy window", oldCap, newCap)
+				}
+				if recovered && d.State != nil {
+					d.State.RateLimited.Store(false)
+				}
+			})
+		}()
+	}
+
 	// Balancer for dynamic chunk splitting and work stealing
 	wg.Add(1)
 	go func() {
@@ -482,11 +566,6 @@ func (d *ConcurrentDownloader) runBalancer(ctx context.Context, queue *TaskQueue
 						didWork = true
 					}
 				}
-				if !didWork && queue.Len() == 0 {
-					if d.HedgeWork(queue) {
-						didWork = true
-					}
-				}
 				if !didWork {
 					break
 				}
@@ -511,7 +590,11 @@ func (d *ConcurrentDownloader) runCompletionMonitor(ctx context.Context, queue *
 			// 2. All workers are idle OR we've accounted for all bytes
 			// Ensure queue is empty (no pending retries) before considering byte count.
 			// This protects against cutting off active retries even if byte count seems high (due to overlaps etc).
-			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
+			parked := int64(0)
+			if d.concurrencyGate != nil {
+				parked = d.concurrencyGate.parkedWorkers()
+			}
+			isDone := queue.Len() == 0 && (int(queue.IdleWorkers()+parked) == numConns || (d.State != nil && d.State.Bytes.Downloaded.Load() >= fileSize))
 			if isDone {
 				queue.Close()
 				return
@@ -595,18 +678,9 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 	// 2. Collect remaining tasks from queue
 	allTasks := append(append(append([]types.Task(nil), activeRemaining...), abandoned...), queue.DrainRemaining()...)
 
-	var remainingTasks []types.Task
+	remainingTasks := make([]types.Task, 0, len(allTasks))
 	var remainingBytes int64
-	seenHedged := make(map[*atomic.Int64]bool)
-
 	for _, task := range allTasks {
-		if task.SharedMaxOffset != nil {
-			if seenHedged[task.SharedMaxOffset] {
-				continue
-			}
-			seenHedged[task.SharedMaxOffset] = true
-			task.SharedMaxOffset = nil // Clear it so hot resume doesn't pin ranges as hedged
-		}
 		remainingTasks = append(remainingTasks, task)
 		remainingBytes += task.Length
 	}
@@ -648,13 +722,19 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		ActualChunkSize: chunkSize,
 		RateLimit:       rateLimit,
 		RateLimitSet:    rateLimitSet,
-		Workers:         d.Runtime.Workers,
-		MinChunkSize:    d.Runtime.MinChunkSize,
+		Workers:         d.Runtime.GetWorkers(),
+		MinChunkSize:    d.Runtime.GetMinChunkSize(),
 	}
+
+	d.State.SetPendingResumeState(s)
+	if err := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true}); err != nil {
+		return fmt.Errorf("save state snapshot: %w", err)
+	}
+	utils.Debug("Saved progress state snapshot (Downloaded=%d, RemainingTasks=%d)", s.Downloaded, len(s.Tasks))
 
 	if emitPauseEvent {
 		if d.ProgressChan != nil {
-			d.ProgressChan <- types.DownloadEvent{
+			event := types.DownloadEvent{
 				Type:         types.EventPaused,
 				DownloadID:   d.ID,
 				Filename:     filepath.Base(destPath),
@@ -662,8 +742,16 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 				State:        s,
 				RateLimit:    rateLimit,
 				RateLimitSet: rateLimitSet,
-				Workers:      d.Runtime.Workers,
-				MinChunkSize: d.Runtime.MinChunkSize,
+				Workers:      d.Runtime.GetWorkers(),
+				MinChunkSize: d.Runtime.GetMinChunkSize(),
+			}
+			select {
+			case d.ProgressChan <- event:
+				// A consumed pending snapshot is the delivery handshake used by the
+				// scheduler to avoid sending a duplicate fallback event.
+				d.State.TakePendingResumeState()
+			default:
+				utils.Debug("Pause event queue full; scheduler will deliver saved state")
 			}
 		}
 		utils.Debug("Download paused, state saved (Downloaded=%d, RemainingTasks=%d, RemainingBytes=%d)",
@@ -671,14 +759,6 @@ func (d *ConcurrentDownloader) saveStateSnapshot(destPath string, fileSize int64
 		return types.ErrPaused
 	}
 
-	// Direct save on error/retry paths
-	d.State.SetPendingResumeState(s)
-	saveErr := store.SaveStateWithOptions(d.URL, destPath, s, store.SaveStateOptions{SkipFileHash: true})
-	if saveErr != nil {
-		utils.Debug("Failed to save state snapshot: %v", saveErr)
-	} else {
-		utils.Debug("Saved progress state snapshot (Downloaded=%d, RemainingTasks=%d)", s.Downloaded, len(s.Tasks))
-	}
 	return nil
 }
 

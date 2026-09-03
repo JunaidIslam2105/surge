@@ -87,6 +87,8 @@ const [interceptEnabled, setInterceptEnabled] = createSignal(true);
 export { interceptEnabled, setInterceptEnabled };
 const [notificationsEnabled, setNotificationsEnabled] = createSignal(true);
 export { notificationsEnabled, setNotificationsEnabled };
+const [fallbackToBrowser, setFallbackToBrowser] = createSignal(true);
+export { fallbackToBrowser, setFallbackToBrowser };
 const [minFileSize, setMinFileSize] = createSignal(10);
 export { minFileSize, setMinFileSize };
 

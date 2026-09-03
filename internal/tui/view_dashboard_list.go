@@ -29,11 +29,11 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 		var searchDisplay string
 		if m.searchActive {
 			searchDisplay = m.searchInput.View() +
-				lipgloss.NewStyle().Foreground(colors.Gray()).Render(" [esc exit]")
+				lipgloss.NewStyle().Foreground(colors.LightGray()).Render(" [esc] Exit")
 		} else {
-			// Show query with clear hint
+			// Show query with an edit hint.
 			searchDisplay = lipgloss.NewStyle().Foreground(colors.Pink()).Render(m.searchQuery) +
-				lipgloss.NewStyle().Foreground(colors.Gray()).Render(" [f to clear]")
+				lipgloss.NewStyle().Foreground(colors.LightGray()).Render(" ["+m.keys.Dashboard.Search.Help().Key+"] Edit")
 		}
 		// Pad the search bar to look like a title block
 		leftTitle = " " + lipgloss.JoinHorizontal(lipgloss.Left, searchIcon, searchDisplay) + " "
@@ -49,7 +49,7 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 	tabBarHeight := lipgloss.Height(tabBar)
 
 	// listContentHeight handles available space for the bubbletea list itself
-	listContentHeight := contentHeight - padTopBottom - tabBarHeight
+	listContentHeight := contentHeight - padTopBottom - tabBarHeight - 1
 	if listContentHeight < 1 {
 		listContentHeight = 1
 	}
@@ -71,7 +71,7 @@ func (m *RootModel) renderDownloadsBox(width, height int, stats ViewStats) strin
 	}
 
 	// Build list inner content - No search bar inside
-	listInnerContent := lipgloss.JoinVertical(lipgloss.Left, tabBar, listContent)
+	listInnerContent := lipgloss.JoinVertical(lipgloss.Left, tabBar, "", listContent)
 	innerContent := listPadding.Render(listInnerContent)
 
 	downloadsBorderColor := colors.Pink()

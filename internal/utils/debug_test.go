@@ -13,20 +13,13 @@ import (
 )
 
 func TestDebug_CreatesLogFile(t *testing.T) {
-	// Note: Debug uses sync.Once, so we can only test it once per test run
-	// This test verifies that the debug function creates a log file
-
-	// Ensure logs directory exists
-	logsDir := config.GetLogsDir()
-	if err := os.MkdirAll(logsDir, 0o755); err != nil {
-		t.Fatalf("Failed to create logs directory: %v", err)
-	}
+	logsDir := t.TempDir()
+	utils.CloseDebug()
+	utils.ConfigureDebug(logsDir)
+	t.Cleanup(utils.CloseDebug)
 
 	// Call Debug
 	utils.Debug("Test message from unit test")
-
-	// Wait a moment for file to be created
-	time.Sleep(100 * time.Millisecond)
 
 	// Check if any debug log file was created
 	entries, err := os.ReadDir(logsDir)
@@ -43,7 +36,7 @@ func TestDebug_CreatesLogFile(t *testing.T) {
 	}
 
 	if !found {
-		t.Log("Note: Debug log file may not be created on first run due to sync.Once behavior")
+		t.Fatal("Debug did not create a log file")
 	}
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/tui/components"
@@ -18,6 +19,7 @@ import (
 type DownloadItem struct {
 	download    *DownloadModel
 	spinnerView string
+	category    string
 }
 
 func (i DownloadItem) Title() string {
@@ -157,7 +159,21 @@ func (d downloadDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 		availableWidth = 1
 	}
 
-	title := utils.TruncateMiddle(i.Title(), availableWidth)
+	title := i.Title()
+	if i.category != "" {
+		category := lipgloss.NewStyle().Foreground(colors.LightGray()).Render("[" + i.category + "]")
+		titleWidth := availableWidth - lipgloss.Width(category) - 1
+		if titleWidth < 1 {
+			titleWidth = 1
+		}
+		title = utils.TruncateMiddle(title, titleWidth)
+		space := availableWidth - lipgloss.Width(title) - lipgloss.Width(category)
+		if space > 0 {
+			title += strings.Repeat(" ", space) + category
+		}
+	} else {
+		title = utils.TruncateMiddle(title, availableWidth)
+	}
 	description := utils.Truncate(i.Description(), availableWidth)
 
 	// Render lines
@@ -186,7 +202,7 @@ func NewDownloadList(width, height int) list.Model {
 	l := list.New([]list.Item{}, delegate, width, height)
 	l.SetShowTitle(false) // Tab bar already shows the category
 	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
+	l.SetFilteringEnabled(false) // Dashboard search owns filtering and focus.
 	l.SetShowHelp(false)
 	l.SetShowPagination(true)
 
@@ -230,7 +246,7 @@ func (m *RootModel) UpdateListItems() {
 		items := make([]list.Item, len(filtered))
 		sv := m.spinner.View()
 		for i, d := range filtered {
-			items[i] = DownloadItem{download: d, spinnerView: sv}
+			items[i] = DownloadItem{download: d, spinnerView: sv, category: m.categoryLabel(d)}
 		}
 		m.list.SetItems(items)
 		// Reset cursor to top when manually switching tabs (standard behavior)
@@ -250,7 +266,7 @@ func (m *RootModel) UpdateListItems() {
 	items := make([]list.Item, len(filtered))
 	sv := m.spinner.View()
 	for i, d := range filtered {
-		items[i] = DownloadItem{download: d, spinnerView: sv}
+		items[i] = DownloadItem{download: d, spinnerView: sv, category: m.categoryLabel(d)}
 	}
 	m.list.SetItems(items)
 
@@ -295,6 +311,16 @@ func (m *RootModel) UpdateListItems() {
 					break
 				}
 			}
+		}
+	}
+
+	// If the previously selected item was removed, ensure the cursor doesn't fall out of bounds
+	if !found && len(items) > 0 {
+		if m.list.Index() >= len(items) {
+			m.list.Select(len(items) - 1)
+		}
+		if m.list.Index() < 0 {
+			m.list.Select(0)
 		}
 	}
 

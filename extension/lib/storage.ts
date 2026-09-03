@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   SERVER_URL: 'serverUrl',
   DISCOVERED_SERVER_URL: 'discoveredServerUrl',
   NOTIFICATIONS: 'notificationsEnabled',
+  FALLBACK_TO_BROWSER: 'fallbackToBrowser',
   MIN_FILE_SIZE: 'minFileSize',
   PROFILES: 'serverProfiles',
   ACTIVE_PROFILE_ID: 'activeServerProfileId',

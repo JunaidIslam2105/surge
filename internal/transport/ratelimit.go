@@ -72,7 +72,10 @@ func (h *HostRateLimiter) Penalize(host string, retryAfter time.Duration, explic
 		d = types.RateLimitMaxBackoff
 	}
 
-	p.until = now.Add(d)
+	deadline := now.Add(d)
+	if deadline.After(p.until) {
+		p.until = deadline
+	}
 
 	h.cleanupLocked()
 	return p.until
@@ -93,12 +96,16 @@ func (h *HostRateLimiter) BlockedUntil(host string, now time.Time) time.Time {
 }
 
 func (h *HostRateLimiter) RecordSuccess(host string) {
+	h.recordSuccess(host, time.Now())
+}
+
+func (h *HostRateLimiter) recordSuccess(host string, now time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if p, ok := h.hosts[host]; ok {
-		p.consecutive = 0
-		p.until = time.Time{}
+	p, ok := h.hosts[host]
+	if !ok || !now.Before(p.until) {
+		delete(h.hosts, host)
 	}
 }
 

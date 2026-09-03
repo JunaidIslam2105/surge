@@ -28,5 +28,9 @@ jobs:
           go-version: '1.25.0'
       - name: golangci-lint
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+      - name: flakylint
+        run: |
+          go install github.com/malikov73/flakylint/cmd/flakylint@v0.2.0
+          flakylint ./...
       - name: unicode lint
         run: go test ./internal/lint/...

@@ -1,6 +1,6 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { normalizeToken, normalizeServerUrl } from './popup/lib/utils';
-import { DownloadStatus, HistoryEntry } from './popup/store/types';
+import type { DownloadStatus, HistoryEntry } from './popup/store/types';
 import {
   STORAGE_KEYS,
   readStoredNumber,
@@ -63,6 +63,8 @@ const pendingDuplicates = new Map<string, PendingDup>();
 
 // Dedupes rapid onCreated events for the same browser download ID.
 const processedIds = new Set<number>();
+// Coalesces duplicate onCreated events that use different browser download IDs.
+const interceptingUrls = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -392,21 +394,135 @@ async function fetchHistoryList(): Promise<{ data: HistoryEntry[]; authError: bo
   }
 }
 
-/**
- * Send a download request to the Surge backend.
- * Returns { success: true } or { success: false, error: string }.
- */
+type HandoffResult =
+  | { success: true; outcome: 'surge'; filename?: string }
+  | { success: true; outcome: 'browser'; surgeError: string }
+  | { success: false; outcome: 'failed'; error: string; surgeError: string; fallbackError?: string };
+
+const BROWSER_REJECTED_HEADERS = new Set([
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'user-agent',
+  'via',
+]);
+const BROWSER_METHOD_OVERRIDE_HEADERS = new Set([
+  'x-http-method',
+  'x-http-method-override',
+  'x-method-override',
+]);
+const BROWSER_REJECTED_METHODS = new Set(['connect', 'trace', 'track']);
+
+const SAFE_DOWNLOAD_LOG_FIELDS = new Set([
+  'id',
+  'status',
+  'outcome',
+  'state',
+  'totalBytes',
+  'forwardedHeaderCount',
+]);
+const SAFE_DOWNLOAD_LOG_URL_FIELDS = new Set(['url', 'base']);
+
+function redactUrlQuery(value: string): string {
+  try {
+    const url = new URL(value);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return value.split(/[?#]/, 1)[0] ?? '';
+  }
+}
+
+function logDownload(message: string, details: Record<string, unknown>): void {
+  const safeDetails: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(details)) {
+    if (SAFE_DOWNLOAD_LOG_URL_FIELDS.has(name) && typeof value === 'string') {
+      safeDetails[name] = redactUrlQuery(value);
+    } else if (SAFE_DOWNLOAD_LOG_FIELDS.has(name)) {
+      safeDetails[name] = value;
+    }
+  }
+  console.debug(`[Surge] download ${message}`, safeDetails);
+}
+
+function buildBrowserDownloadHeaders(headers: Record<string, string>): { name: string; value: string }[] | undefined {
+  const browserHeaders = Object.entries(headers)
+    .filter(([name, value]) => {
+      const normalizedName = name.toLowerCase();
+      return !BROWSER_REJECTED_HEADERS.has(normalizedName)
+        && !normalizedName.startsWith('proxy-')
+        && !normalizedName.startsWith('sec-')
+        && !(BROWSER_METHOD_OVERRIDE_HEADERS.has(normalizedName)
+          && value.split(',').some(method => BROWSER_REJECTED_METHODS.has(method.trim().toLowerCase())));
+    })
+    .map(([name, value]) => ({ name, value }));
+  return browserHeaders.length > 0 ? browserHeaders : undefined;
+}
+
+async function fallbackToBrowser(
+  url: string,
+  surgeError: string,
+  capturedHeaders: Record<string, string>,
+): Promise<HandoffResult> {
+  const enabled = await storageGetBoolean(STORAGE_KEYS.FALLBACK_TO_BROWSER);
+  if (enabled === false) {
+    logDownload('browser fallback disabled', { url, surgeError });
+    return { success: false, outcome: 'failed', error: surgeError, surgeError };
+  }
+
+  try {
+    const headers = buildBrowserDownloadHeaders(capturedHeaders);
+    logDownload('starting browser fallback', { url, forwardedHeaderCount: headers?.length ?? 0 });
+    const id = await browser.downloads.download(headers ? { url, headers } : { url });
+    logDownload('browser fallback started', { id, url });
+    return { success: true, outcome: 'browser', surgeError };
+  } catch (error) {
+    const fallbackError = error instanceof Error ? error.message : String(error);
+    logDownload('browser fallback failed', { url, fallbackError });
+    return {
+      success: false,
+      outcome: 'failed',
+      error: `${surgeError}; browser fallback failed: ${fallbackError}`,
+      surgeError,
+      fallbackError,
+    };
+  }
+}
+
+/** Send a download to Surge, retrying it through the browser when configured. */
 async function sendToSurge(
   url: string,
   filename: string,
   directory: string,
   headers: Record<string, string>,
   options?: { skipApproval?: boolean },
-): Promise<{ success: boolean; filename?: string; error?: string }> {
+): Promise<HandoffResult> {
   const base = await getBaseUrl();
-  if (!base) return { success: false, error: 'Server not running' };
+  if (!base) {
+    logDownload('Surge handoff skipped: server unavailable', { url });
+    return fallbackToBrowser(url, 'Server not running', headers);
+  }
 
   try {
+    logDownload('starting Surge handoff', { url, base });
     const resp = await fetch(`${base}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
@@ -422,11 +538,16 @@ async function sendToSurge(
 
     if (resp.ok) {
       const data = await resp.json().catch(() => ({}));
-      return { success: true, filename: data.filename };
+      logDownload('Surge handoff succeeded', { url, status: resp.status, filename: data.filename });
+      return { success: true, outcome: 'surge', filename: data.filename };
     }
-    return { success: false, error: await resp.text().catch(() => '') };
+    const error = await resp.text().catch(() => '') || `Server returned ${resp.status}`;
+    logDownload('Surge handoff failed', { url, status: resp.status, error });
+    return fallbackToBrowser(url, error, headers);
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    const surgeError = error instanceof Error ? error.message : String(error);
+    logDownload('Surge handoff failed', { url, surgeError });
+    return fallbackToBrowser(url, surgeError, headers);
   }
 }
 
@@ -475,6 +596,35 @@ async function isNotificationsEnabled(): Promise<boolean> {
   return enabled !== false; // Default to true if undefined
 }
 
+async function notifyHandoffResult(result: HandoffResult, filename: string): Promise<void> {
+  if (!await isNotificationsEnabled()) return;
+
+  if (result.outcome === 'surge') {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge',
+      message: `Download started: ${result.filename || filename}`,
+    });
+  } else if (result.outcome === 'browser') {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge',
+      message: `Surge handoff failed; browser retry started: ${filename}`,
+    });
+  } else {
+    browser.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Surge Error',
+      message: result.fallbackError
+        ? `Surge and browser handling failed: ${result.error}`
+        : `Failed to start download: ${result.surgeError}`,
+    });
+  }
+}
+
 async function getMinFileSizeMB(): Promise<number> {
   const result = await browser.storage.local.get(STORAGE_KEYS.MIN_FILE_SIZE);
   return readStoredNumber(result, STORAGE_KEYS.MIN_FILE_SIZE, 10);
@@ -510,28 +660,66 @@ async function isDuplicateDownload(url: string): Promise<boolean> {
 }
 
 async function handleDownloadCreated(downloadItem: {
-  id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number;
+  id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number; byExtensionId?: string;
 }): Promise<void> {
-  if (!await isInterceptEnabled()) return;
-  if (shouldSkipUrl(downloadItem.url)) return;
-  if (!isFreshDownload(downloadItem)) return;
+  if (downloadItem.byExtensionId === browser.runtime.id) {
+    logDownload('ignored extension-created download', { id: downloadItem.id, url: downloadItem.url });
+    return;
+  }
+  if (!await isInterceptEnabled()) {
+    logDownload('ignored: interception disabled', { id: downloadItem.id, url: downloadItem.url });
+    return;
+  }
+  if (shouldSkipUrl(downloadItem.url)) {
+    logDownload('ignored: unsupported URL', { id: downloadItem.id, url: downloadItem.url });
+    return;
+  }
+  if (!isFreshDownload(downloadItem)) {
+    logDownload('ignored: stale download', { id: downloadItem.id, url: downloadItem.url, state: downloadItem.state });
+    return;
+  }
 
   const minFileSizeMB = await getMinFileSizeMB();
   const minSizeInBytes = minFileSizeMB * 1024 * 1024;
   if (minSizeInBytes > 0 && downloadItem.totalBytes !== undefined && downloadItem.totalBytes > 0 && downloadItem.totalBytes < minSizeInBytes) {
+    logDownload('ignored: below size threshold', { id: downloadItem.id, url: downloadItem.url, totalBytes: downloadItem.totalBytes });
     return; // File is smaller than minimum size threshold; let browser handle it.
   }
 
   // Only intercept when Surge is actually reachable. If the daemon is offline,
   // leave the browser download alone so normal downloads keep working.
-  if (!await checkHealthSilent()) return;
+  if (!await checkHealthSilent()) {
+    logDownload('ignored: Surge unavailable', { id: downloadItem.id, url: downloadItem.url });
+    return;
+  }
 
+  if (interceptingUrls.has(downloadItem.url)) {
+    // A second browser download ID is a real download, not a duplicate event
+    // for the first ID. Cancel it so it cannot continue alongside the handoff
+    // already in progress for this URL.
+    try {
+      await browser.downloads.cancel(downloadItem.id);
+      await browser.downloads.erase({ id: downloadItem.id } as any).catch(() => {});
+      logDownload('cancelled: handoff already in progress', { id: downloadItem.id, url: downloadItem.url });
+    } catch {
+      logDownload('could not cancel duplicate while handoff is in progress', { id: downloadItem.id, url: downloadItem.url });
+    }
+    return;
+  }
+  interceptingUrls.add(downloadItem.url);
+  try {
   // Once health has passed, cancel the browser download immediately before any
   // additional async work so the browser does not race ahead of the handoff.
   try {
     await browser.downloads.cancel(downloadItem.id);
+  } catch {
+    logDownload('handoff aborted: browser cancellation failed', { id: downloadItem.id, url: downloadItem.url });
+    return; // The original browser download is still active.
+  }
+  logDownload('browser download cancelled', { id: downloadItem.id, url: downloadItem.url });
+  try {
     await browser.downloads.erase({ id: downloadItem.id } as any);
-  } catch { /* already completed or removed - ignore */ }
+  } catch { /* already removed - ignore */ }
 
   const { filename, directory } = extractPathInfo(downloadItem);
   const duplicateDisplayName = filename || downloadItem.url.split('/').pop()?.split('?')[0] || 'Unknown file';
@@ -540,6 +728,7 @@ async function handleDownloadCreated(downloadItem: {
   // Check for duplicates in the extension BEFORE sending to server.
   // This way the TUI never sees a duplicate prompt.
   if (await isDuplicateDownload(downloadItem.url)) {
+    logDownload('queued duplicate confirmation', { id: downloadItem.id, url: downloadItem.url });
     pendingDuplicateCounter = await queueDuplicateDownload({
       pendingDuplicates,
       pendingDuplicateCounter,
@@ -557,26 +746,14 @@ async function handleDownloadCreated(downloadItem: {
 
   // Force empty filename hint for backend - rely on backend prober.
   const result = await sendToSurge(downloadItem.url, '', directory, headers);
+  logDownload('handoff complete', { id: downloadItem.id, url: downloadItem.url, outcome: result.outcome });
 
-  if (result.success) {
+  if (result.outcome === 'surge') {
     await tryOpenPopup();
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge',
-        message: `Download started: ${result.filename || 'Unknown file'}`,
-      });
-    }
-  } else if (result.error) {
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge Error',
-        message: `Failed to start download: ${result.error}`,
-      });
-    }
+  }
+  await notifyHandoffResult(result, duplicateDisplayName);
+  } finally {
+    interceptingUrls.delete(downloadItem.url);
   }
 }
 
@@ -856,18 +1033,11 @@ async function handleConfirmDuplicate(id: string): Promise<{ success: boolean; e
     {},
     { skipApproval: true },
   );
-  if (result.success) {
-    if (await isNotificationsEnabled()) {
-      browser.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Surge',
-        message: `Download started: ${pending.filename}`,
-      });
-    }
-  }
+  await notifyHandoffResult(result, pending.filename);
   await notifyNextPendingDuplicate();
-  return { success: result.success };
+  return result.outcome === 'failed'
+    ? { success: false, error: result.error }
+    : { success: true };
 }
 
 async function handleSkipDuplicate(id: string): Promise<{ success: boolean }> {
@@ -885,9 +1055,19 @@ async function handleSkipDuplicate(id: string): Promise<{ success: boolean }> {
 export default defineBackground(() => {
   // Download interception
   browser.downloads.onCreated.addListener((downloadItem: {
-    id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number;
+    id: number; url: string; filename?: string; state?: string; startTime?: string; totalBytes?: number; byExtensionId?: string;
   }) => {
-    if (processedIds.has(downloadItem.id)) return;
+    logDownload('created', {
+      id: downloadItem.id,
+      url: downloadItem.url,
+      byExtensionId: downloadItem.byExtensionId,
+      state: downloadItem.state,
+      totalBytes: downloadItem.totalBytes,
+    });
+    if (processedIds.has(downloadItem.id)) {
+      logDownload('ignored: duplicate event ID', { id: downloadItem.id, url: downloadItem.url });
+      return;
+    }
     processedIds.add(downloadItem.id);
     setTimeout(() => processedIds.delete(downloadItem.id), 120_000);
     handleDownloadCreated(downloadItem).catch(err =>
@@ -1000,8 +1180,10 @@ export const __test__ = {
     pendingDuplicateCounter = 0;
     pendingDuplicates.clear();
     processedIds.clear();
+    interceptingUrls.clear();
   },
   handleDownloadCreated,
+  captureHeaders,
   reresolveActiveServerUrl,
   handleMessage,
 };

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Surge
+Comment=Blazing fast TUI download manager
+Exec=surge
+Icon=surge
+Terminal=true
+Type=Application
+Categories=Network;

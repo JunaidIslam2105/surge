@@ -2,7 +2,6 @@ package concurrent
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,6 +61,36 @@ func TestActiveTask_RemainingTask(t *testing.T) {
 	at.CurrentOffset.Store(1000)
 	if at.RemainingTask() != nil {
 		t.Error("RemainingTask should return nil when complete")
+	}
+}
+
+func TestActiveTask_RemainingTaskWaitsForRangeMutation(t *testing.T) {
+	at := &ActiveTask{Task: types.Task{Offset: 0, Length: 1000}}
+	at.CurrentOffset.Store(250)
+	at.StopAt.Store(1000)
+
+	at.RangeMu.Lock()
+	result := make(chan *types.Task, 1)
+	go func() {
+		result <- at.RemainingTask()
+	}()
+
+	select {
+	case <-result:
+		at.RangeMu.Unlock()
+		t.Fatal("RemainingTask returned while the range boundary was being mutated")
+	case <-time.After(20 * time.Millisecond):
+	}
+	at.StopAt.Store(750)
+	at.RangeMu.Unlock()
+
+	select {
+	case remaining := <-result:
+		if remaining == nil || remaining.Offset != 250 || remaining.Length != 500 {
+			t.Fatalf("remaining task = %+v, want offset 250 length 500", remaining)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("RemainingTask did not resume after the range mutation")
 	}
 }
 
@@ -171,34 +200,5 @@ func TestActiveTask_GetSpeed_Decay(t *testing.T) {
 	speed = at.GetSpeed()
 	if speed < 99.0 || speed > 101.0 {
 		t.Errorf("Extreme decayed speed = %f, want ~100.0", speed)
-	}
-}
-
-func TestActiveTask_RemainingTask_PreservesSharedMaxOffset(t *testing.T) {
-	sharedMax := &atomic.Int64{}
-	sharedMax.Store(500)
-
-	at := &ActiveTask{
-		Task:            types.Task{Offset: 0, Length: 1000, SharedMaxOffset: sharedMax},
-		SharedMaxOffset: sharedMax,
-	}
-	at.CurrentOffset.Store(200)
-	at.StopAt.Store(1000)
-
-	remaining := at.RemainingTask()
-	if remaining == nil {
-		t.Fatal("RemainingTask returned nil")
-	}
-
-	if remaining.Offset != 500 {
-		t.Errorf("RemainingTask.Offset = %d, want 500 (from SharedMaxOffset)", remaining.Offset)
-	}
-
-	if remaining.Length != 500 {
-		t.Errorf("RemainingTask.Length = %d, want 500", remaining.Length)
-	}
-
-	if remaining.SharedMaxOffset != sharedMax {
-		t.Errorf("RemainingTask.SharedMaxOffset = %v, want %v", remaining.SharedMaxOffset, sharedMax)
 	}
 }

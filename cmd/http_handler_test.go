@@ -330,14 +330,24 @@ func TestHandleDownload_SkipApprovalUsesLifecycleEnqueue(t *testing.T) {
 		GlobalProgressCh = nil
 	})
 
+	firstRange := make(chan string, 1)
 	probeServer := testutil.NewHTTPServerT(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Range"); got != "bytes=0-0" {
-			t.Fatalf("Range header = %q, want bytes=0-0", got)
+		rangeHeader := r.Header.Get("Range")
+		select {
+		case firstRange <- rangeHeader:
+		default:
 		}
-		w.Header().Set("Content-Range", "bytes 0-0/7")
-		w.Header().Set("Content-Length", "1")
+		if rangeHeader == "bytes=0-0" {
+			w.Header().Set("Content-Range", "bytes 0-0/7")
+			w.Header().Set("Content-Length", "1")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("x"))
+			return
+		}
+		w.Header().Set("Content-Range", "bytes 0-6/7")
+		w.Header().Set("Content-Length", "7")
 		w.WriteHeader(http.StatusPartialContent)
-		_, _ = w.Write([]byte("x"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer probeServer.Close()
 
@@ -372,6 +382,14 @@ func TestHandleDownload_SkipApprovalUsesLifecycleEnqueue(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-firstRange:
+		if got != "bytes=0-0" {
+			t.Fatalf("first Range header = %q, want bytes=0-0", got)
+		}
+	default:
+		t.Fatal("expected lifecycle enqueue to probe the server")
 	}
 	configs := GlobalPool.GetAll()
 	if len(configs) != 1 {

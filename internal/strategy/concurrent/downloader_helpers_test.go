@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 
 	"github.com/SurgeDM/Surge/internal/progress"
@@ -63,6 +62,30 @@ func TestHandlePause_Normal(t *testing.T) {
 	}
 }
 
+func TestHandlePause_PersistsWithoutLifecycleConsumer(t *testing.T) {
+	tmpDir := testutil.SetupStateDB(t)
+	destPath := filepath.Join(tmpDir, "test.bin")
+	state := progress.New("test-id", 1000)
+	progressCh := make(chan types.DownloadEvent, 1)
+	progressCh <- types.DownloadEvent{}
+	download := &ConcurrentDownloader{
+		ID:           "test-id",
+		URL:          "http://example.com/file.bin",
+		State:        state,
+		ProgressChan: progressCh,
+		Runtime:      &types.RuntimeConfig{},
+	}
+	queue := NewTaskQueue()
+	queue.Push(types.Task{Offset: 500, Length: 500})
+
+	if err := download.handlePause(destPath, 1000, queue, nil); !errors.Is(err, types.ErrPaused) {
+		t.Fatalf("handlePause = %v, want ErrPaused", err)
+	}
+	if snapshot := state.TakePendingResumeState(); snapshot == nil {
+		t.Fatal("pause state was not retained")
+	}
+}
+
 func TestHandlePause_UsesLiveRateLimitFromState(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	cleanup := func() {}
@@ -100,6 +123,9 @@ func TestHandlePause_UsesLiveRateLimitFromState(t *testing.T) {
 	}
 	if msg.State == nil {
 		t.Fatal("expected pause state")
+	}
+	if pending := state.TakePendingResumeState(); pending != nil {
+		t.Fatalf("delivered pause event left fallback state pending: %+v", pending)
 	}
 }
 
@@ -273,25 +299,25 @@ func TestHandlePause_CompletionFinalization(t *testing.T) {
 	}
 }
 
-func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
+func TestSaveStateSnapshot_PersistsActiveAndQueuedTasks(t *testing.T) {
 	tmpDir := testutil.SetupStateDB(t)
 	cleanup := func() {}
 	defer cleanup()
 
 	fileSize := int64(1000)
-	destPath := filepath.Join(tmpDir, "hedge.bin")
+	destPath := filepath.Join(tmpDir, "snapshot.bin")
 	state := progress.New("test-id", fileSize)
 	downloader := &ConcurrentDownloader{
 		ID:          "test-id",
 		State:       state,
 		Runtime:     &types.RuntimeConfig{},
-		URL:         "http://example.com/hedge.bin",
+		URL:         "http://example.com/snapshot.bin",
 		activeTasks: make(map[int]*ActiveTask),
 	}
 
 	if err := store.AddToMasterList(types.DownloadRecord{
 		ID:        "test-id",
-		URL:       "http://example.com/hedge.bin",
+		URL:       "http://example.com/snapshot.bin",
 		DestPath:  destPath,
 		Status:    "downloading",
 		TotalSize: fileSize,
@@ -301,21 +327,10 @@ func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
 
 	queue := NewTaskQueue()
 
-	// Create a shared offset pointer
-	sharedOffset := &atomic.Int64{}
-	sharedOffset.Store(500)
-
-	// Simulate a queued hedge task that was created when the offset was 500
-	queue.Push(types.Task{
-		Offset:          500,
-		Length:          500, // 1000 - 500
-		SharedMaxOffset: sharedOffset,
-	})
+	queue.Push(types.Task{Offset: 500, Length: 500})
 
 	// Simulate an active worker that has advanced to 600
-	active := &ActiveTask{
-		SharedMaxOffset: sharedOffset,
-	}
+	active := &ActiveTask{}
 	active.CurrentOffset.Store(600)
 	active.StopAt.Store(1000)
 
@@ -333,22 +348,11 @@ func TestSaveStateSnapshot_HedgeOrderingAndResume(t *testing.T) {
 		t.Fatalf("failed to load saved state: %v", err)
 	}
 
-	if len(saved.Tasks) != 1 {
-		t.Fatalf("Expected exactly 1 deduplicated task, got %d", len(saved.Tasks))
+	if len(saved.Tasks) != 2 {
+		t.Fatalf("Expected active and queued tasks, got %d", len(saved.Tasks))
+	}
+	if saved.Tasks[0].Offset != 600 || saved.Tasks[0].Length != 400 {
+		t.Errorf("active remaining task = %+v, want offset=600 length=400", saved.Tasks[0])
 	}
 
-	task := saved.Tasks[0]
-	// If active worker won deduplication, Length should be 400 (1000-600).
-	// If queued task won, Length would be 500.
-	if task.Length != 400 {
-		t.Errorf("Expected remaining length 400 (active task won), got %d (queued task won?)", task.Length)
-	}
-	if task.Offset != 600 {
-		t.Errorf("Expected remaining offset 600, got %d", task.Offset)
-	}
-
-	// Verify SharedMaxOffset is cleared to prevent hot-resume pinning
-	if task.SharedMaxOffset != nil {
-		t.Errorf("Expected SharedMaxOffset to be cleared, but it was not nil")
-	}
 }

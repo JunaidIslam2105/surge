@@ -10,6 +10,7 @@ import (
 	"github.com/SurgeDM/Surge/internal/selfupdate"
 	"github.com/SurgeDM/Surge/internal/utils"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 
 	tea "charm.land/bubbletea/v2"
@@ -136,7 +137,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		listInnerPadding := lipgloss.NewStyle().Padding(1, 2)
 		m.list.SetSize(
 			layout.ListWidth-listInnerPadding.GetHorizontalFrameSize()-BoxStyle.GetHorizontalFrameSize(),
-			layout.ListHeight-layout.TabBarHeight-BoxStyle.GetVerticalFrameSize()-listInnerPadding.GetVerticalFrameSize(),
+			layout.ListHeight-layout.TabBarHeight-BoxStyle.GetVerticalFrameSize()-listInnerPadding.GetVerticalFrameSize()-1,
 		)
 
 		// Update list based on active tab
@@ -260,6 +261,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case SpeedLimitsState:
 			return m.updateSpeedLimits(msg)
 
+		case CategoryPickerState:
+			return m.updateCategoryPicker(msg)
+
 		case SettingsState:
 			return m.updateSettings(msg)
 
@@ -270,7 +274,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateURLUpdate(msg)
 
 		case HelpModalState:
-			if msg.String() == "esc" {
+			if msg.String() == "esc" || key.Matches(msg, m.keys.Dashboard.ToggleHelp) {
 				m.state = DashboardState
 				return m, nil
 			}

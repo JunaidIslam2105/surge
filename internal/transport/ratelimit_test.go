@@ -129,11 +129,35 @@ func TestHostRateLimiter_RecordSuccess(t *testing.T) {
 	now := time.Now()
 
 	h.Penalize("example.com", 1*time.Second, true, now)
-	h.RecordSuccess("example.com")
+	h.recordSuccess("example.com", now.Add(100*time.Millisecond))
 
 	bu := h.BlockedUntil("example.com", now.Add(100*time.Millisecond))
-	if !bu.IsZero() {
-		t.Fatal("expected host to be free after RecordSuccess")
+	if bu.IsZero() {
+		t.Fatal("expected overlapping success to preserve the future cooldown")
+	}
+
+	h.recordSuccess("example.com", now.Add(2*time.Second))
+	h.mu.Lock()
+	_, retained := h.hosts["example.com"]
+	h.mu.Unlock()
+	if retained {
+		t.Fatal("expected success after cooldown to remove the host penalty")
+	}
+}
+
+func TestHostRateLimiter_LaterPenaltyCannotShortenCooldown(t *testing.T) {
+	h := NewHostRateLimiter()
+	now := time.Now()
+
+	first := h.Penalize("example.com", 10*time.Second, true, now)
+	second := h.Penalize("example.com", time.Second, true, now.Add(time.Second))
+	if second.Before(first) {
+		t.Fatalf("later penalty shortened deadline from %v to %v", first, second)
+	}
+
+	h.recordSuccess("example.com", now.Add(2*time.Second))
+	if got := h.BlockedUntil("example.com", now.Add(2*time.Second)); got.Before(first) {
+		t.Fatalf("overlapping success shortened deadline from %v to %v", first, got)
 	}
 }
 

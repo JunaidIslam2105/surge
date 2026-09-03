@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -123,6 +124,102 @@ func TestLifecycleManager_EnqueueWithID(t *testing.T) {
 
 	if id != customID {
 		t.Errorf("expected custom ID %s, got %s", customID, id)
+	}
+}
+
+func TestLifecycleManager_EnqueueCoalescesConcurrentRequests(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var requests atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		started <- struct{}{}
+		<-release
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
+	mgr := NewLifecycleManager(pool, nil, nil)
+	defer mgr.Shutdown()
+	joined := make(chan struct{}, 1)
+	mgr.inflightJoinHook = func() { joined <- struct{}{} }
+
+	req := &DownloadRequest{URL: ts.URL + "/duplicate.bin", Filename: "duplicate.bin", Path: t.TempDir()}
+	type result struct {
+		id  string
+		err error
+	}
+	results := make(chan result, 2)
+	go func() {
+		id, _, err := mgr.Enqueue(context.Background(), req)
+		results <- result{id, err}
+	}()
+	<-started
+	go func() {
+		id, _, err := mgr.Enqueue(context.Background(), req)
+		results <- result{id, err}
+	}()
+	<-joined
+	close(release)
+
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("Enqueue errors = %v, %v", first.err, second.err)
+	}
+	if first.id == "" || first.id != second.id {
+		t.Fatalf("enqueue ids = %q, %q; want one shared id", first.id, second.id)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("probe requests = %d, want 1", got)
+	}
+}
+
+func TestLifecycleManager_EnqueueDoesNotCoalesceDifferentRequests(t *testing.T) {
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started <- struct{}{}
+		<-release
+		w.Header().Set("Content-Length", "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	pool := scheduler.New(make(chan types.DownloadEvent, 10), 1)
+	mgr := NewLifecycleManager(pool, nil, nil)
+	defer mgr.Shutdown()
+	entered := make(chan struct{}, 2)
+	mgr.inflightStartHook = func() { entered <- struct{}{} }
+
+	dest := t.TempDir()
+	type result struct {
+		filename string
+		err      error
+	}
+	results := make(chan result, 2)
+	for _, filename := range []string{"first.bin", "second.bin"} {
+		go func(filename string) {
+			_, finalFilename, err := mgr.Enqueue(context.Background(), &DownloadRequest{
+				URL: ts.URL + "/same-resource", Filename: filename, Path: dest,
+			})
+			results <- result{finalFilename, err}
+		}(filename)
+	}
+	// Wait until both requests have passed the in-flight map before releasing
+	// the first same-host probe; the probe layer serializes hosts deliberately.
+	<-entered
+	<-entered
+	close(release)
+	<-started
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("Enqueue errors = %v, %v", first.err, second.err)
+	}
+	if (first.filename != "first.bin" || second.filename != "second.bin") &&
+		(first.filename != "second.bin" || second.filename != "first.bin") {
+		t.Fatalf("resolved filenames = %q, %q; want both distinct requested names", first.filename, second.filename)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/progress"
 	"github.com/SurgeDM/Surge/internal/config"
+	engineprogress "github.com/SurgeDM/Surge/internal/progress"
 	"github.com/SurgeDM/Surge/internal/tui/colors"
 	"github.com/SurgeDM/Surge/internal/types"
 )
@@ -193,4 +194,36 @@ func BenchmarkCPU_FullView_New(b *testing.B) {
 		// NEW: no list rebuild, speed cached, graph cached
 		_ = m.View()
 	}
+}
+
+// --- Benchmark 5: avoid copying chunk state when the chunk map is hidden ---
+
+func BenchmarkCPU_HiddenChunkSnapshot_Old(b *testing.B) {
+	m := hiddenChunkBenchModel()
+	d := m.GetSelectedDownload()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _, _, _ = d.state.GetBitmap() // OLD: unconditional snapshot before View
+		_ = m.View()
+	}
+}
+
+func BenchmarkCPU_HiddenChunkSnapshot_New(b *testing.B) {
+	m := hiddenChunkBenchModel()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = m.View()
+	}
+}
+
+func hiddenChunkBenchModel() RootModel {
+	m := fullBenchModel(1)
+	m.width = 100 // Right column, and therefore chunk map, is hidden.
+	d := m.downloads[0]
+	d.state = engineprogress.New(d.ID, d.Total)
+	d.state.InitBitmap(d.Total, 64*1024)
+	m.UpdateListItems()
+	return m
 }
